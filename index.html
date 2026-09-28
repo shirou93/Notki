@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#173c32">
+  <meta name="description" content="Notki — prywatny notatnik w przeglądarce.">
+  <title>Notki — Twój notatnik</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Nawigacja">
+      <a class="brand" href="#all" aria-label="Notki, wszystkie notatki">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>notki<span class="brand-period">.</span></span>
+      </a>
+      <button class="compose-button" id="create-note" type="button"><span aria-hidden="true">+</span> Nowa notatka</button>
+      <nav class="nav-list" aria-label="Widoki notatek">
+        <button class="nav-item is-active" type="button" data-view="all"><span class="nav-icon" aria-hidden="true">▤</span><span>Wszystkie</span><span class="nav-count" id="count-all">0</span></button>
+        <button class="nav-item" type="button" data-view="pinned"><span class="nav-icon" aria-hidden="true">⌖</span><span>Przypięte</span><span class="nav-count" id="count-pinned">0</span></button>
+        <button class="nav-item" type="button" data-view="archive"><span class="nav-icon" aria-hidden="true">▣</span><span>Archiwum</span><span class="nav-count" id="count-archive">0</span></button>
+        <button class="nav-item" type="button" data-view="trash"><span class="nav-icon" aria-hidden="true">⌫</span><span>Kosz</span><span class="nav-count" id="count-trash">0</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="storage-note"><span class="storage-dot"></span><span>Zapisane na tym urządzeniu</span></div>
+        <span class="sidebar-version">NOTKI · 01</span>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>TWÓJ NOTATNIK</span><span class="breadcrumb-slash">/</span><span id="breadcrumb-view">Wszystkie</span></div>
+        <div class="topbar-actions">
+          <label class="search-box" for="search-input"><span class="search-icon" aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="Szukaj w notatkach" autocomplete="off"><kbd>⌘ K</kbd></label>
+          <details class="settings-menu" id="settings-menu">
+            <summary class="settings-trigger" aria-label="Ustawienia" title="Ustawienia"><span aria-hidden="true">⚙</span></summary>
+            <div class="settings-popover" role="group" aria-label="Backup i import">
+              <span class="settings-heading">DANE I KOPIE</span>
+              <div class="data-actions">
+                <button class="data-action" id="export-notes" type="button" aria-label="Eksportuj kopię zapasową" title="Pobierz kopię zapasową"><span class="action-icon" aria-hidden="true">↓</span><span class="action-label">Pobierz kopię zapasową</span></button>
+                <button class="data-action" id="import-notes" type="button" aria-label="Importuj notatki" title="Importuj z kopii zapasowej"><span class="action-icon" aria-hidden="true">↑</span><span class="action-label">Importuj notatki</span></button>
+                <input id="import-file" type="file" accept=".json,application/json" hidden>
+              </div>
+            </div>
+          </details>
+          <span class="avatar" aria-label="Profil lokalny" title="Profil lokalny">N</span>
+        </div>
+      </header>
+
+      <section class="page-heading">
+        <div><p class="eyebrow" id="note-count-label">TWÓJ SPOKÓJ, TWOJE NOTATKI</p><h1 id="page-title">Wszystkie notatki<span class="heading-period">.</span></h1></div>
+        <button class="new-note-link" id="create-note-heading" type="button"><span aria-hidden="true">+</span> Dodaj notatkę</button>
+      </section>
+
+      <section class="capture-wrap" aria-label="Szybka notatka">
+        <button class="capture-box" id="capture-note" type="button"><span class="capture-plus" aria-hidden="true">+</span><span>Zapisz myśl, zanim ucieknie...</span><span class="capture-shortcut">N</span></button>
+      </section>
+
+      <section class="shared-banner" id="shared-banner" hidden aria-live="polite">
+        <div><span class="shared-kicker">NOTATKA OD KOGOŚ</span><strong id="shared-title">Udostępniona notatka</strong><p id="shared-preview"></p></div>
+        <div class="shared-actions"><button class="button-secondary" id="dismiss-shared" type="button">Odrzuć</button><button class="button-primary" id="save-shared" type="button">Zapisz u siebie</button></div>
+      </section>
+
+      <section class="notes-area" aria-live="polite">
+        <div class="section-label" id="pinned-label" hidden><span>PRZYPIĘTE</span><span class="section-rule"></span></div>
+        <div class="notes-grid" id="pinned-grid"></div>
+        <div class="section-label" id="other-label" hidden><span id="other-label-text">POZOSTAŁE</span><span class="section-rule"></span></div>
+        <div class="notes-grid" id="notes-grid"></div>
+        <div class="empty-state" id="empty-state" hidden>
+          <div class="empty-art" aria-hidden="true"><span class="empty-sheet"></span><span class="empty-spark">✳</span></div>
+          <h2 id="empty-title">Tu zaczyna się dobra myśl.</h2>
+          <p id="empty-copy">Zapisz pierwszą notatkę. Będzie czekać na Ciebie właśnie tutaj.</p>
+          <button class="button-primary" id="empty-create" type="button">+ Napisz pierwszą notatkę</button>
+        </div>
+      </section>
+      <footer class="page-footer"><span id="footer-count">0 notatek</span><span>Twoje pomysły są tylko Twoje.</span></footer>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="editor-backdrop" hidden></div>
+  <aside class="editor-panel" id="editor-panel" aria-label="Edytor notatki" aria-hidden="true">
+    <div class="editor-topbar">
+      <button class="icon-button editor-close" id="close-editor" type="button" aria-label="Zamknij edytor" title="Zamknij">×</button>
+      <span class="save-state" id="save-state"><span class="save-dot"></span>Zapisano</span>
+      <div class="editor-tools">
+        <button class="icon-button" id="pin-note" type="button" aria-label="Przypnij notatkę" title="Przypnij">⌖</button>
+        <button class="icon-button" id="archive-note" type="button" aria-label="Archiwizuj notatkę" title="Archiwizuj">▣</button>
+        <button class="icon-button" id="share-note" type="button" aria-label="Udostępnij notatkę" title="Udostępnij link">↗</button>
+        <button class="icon-button danger-icon" id="delete-note" type="button" aria-label="Przenieś do kosza" title="Przenieś do kosza">⌫</button>
+      </div>
+    </div>
+    <div class="editor-content">
+      <label class="sr-only" for="note-title">Tytuł notatki</label>
+      <input class="editor-title" id="note-title" type="text" placeholder="Tytuł" maxlength="160" autocomplete="off">
+      <label class="sr-only" for="note-body">Treść notatki</label>
+      <div class="format-toolbar" id="format-toolbar" role="toolbar" aria-label="Formatowanie notatki">
+        <button class="format-tool" type="button" data-command="bold" aria-label="Pogrubienie" title="Pogrubienie"><strong>B</strong></button>
+        <button class="format-tool" type="button" data-command="italic" aria-label="Kursywa" title="Kursywa"><em>I</em></button>
+        <button class="format-tool" type="button" data-command="underline" aria-label="Podkreślenie" title="Podkreślenie"><span class="underline-icon">U</span></button>
+        <span class="format-separator" aria-hidden="true"></span>
+        <button class="format-tool" type="button" data-command="insertUnorderedList" aria-label="Lista punktowana" title="Lista punktowana">•≡</button>
+        <button class="format-tool" type="button" data-command="insertOrderedList" aria-label="Lista numerowana" title="Lista numerowana">1.</button>
+        <button class="format-tool" type="button" data-insert-checklist aria-label="Dodaj checkbox" title="Dodaj checkbox">☐</button>
+        <span class="format-separator" aria-hidden="true"></span>
+        <button class="format-tool clear-format" type="button" data-command="removeFormat" aria-label="Wyczyść formatowanie" title="Wyczyść formatowanie">Tx</button>
+      </div>
+      <div class="editor-body" id="note-body" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Treść notatki" data-placeholder="Zacznij pisać..."></div>
+      <div class="editor-meta"><span id="editor-date"></span><span class="meta-separator">·</span><span id="editor-words">0 słów</span></div>
+      <div class="editor-divider"></div>
+      <label class="field-label" for="note-tags">ETYKIETY</label>
+      <input class="tags-input" id="note-tags" type="text" placeholder="np. praca, pomysły" autocomplete="off">
+      <div class="field-label color-label">KOLOR NOTATKI</div>
+      <div class="color-picker" role="group" aria-label="Kolor notatki">
+        <button class="color-swatch swatch-default is-selected" data-color="default" type="button" aria-label="Domyślny" title="Domyślny"></button>
+        <button class="color-swatch swatch-mint" data-color="mint" type="button" aria-label="Miętowy" title="Miętowy"></button>
+        <button class="color-swatch swatch-lemon" data-color="lemon" type="button" aria-label="Cytrynowy" title="Cytrynowy"></button>
+        <button class="color-swatch swatch-peach" data-color="peach" type="button" aria-label="Brzoskwiniowy" title="Brzoskwiniowy"></button>
+        <button class="color-swatch swatch-lilac" data-color="lilac" type="button" aria-label="Lawendowy" title="Lawendowy"></button>
+        <button class="color-swatch swatch-sky" data-color="sky" type="button" aria-label="Błękitny" title="Błękitny"></button>
+      </div>
+      <div class="editor-bottom-note"><span class="lock-mark" aria-hidden="true">◈</span> Ta notatka jest prywatna, dopóki jej nie udostępnisz.</div>
+    </div>
+  </aside>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <template id="note-template">
+    <article class="note-card">
+      <div class="card-topline"><span class="card-date"></span><div class="card-tools"><button class="card-drag" type="button" aria-label="Zmień kolejność notatki" title="Przeciągnij, aby zmienić kolejność">⠿</button><button class="card-pin" type="button" aria-label="Przypnij notatkę" title="Przypnij">⌖</button></div></div>
+      <h2 class="card-title"></h2>
+      <p class="card-body"></p>
+      <div class="card-bottom"><div class="card-tags"></div><button class="card-share" type="button" aria-label="Udostępnij notatkę" title="Udostępnij link">↗</button></div>
+    </article>
+  </template>
+</body>
+</html>
