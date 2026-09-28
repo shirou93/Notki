@@ -33,7 +33,9 @@
       notes.splice(index, 1);
       notes.unshift(note);
     }
-  }
+      // Update order to maintain manual sort
+      note.order = Date.now();
+    }
 
   function sanitizeRichHtml(html) {
     const template = document.createElement('template');
@@ -258,12 +260,17 @@
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
       if (!Array.isArray(stored)) return [];
       const valid = stored.filter(note => note && typeof note.id === 'string');
-      const hasManualOrder = valid.length > 0 && valid.every(note => Number.isFinite(note.order));
-      return valid.sort((a, b) => hasManualOrder ? b.order - a.order : new Date(b.updatedAt) - new Date(a.updatedAt));
-    } catch {
-      return [];
+        // Ensure all notes have an order property for consistent sorting
+        valid.forEach(note => {
+          if (!Number.isFinite(note.order)) {
+            note.order = Date.parse(note.updatedAt) || Date.now();
+          }
+        });
+        return valid.sort((a, b) => b.order - a.order);
+      } catch {
+        return [];
+      }
     }
-  }
 
   function persist() {
     notes.forEach((note, index) => { note.order = notes.length - index; });
@@ -276,12 +283,13 @@
     const target = notes.find(note => note.id === targetId);
     if (sourceIndex < 0 || !target) return;
     const [source] = notes.splice(sourceIndex, 1);
-    if (view === 'all' && !query) source.pinned = target.pinned;
-    const targetIndex = notes.findIndex(note => note.id === targetId);
-    notes.splice(targetIndex + Number(after), 0, source);
-    persist();
-    render();
-  }
+      // Preserve pinned status when moving in 'all' view
+      if (view === 'all' && !query) source.pinned = target.pinned;
+      const targetIndex = notes.findIndex(note => note.id === targetId);
+      notes.splice(targetIndex + Number(after), 0, source);
+      persist();
+      render();
+    }
 
   function createNote(data = {}) {
     const now = new Date().toISOString();
@@ -297,8 +305,9 @@
       deleted: false,
       createdAt: now,
       updatedAt: now,
-    };
-  }
+        order: Date.now(),
+      };
+    }
 
   function isActive(note) {
     return !note.archived && !note.deleted;
@@ -313,8 +322,16 @@
       if (!query) return true;
       const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')}`.toLocaleLowerCase('pl');
       return searchable.includes(query.toLocaleLowerCase('pl'));
-    }).sort((a, b) => view === 'all' ? Number(b.pinned) - Number(a.pinned) : 0);
-  }
+      }).sort((a, b) => {
+        // In 'all' view without search, sort by pinned first, then by manual order
+        if (view === 'all' && !query) {
+          if (a.pinned !== b.pinned) return Number(b.pinned) - Number(a.pinned);
+          return b.order - a.order;
+        }
+        // In other views or with search, maintain manual order
+        return b.order - a.order;
+      });
+    }
 
   function render() {
     const active = notes.filter(isActive);
