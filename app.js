@@ -423,7 +423,9 @@
     card.addEventListener('click', event => {
       const clickedCheckbox = event.target.closest('input[type="checkbox"], .task-checkbox');
       if (clickedCheckbox) return;
-      if (!event.target.closest('button')) openEditor(note.id);
+      if (event.target.closest('button')) return;
+      if (event.target.closest('.card-drag, .card-pin, .card-share')) return;
+      openEditor(note.id);
     });
     return card;
   }
@@ -693,9 +695,12 @@
     }
   });
 
-  document.addEventListener('selectionchange', rememberEditorRange);
+  document.addEventListener('selectionchange', event => {
+    if (elements.noteBody.contains(event.target) || elements.noteBody === event.target) {
+      rememberEditorRange();
+    }
+  });
   $$('#format-toolbar button').forEach(button => {
-    button.addEventListener('mousedown', event => event.preventDefault());
     button.addEventListener('click', () => {
       restoreEditorRange();
       const previousRange = editorRange?.cloneRange();
@@ -836,7 +841,7 @@
   });
   document.addEventListener('click', event => {
     const menu = $('#settings-menu');
-    if (menu.open && !menu.contains(event.target)) menu.open = false;
+    if (menu.open && !menu.contains(event.target) && !elements.noteBody.contains(event.target) && !event.target.closest('.editor-panel')) menu.open = false;
   });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && $('#settings-menu').open) {

@@ -157,19 +157,20 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .editor-content { width: 100%; max-width: 650px; flex: 1; align-self: center; overflow-y: auto; padding: 43px 48px 32px; }
 .editor-title { width: 100%; padding: 0; border: 0; outline: 0; color: #242e28; background: transparent; font-family: var(--serif); font-size: 31px; font-weight: 500; letter-spacing: 0; line-height: 1.3; }
 .editor-title::placeholder { color: #bdc5be; }
+.editor-title, .editor-body, .editor-body .task-text { cursor: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M8 2v12M5 3h6M5 13h6%22 stroke=%22%23000%22 stroke-width=%221.5%22/%3E%3C/svg%3E") 8 8, text; }
 .format-toolbar { display: flex; align-items: center; gap: 4px; margin: 20px 0 0; padding: 5px 0; border-top: 1px solid #edf0ec; border-bottom: 1px solid #edf0ec; }
 .format-tool { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; color: #54645a; background: transparent; font-size: 14px; cursor: pointer; }
 .format-tool:hover, .format-tool.is-active { color: #244635; background: #eaf1e5; }
 .format-tool:active { background: #dce9d8; }
 .underline-icon { text-decoration: underline; text-underline-offset: 2px; }
 .format-separator { width: 1px; height: 20px; margin: 0 3px; background: #e4e9e4; }
-.editor-body { width: 100%; min-height: min(43vh, 390px); margin-top: 18px; padding: 0; overflow-y: auto; overflow-wrap: anywhere; outline: 0; color: #414b44; background: transparent; font-size: 14px; line-height: 1.85; caret-color: #173c32; }
+.editor-body { width: 100%; min-height: min(43vh, 390px); margin-top: 18px; padding: 0; overflow-y: auto; overflow-wrap: anywhere; outline: 0; color: #414b44; background: transparent; font-size: 14px; line-height: 1.85; caret-color: #0066cc; }
 .editor-body:empty::before { color: #aab3ac; content: attr(data-placeholder); pointer-events: none; }
 .editor-body p { margin: 0 0 10px; }
 .editor-body ul, .editor-body ol { padding-left: 24px; }
 .editor-body .task-list { padding-left: 0; list-style: none; }
 .editor-body .task-list li { display: grid; grid-template-columns: 15px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 22px; margin: 0 0 6px; }
-.editor-body .task-list li > .task-text { display: block; min-width: 1ch; min-height: 1.35em; margin: 0; outline: none; color: #414b44; caret-color: #173c32; white-space: pre-wrap; word-break: break-word; line-height: 1.35; }
+.editor-body .task-list li > .task-text { display: block; min-width: 1ch; min-height: 1.35em; margin: 0; outline: none; color: #414b44; caret-color: #0066cc; white-space: pre-wrap; word-break: break-word; line-height: 1.35; }
 .editor-body .task-list li > .task-text:empty::before { content: ' '; display: inline-block; min-width: 1ch; }
 .editor-body .task-checkbox { width: 15px; height: 15px; margin: 0; accent-color: #52754e; vertical-align: middle; }
 .editor-meta { display: flex; gap: 7px; margin-top: 12px; color: #9aa49c; font-size: 10px; }
