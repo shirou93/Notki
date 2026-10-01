@@ -1,5 +1,7 @@
 (() => {
   const STORAGE_KEY = 'notki.notes.v1';
+  const THEME_STORAGE_KEY = 'notki.theme.v1';
+  const systemColorScheme = window.matchMedia('(prefers-color-scheme: dark)');
   const COLORS = ['default', 'mint', 'lemon', 'peach', 'lilac', 'sky'];
   const VIEW_LABELS = { all: 'Wszystkie notatki', pinned: 'Przypięte', archive: 'Archiwum', trash: 'Kosz' };
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -11,7 +13,7 @@
     grid: $('#notes-grid'), empty: $('#empty-state'), emptyTitle: $('#empty-title'), emptyCopy: $('#empty-copy'),
     footerCount: $('#footer-count'), search: $('#search-input'), panel: $('#editor-panel'), backdrop: $('#editor-backdrop'),
     noteTitle: $('#note-title'), noteBody: $('#note-body'), tags: $('#note-tags'), saveState: $('#save-state'), date: $('#editor-date'),
-    words: $('#editor-words'), pin: $('#pin-note'), archive: $('#archive-note'), delete: $('#delete-note'), toast: $('#toast'),
+    words: $('#editor-words'), pin: $('#pin-note'), archive: $('#archive-note'), delete: $('#delete-note'), toast: $('#toast'), themeToggle: $('#theme-toggle'),
     sharedBanner: $('#shared-banner'), sharedTitle: $('#shared-title'), sharedPreview: $('#shared-preview'),
   };
 
@@ -26,6 +28,26 @@
   let returnFocus = null;
   let dragState = null;
   let editorRange = null;
+
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    const nextTheme = theme === 'dark' ? 'jasny' : 'ciemny';
+    elements.themeToggle.querySelector('span').textContent = theme === 'dark' ? '☀' : '☾';
+    elements.themeToggle.setAttribute('aria-label', `Włącz ${nextTheme} motyw`);
+    elements.themeToggle.setAttribute('title', `Włącz ${nextTheme} motyw`);
+    elements.themeToggle.setAttribute('aria-pressed', String(theme === 'dark'));
+  }
+
+  const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+  applyTheme(savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : systemColorScheme.matches ? 'dark' : 'light');
+  systemColorScheme.addEventListener('change', event => {
+    if (!localStorage.getItem(THEME_STORAGE_KEY)) applyTheme(event.matches ? 'dark' : 'light');
+  });
+  elements.themeToggle.addEventListener('click', () => {
+    const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    applyTheme(theme);
+  });
 
   function moveToFront(note) {
     const index = notes.indexOf(note);
