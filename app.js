@@ -1,5 +1,6 @@
 (() => {
   const STORAGE_KEY = 'notki.notes.v1';
+  const MIGRATION_KEY = 'notki.server-migrated.v1';
   const THEME_STORAGE_KEY = 'notki.theme.v1';
   const systemColorScheme = window.matchMedia('(prefers-color-scheme: dark)');
   const COLORS = ['default', 'mint', 'lemon', 'peach', 'lilac', 'sky'];
@@ -14,13 +15,20 @@
     footerCount: $('#footer-count'), search: $('#search-input'), panel: $('#editor-panel'), backdrop: $('#editor-backdrop'),
     noteTitle: $('#note-title'), noteBody: $('#note-body'), tags: $('#note-tags'), saveState: $('#save-state'), date: $('#editor-date'),
     words: $('#editor-words'), pin: $('#pin-note'), archive: $('#archive-note'), delete: $('#delete-note'), toast: $('#toast'), themeToggle: $('#theme-toggle'),
+    appShell: $('#app-shell'), authView: $('#auth-view'), authHeading: $('#auth-heading'), authDescription: $('#auth-description'), authMessage: $('#auth-message'),
+    loginForm: $('#login-form'), registerForm: $('#register-form'), authSwitch: $('#auth-switch'), adminLink: $('#admin-link'),
     sharedBanner: $('#shared-banner'), sharedTitle: $('#shared-title'), sharedPreview: $('#shared-preview'),
   };
 
-  let notes = loadNotes();
+  let notes = [];
+  const legacyNotes = loadNotes();
+  const inviteToken = new URLSearchParams(window.location.search).get('invite');
+  let currentUser = null;
+  let saveQueue = Promise.resolve();
   let view = 'all';
   let query = '';
   let activeId = null;
+  let activeIsNew = false;
   let activeColor = 'default';
   let toastTimeout;
   let saveTimeout;
@@ -47,6 +55,117 @@
     const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
     localStorage.setItem(THEME_STORAGE_KEY, theme);
     applyTheme(theme);
+  });
+
+  async function apiRequest(path, options = {}) {
+    const headers = new Headers(options.headers || {});
+    if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+    const response = await fetch(path, { ...options, headers, credentials: 'same-origin' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || 'Wystąpił błąd serwera.');
+    return payload;
+  }
+
+  function showAuth(mode, message = '') {
+    elements.authView.hidden = false;
+    elements.appShell.hidden = true;
+    elements.panel.hidden = true;
+    elements.backdrop.hidden = true;
+    elements.loginForm.hidden = mode !== 'login';
+    elements.registerForm.hidden = mode !== 'register';
+    elements.authHeading.firstChild.textContent = mode === 'register' ? 'Utwórz konto' : 'Zaloguj się';
+    elements.authDescription.textContent = mode === 'register'
+      ? 'Utwórz konto, korzystając z zaproszenia administratora.'
+      : 'Zaloguj się na swoje konto, aby otworzyć notatki.';
+    elements.authMessage.textContent = message;
+    elements.authMessage.hidden = !message;
+    elements.authSwitch.hidden = !inviteToken;
+    elements.authSwitch.textContent = mode === 'register' ? 'Masz już konto? Zaloguj się' : 'Masz zaproszenie? Utwórz konto';
+    document.body.classList.add('is-auth');
+  }
+
+  async function showApp(user) {
+    currentUser = user;
+    const response = await apiRequest('/api/notes');
+    notes = response.notes;
+    const migratedKey = `${MIGRATION_KEY}.${user.id}`;
+    if (!notes.length && legacyNotes.length && !localStorage.getItem(migratedKey)) {
+      if (window.confirm(`Przenieść ${legacyNotes.length} lokalnych notatek do konta ${user.email}?`)) {
+        notes = legacyNotes;
+        await apiRequest('/api/notes', { method: 'PUT', body: JSON.stringify({ notes }) });
+      }
+      localStorage.setItem(migratedKey, '1');
+    }
+    elements.authView.hidden = true;
+    elements.appShell.hidden = false;
+    elements.panel.hidden = false;
+    elements.adminLink.hidden = !user.isAdmin;
+    $('.avatar').textContent = user.email.slice(0, 1).toLocaleUpperCase('pl');
+    $('.avatar').title = user.email;
+    $('.avatar').setAttribute('aria-label', `Konto ${user.email}`);
+    document.body.classList.remove('is-auth');
+    render();
+    readSharedNote();
+  }
+
+  async function initializeApp() {
+    try {
+      const { needsSetup } = await apiRequest('/api/setup/status');
+      if (needsSetup) {
+        window.location.replace('/setup');
+        return;
+      }
+      const { user } = await apiRequest('/api/session');
+      if (user) {
+        await showApp(user);
+        return;
+      }
+      showAuth(inviteToken ? 'register' : 'login');
+    } catch (error) {
+      showAuth(inviteToken ? 'register' : 'login', `Nie można połączyć się z serwerem. Uruchom go poleceniem „python server.py”. ${error.message}`);
+    }
+  }
+
+  elements.authSwitch.addEventListener('click', () => {
+    showAuth(elements.registerForm.hidden ? 'register' : 'login');
+  });
+  elements.loginForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    try {
+      const { user } = await apiRequest('/api/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: $('#login-email').value, password: $('#login-password').value }),
+      });
+      await showApp(user);
+    } catch (error) {
+      $('#login-password').value = '';
+      showAuth('login', error.message);
+    }
+  });
+  elements.registerForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const password = $('#register-password').value;
+    if (password !== $('#register-confirm').value) {
+      showAuth('register', 'Hasła nie są takie same.');
+      return;
+    }
+    try {
+      const { user } = await apiRequest('/api/register', {
+        method: 'POST',
+        body: JSON.stringify({ email: $('#register-email').value, password, invite: inviteToken }),
+      });
+      await showApp(user);
+    } catch (error) {
+      showAuth('register', error.message);
+    }
+  });
+  $('#logout-button').addEventListener('click', async () => {
+    try {
+      await apiRequest('/api/logout', { method: 'POST', body: '{}' });
+      window.location.assign('/');
+    } catch (error) {
+      showToast(error.message);
+    }
   });
 
   function moveToFront(note) {
@@ -86,7 +205,18 @@
         return;
       }
       const safeNode = document.createElement(node.tagName.toLowerCase());
-      if (node.tagName === 'UL' && node.classList.contains('task-list')) safeNode.className = 'task-list';
+      if (node.tagName === 'UL' && node.classList.contains('task-list')) {
+        safeNode.className = node.classList.contains('task-list-completed') ? 'task-list task-list-completed' : 'task-list';
+      }
+      if (node.tagName === 'P' && node.classList.contains('task-group-label')) {
+        safeNode.className = 'task-group-label';
+        safeNode.contentEditable = 'false';
+      }
+      if (node.tagName === 'SPAN' && (node.classList.contains('task-text')
+          || (node.parentElement?.matches('li') && node.parentElement.querySelector('input[type="checkbox"]')))) {
+        safeNode.className = 'task-text';
+        safeNode.tabIndex = 0;
+      }
       if (node.tagName === 'A') {
         try {
           const url = new URL(node.getAttribute('href'), window.location.href);
@@ -128,11 +258,159 @@
     return sanitizeRichHtml(clone.innerHTML);
   }
 
+  function normalizeTaskText(value) {
+    return String(value || '').replace(/[\u200b\u00a0]/g, ' ').replace(/\s+/g, ' ').trim().toLocaleLowerCase('pl');
+  }
+
+  function normalizeChecklistItemMarkup(root = elements.noteBody) {
+    root.querySelectorAll('ul.task-list > li').forEach(item => {
+      const checkbox = item.querySelector(':scope > input.task-checkbox');
+      if (!checkbox) return;
+      let text = item.querySelector(':scope > .task-text');
+      const strayNodes = [...item.childNodes].filter(node => node !== checkbox && node !== text);
+      if (!strayNodes.length && text) return;
+      const strayText = strayNodes.map(node => node.textContent.trim()).filter(Boolean).join(' ');
+      if (!text) {
+        text = document.createElement('span');
+        text.className = 'task-text';
+      }
+      if (strayText) text.textContent = [strayText, text.textContent.trim()].filter(Boolean).join(' ');
+      strayNodes.forEach(node => node.remove());
+      checkbox.after(text);
+      text.tabIndex = 0;
+    });
+  }
+
+  function taskTextAtSelection() {
+    const selection = window.getSelection();
+    const node = selection?.focusNode || selection?.anchorNode;
+    const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    return element?.closest('.task-text') || null;
+  }
+
+  function placeTaskCaretFromPointer(event) {
+    let range = document.caretRangeFromPoint?.(event.clientX, event.clientY);
+    if (!range && document.caretPositionFromPoint) {
+      const position = document.caretPositionFromPoint(event.clientX, event.clientY);
+      if (position) {
+        range = document.createRange();
+        range.setStart(position.offsetNode, position.offset);
+        range.collapse(true);
+      }
+    }
+    if (!range) return;
+    const node = range.startContainer;
+    const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    if (event.target.closest?.('input.task-checkbox')) return;
+    const taskText = event.target.closest?.('.task-text')
+      || element?.closest('.task-text')
+      || (event.target.closest?.('li') || element?.closest('li'))?.querySelector(':scope > .task-text');
+    if (!taskText) return;
+    if (!taskText.contains(range.startContainer)) {
+      const bounds = taskText.getBoundingClientRect();
+      range = document.createRange();
+      range.selectNodeContents(taskText);
+      range.collapse(event.clientX < bounds.left + bounds.width / 2);
+    }
+    event.preventDefault();
+    elements.noteBody.focus();
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    rememberEditorRange();
+  }
+
+  function normalizeChecklistGroups(root = elements.noteBody) {
+    normalizeChecklistItemMarkup(root);
+    root.querySelectorAll('ul.task-list:not(.task-list-completed)').forEach(activeList => {
+      const oldLabel = activeList.nextElementSibling?.matches('p.task-group-label') ? activeList.nextElementSibling : null;
+      const oldCompletedList = oldLabel?.nextElementSibling?.matches('ul.task-list.task-list-completed')
+        ? oldLabel.nextElementSibling
+        : null;
+      const allItems = [
+        ...activeList.querySelectorAll(':scope > li'),
+        ...(oldCompletedList ? oldCompletedList.querySelectorAll(':scope > li') : []),
+      ].filter(item => item.querySelector('input.task-checkbox'));
+      const activeItems = allItems.filter(item => !item.querySelector('input.task-checkbox').checked);
+      const completedItems = allItems.filter(item => item.querySelector('input.task-checkbox').checked);
+      const currentActiveItems = [...activeList.querySelectorAll(':scope > li')];
+      if (currentActiveItems.length !== activeItems.length
+          || currentActiveItems.some((item, index) => item !== activeItems[index])) {
+        activeList.replaceChildren(...activeItems);
+      }
+
+      if (!completedItems.length) {
+        oldLabel?.remove();
+        oldCompletedList?.remove();
+        return;
+      }
+
+      const label = oldLabel || document.createElement('p');
+      label.className = 'task-group-label';
+      label.contentEditable = 'false';
+      label.textContent = 'Zaznaczone';
+      const completedList = oldCompletedList || document.createElement('ul');
+      completedList.className = 'task-list task-list-completed';
+      const currentCompletedItems = [...completedList.querySelectorAll(':scope > li')];
+      if (currentCompletedItems.length !== completedItems.length
+          || currentCompletedItems.some((item, index) => item !== completedItems[index])) {
+        completedList.replaceChildren(...completedItems);
+      }
+      if (activeList.nextElementSibling !== label) activeList.after(label);
+      if (label.nextElementSibling !== completedList) label.after(completedList);
+    });
+  }
+
+  function updateCompletedTaskSuggestions(taskText) {
+    const suggestions = $('#task-restore-suggestions');
+    suggestions.replaceChildren();
+    if (!taskText || taskText.closest('.task-list-completed')) {
+      suggestions.hidden = true;
+      return;
+    }
+    const query = normalizeTaskText(taskText.textContent);
+    if (query.length < 2) {
+      suggestions.hidden = true;
+      return;
+    }
+    const matches = [...elements.noteBody.querySelectorAll('.task-list-completed > li')]
+      .map(item => ({ item, text: item.querySelector('.task-text') }))
+      .filter(({ text }) => text && normalizeTaskText(text.textContent).startsWith(query));
+    if (!matches.length) {
+      suggestions.hidden = true;
+      return;
+    }
+
+    const message = document.createElement('span');
+    message.className = 'task-restore-message';
+    message.textContent = 'To zadanie jest już zaznaczone:';
+    suggestions.append(message);
+    matches.forEach(({ item, text }) => {
+      const button = document.createElement('button');
+      button.className = 'task-restore-option';
+      button.type = 'button';
+      button.textContent = `Przywróć „${text.textContent.trim()}”`;
+      button.addEventListener('click', () => {
+        const currentItem = taskText.closest('li');
+        if (currentItem && currentItem !== item) currentItem.remove();
+        item.querySelector('input.task-checkbox').checked = false;
+        normalizeChecklistGroups();
+        suggestions.hidden = true;
+        placeEditorCaret(item.querySelector('.task-text'));
+        updateWordCount();
+        scheduleSave();
+      });
+      suggestions.append(button);
+    });
+    suggestions.hidden = false;
+  }
+
   function rememberEditorRange() {
     const selection = window.getSelection();
     if (!selection?.rangeCount || !elements.noteBody.contains(selection.anchorNode) || !elements.noteBody.contains(selection.focusNode)) return;
     editorRange = selection.getRangeAt(0).cloneRange();
     updateFormatToolbar();
+    updateCompletedTaskSuggestions(taskTextAtSelection());
   }
 
   function restoreEditorRange() {
@@ -164,15 +442,44 @@
 
     const content = document.createElement('span');
     content.className = 'task-text';
-    content.contentEditable = 'true';
-    content.setAttribute('role', 'textbox');
     content.tabIndex = 0;
     content.textContent = '\u00A0';
     item.append(checkbox, content);
     return item;
   }
 
-  function placeEditorCaret(container) {
+  function removeChecklistItem(item) {
+    const list = item.closest('ul.task-list');
+    const previousText = item.previousElementSibling?.querySelector('.task-text');
+    const nextText = item.nextElementSibling?.querySelector('.task-text');
+    const wasCompleted = list.classList.contains('task-list-completed');
+    const parent = list.parentElement;
+    const afterList = list.nextSibling;
+    item.remove();
+    normalizeChecklistGroups();
+
+    if (previousText?.isConnected) {
+      placeEditorCaret(previousText, true);
+      return;
+    }
+    if (nextText?.isConnected) {
+      placeEditorCaret(nextText);
+      return;
+    }
+
+    const activeList = elements.noteBody.querySelector('ul.task-list:not(.task-list-completed)');
+    const completedList = elements.noteBody.querySelector('ul.task-list-completed');
+    if (activeList && !activeList.children.length && !completedList) activeList.remove();
+    const paragraph = document.createElement('div');
+    paragraph.append(document.createElement('br'));
+    if (activeList?.isConnected && completedList) activeList.after(paragraph);
+    else if (parent === elements.noteBody) elements.noteBody.insertBefore(paragraph, afterList?.isConnected ? afterList : null);
+    else parent.after(paragraph);
+    if (wasCompleted) normalizeChecklistGroups();
+    placeEditorCaret(paragraph);
+  }
+
+  function placeEditorCaret(container, atEnd = false) {
     if (!container || !container.nodeType) return;
 
     const selection = window.getSelection();
@@ -200,16 +507,16 @@
         target = emptyText;
       }
 
-      container.focus();
+      (container.matches?.('.task-text') ? elements.noteBody : container).focus();
     }
 
     const range = document.createRange();
     if (target.nodeType === Node.TEXT_NODE) {
-      range.setStart(target, 0);
+      range.setStart(target, atEnd ? target.length : 0);
       range.collapse(true);
     } else {
       range.selectNodeContents(target);
-      range.collapse(true);
+      range.collapse(!atEnd);
     }
 
     selection.removeAllRanges();
@@ -296,7 +603,10 @@
 
   function persist() {
     notes.forEach((note, index) => { note.order = notes.length - index; });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+    if (!currentUser) return;
+    const snapshot = JSON.stringify({ notes });
+    saveQueue = saveQueue.catch(() => {}).then(() => apiRequest('/api/notes', { method: 'PUT', body: snapshot }));
+    saveQueue.catch(error => showToast(`Nie udało się zapisać notatek: ${error.message}`));
   }
 
   function moveNote(noteId, targetId, after = false) {
@@ -465,12 +775,13 @@
   }
 
   function openEditor(id = null) {
+    if (!currentUser) return;
     const existing = notes.find(note => note.id === id);
     if (!existing && view === 'trash') return;
     const note = existing || createNote();
+    activeIsNew = !existing;
     if (!existing) {
       notes.unshift(note);
-      persist();
     }
     activeId = note.id;
     activeColor = note.color;
@@ -478,6 +789,9 @@
     elements.noteTitle.value = note.title;
     editorRange = null;
     elements.noteBody.innerHTML = note.bodyFormat === 1 ? sanitizeRichHtml(note.body) : plainTextToHtml(note.body);
+    normalizeChecklistGroups();
+    $('#task-restore-suggestions').replaceChildren();
+    $('#task-restore-suggestions').hidden = true;
     elements.tags.value = (note.tags || []).join(', ');
     elements.date.textContent = `Utworzono ${formatFullDate(note.createdAt)}`;
     updateWordCount();
@@ -493,8 +807,15 @@
 
   function closeEditor() {
     if (!activeId) return;
-    saveEditor();
+    window.clearTimeout(saveTimeout);
+    if (activeIsNew && !hasEditorContent()) {
+      notes = notes.filter(note => note.id !== activeId);
+      persist();
+    } else {
+      saveEditor();
+    }
     activeId = null;
+    activeIsNew = false;
     elements.panel.classList.remove('is-open');
     elements.panel.setAttribute('aria-hidden', 'true');
     elements.backdrop.hidden = true;
@@ -503,9 +824,18 @@
     render();
   }
 
+  function hasEditorContent() {
+    return Boolean(
+      elements.noteTitle.value.trim()
+      || elements.tags.value.split(',').some(tag => tag.trim())
+      || normalizeTaskText(elements.noteBody.textContent),
+    );
+  }
+
   function saveEditor() {
     const note = notes.find(item => item.id === activeId);
     if (!note) return;
+    normalizeChecklistGroups();
     note.title = elements.noteTitle.value.trim();
     note.body = serializedEditorBody();
     note.bodyFormat = 1;
@@ -529,7 +859,9 @@
   }
 
   function updateWordCount() {
-    const text = elements.noteBody.innerText || elements.noteBody.textContent || '';
+    const body = elements.noteBody.cloneNode(true);
+    body.querySelectorAll('.task-group-label').forEach(label => label.remove());
+    const text = body.innerText || body.textContent || '';
     const count = text.trim().split(/\s+/).filter(Boolean).length;
     elements.words.textContent = `${count} ${plural(count, 'słowo', 'słowa', 'słów')}`;
   }
@@ -628,95 +960,6 @@
     toastTimeout = window.setTimeout(() => elements.toast.classList.remove('is-visible'), 3200);
   }
 
-  function exportBackup() {
-    $('#settings-menu').open = false;
-    const backup = { format: 'notki-backup', version: 1, exportedAt: new Date().toISOString(), notes };
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `notki-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    showToast(`Kopia zapasowa pobrana: ${notes.length} ${plural(notes.length, 'notatka', 'notatki', 'notatek')}.`);
-  }
-
-  function normalizeBackupNote(candidate) {
-    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate) || typeof candidate.id !== 'string' || !candidate.id.trim()) return null;
-    if (typeof candidate.title !== 'string' && typeof candidate.body !== 'string') return null;
-    if (typeof candidate.body === 'string' && candidate.body.length > 1000000) return null;
-    const now = new Date().toISOString();
-    const createdAt = Number.isFinite(Date.parse(candidate.createdAt)) ? new Date(candidate.createdAt).toISOString() : now;
-    const updatedAt = Number.isFinite(Date.parse(candidate.updatedAt)) ? new Date(candidate.updatedAt).toISOString() : createdAt;
-    const deleted = Boolean(candidate.deleted);
-    const archived = !deleted && Boolean(candidate.archived);
-    return {
-      id: candidate.id.trim().slice(0, 160),
-      title: typeof candidate.title === 'string' ? candidate.title.slice(0, 160) : '',
-      body: typeof candidate.body === 'string' ? candidate.body : '',
-      bodyFormat: candidate.bodyFormat === 1 ? 1 : 0,
-      color: COLORS.includes(candidate.color) ? candidate.color : 'default',
-      tags: [...new Set((Array.isArray(candidate.tags) ? candidate.tags : []).filter(tag => typeof tag === 'string').map(tag => tag.trim().toLocaleLowerCase('pl')).filter(Boolean))].slice(0, 50),
-      pinned: !deleted && !archived && Boolean(candidate.pinned),
-      archived,
-      deleted,
-      createdAt,
-      updatedAt,
-      order: Number.isFinite(candidate.order) ? candidate.order : Date.parse(updatedAt),
-    };
-  }
-
-  async function importBackup(file) {
-    if (file.size > 10000000) throw new Error('Plik kopii zapasowej przekracza limit 10 MB.');
-    const parsed = JSON.parse(await file.text());
-    const records = Array.isArray(parsed) ? parsed : parsed?.format === 'notki-backup' && parsed.version === 1 ? parsed.notes : null;
-    if (!Array.isArray(records) || records.length > 10000) throw new Error('Plik nie jest prawidłową kopią Notki.');
-    const knownIds = new Set(notes.map(note => note.id));
-    const imported = [];
-    let skipped = 0;
-    records.forEach(record => {
-      const note = normalizeBackupNote(record);
-      if (!note || knownIds.has(note.id)) {
-        skipped += 1;
-        return;
-      }
-      knownIds.add(note.id);
-      imported.push(note);
-    });
-    if (!imported.length) {
-      showToast(records.length ? `Nic nie dodano; pominięto ${skipped} duplikatów lub błędnych wpisów.` : 'Ta kopia zapasowa nie zawiera notatek.');
-      return;
-    }
-    const existingNotes = notes;
-    notes = [...imported, ...notes];
-    try {
-      persist();
-    } catch {
-      notes = existingNotes;
-      throw new Error('Brak miejsca w pamięci przeglądarki na import tych notatek.');
-    }
-    render();
-    showToast(`Import zakończony: dodano ${imported.length}, pominięto ${skipped}.`);
-  }
-
-  $('#export-notes').addEventListener('click', exportBackup);
-  $('#import-notes').addEventListener('click', () => $('#import-file').click());
-  $('#import-file').addEventListener('change', async event => {
-    const input = event.currentTarget;
-    const file = input.files[0];
-    if (!file) return;
-    try {
-      await importBackup(file);
-    } catch (error) {
-      showToast(error instanceof SyntaxError ? 'Plik nie zawiera poprawnego JSON-u.' : error.message);
-    } finally {
-      input.value = '';
-      $('#settings-menu').open = false;
-    }
-  });
-
   document.addEventListener('selectionchange', event => {
     if (elements.noteBody.contains(event.target) || elements.noteBody === event.target) {
       rememberEditorRange();
@@ -727,7 +970,7 @@
       restoreEditorRange();
       const previousRange = editorRange?.cloneRange();
       if (button.hasAttribute('data-insert-checklist')) {
-        document.execCommand('insertHTML', false, '<ul class="task-list"><li><input type="checkbox" class="task-checkbox" contenteditable="false" aria-label="Oznacz zadanie jako wykonane"><span class="task-text" contenteditable="true" role="textbox">&#8203;</span></li></ul>');
+        document.execCommand('insertHTML', false, '<ul class="task-list"><li><input type="checkbox" class="task-checkbox" contenteditable="false" aria-label="Oznacz zadanie jako wykonane"><span class="task-text" tabindex="0">&#8203;</span></li></ul>');
       } else if (button.dataset.command) {
         document.execCommand(button.dataset.command, false, null);
       }
@@ -741,9 +984,23 @@
     });
   });
   elements.noteBody.addEventListener('keydown', event => {
+    if (event.key === 'Backspace') {
+      const selectedTask = taskTextAtSelection();
+      const focusedCheckbox = event.target.matches?.('input.task-checkbox') ? event.target : null;
+      const item = focusedCheckbox?.closest('li')
+        || (selectedTask && !normalizeTaskText(selectedTask.textContent) ? selectedTask.closest('li') : null);
+      if (item) {
+        event.preventDefault();
+        removeChecklistItem(item);
+        $('#task-restore-suggestions').hidden = true;
+        updateWordCount();
+        scheduleSave();
+      }
+      return;
+    }
     if (event.key !== 'Enter' || event.shiftKey) return;
     const selection = window.getSelection();
-    const anchor = selection?.anchorNode;
+    const anchor = selection?.focusNode || selection?.anchorNode;
     const anchorElement = anchor?.nodeType === Node.ELEMENT_NODE ? anchor : anchor?.parentElement;
     const item = anchorElement?.closest('li');
     const list = item?.closest('ul.task-list');
@@ -765,14 +1022,24 @@
     } else {
       const nextItem = createChecklistItem();
       item.after(nextItem);
+      normalizeChecklistGroups();
       const nextText = nextItem.querySelector('.task-text');
       window.setTimeout(() => placeEditorCaret(nextText), 0);
     }
+    normalizeChecklistGroups();
+    $('#task-restore-suggestions').hidden = true;
     updateWordCount();
     scheduleSave();
   });
+  elements.noteBody.addEventListener('pointerdown', event => {
+    if (event.button === 0) placeTaskCaretFromPointer(event);
+  });
   elements.noteBody.addEventListener('change', event => {
-    if (event.target.matches('input[type="checkbox"]')) scheduleSave();
+    if (event.target.matches('input[type="checkbox"]')) {
+      normalizeChecklistGroups();
+      $('#task-restore-suggestions').hidden = true;
+      scheduleSave();
+    }
   });
 
   $('#create-note').addEventListener('click', () => openEditor());
@@ -790,8 +1057,12 @@
     query = elements.search.value.trim();
     render();
   });
-  [elements.noteTitle, elements.noteBody, elements.tags].forEach(input => input.addEventListener('input', () => {
-    if (input === elements.noteBody) updateWordCount();
+  [elements.noteTitle, elements.noteBody, elements.tags].forEach(input => input.addEventListener('input', event => {
+    if (input === elements.noteBody) {
+      normalizeChecklistItemMarkup();
+      updateWordCount();
+      updateCompletedTaskSuggestions(taskTextAtSelection());
+    }
     scheduleSave();
   }));
   $$('.color-swatch').forEach(swatch => swatch.addEventListener('click', () => {
@@ -881,6 +1152,5 @@
     if (event.key === 'Escape' && activeId) closeEditor();
   });
 
-  render();
-  readSharedNote();
+  initializeApp();
 })();

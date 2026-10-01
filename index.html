@@ -13,7 +13,34 @@
   <script src="app.js" defer></script>
 </head>
 <body>
-  <div class="app-shell">
+  <section class="auth-view" id="auth-view" hidden>
+    <div class="auth-content">
+      <a class="brand auth-brand" href="/" aria-label="Notki"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span>notki<span class="brand-period">.</span></span></a>
+      <p class="eyebrow">NOTATKI PRYWATNE</p>
+      <h1 id="auth-heading">Zaloguj się<span class="heading-period">.</span></h1>
+      <p class="auth-description" id="auth-description">Zaloguj się na swoje konto, aby otworzyć notatki.</p>
+      <p class="auth-message" id="auth-message" role="alert" hidden></p>
+      <form class="auth-form" id="login-form">
+        <label class="field-label" for="login-email">E-MAIL</label>
+        <input class="auth-input" id="login-email" type="email" autocomplete="username" required maxlength="254">
+        <label class="field-label" for="login-password">HASŁO</label>
+        <input class="auth-input" id="login-password" type="password" autocomplete="current-password" required>
+        <button class="button-primary" type="submit">Zaloguj się</button>
+      </form>
+      <form class="auth-form" id="register-form" hidden>
+        <label class="field-label" for="register-email">E-MAIL</label>
+        <input class="auth-input" id="register-email" type="email" autocomplete="email" required maxlength="254">
+        <label class="field-label" for="register-password">HASŁO</label>
+        <input class="auth-input" id="register-password" type="password" autocomplete="new-password" required minlength="12">
+        <label class="field-label" for="register-confirm">POWTÓRZ HASŁO</label>
+        <input class="auth-input" id="register-confirm" type="password" autocomplete="new-password" required minlength="12">
+        <button class="button-primary" type="submit">Utwórz konto</button>
+      </form>
+      <button class="auth-switch" id="auth-switch" type="button" hidden></button>
+    </div>
+  </section>
+
+  <div class="app-shell" id="app-shell" hidden>
     <aside class="sidebar" aria-label="Nawigacja">
       <a class="brand" href="#all" aria-label="Notki, wszystkie notatki">
         <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
@@ -26,8 +53,9 @@
         <button class="nav-item" type="button" data-view="archive"><span class="nav-icon" aria-hidden="true">▣</span><span>Archiwum</span><span class="nav-count" id="count-archive">0</span></button>
         <button class="nav-item" type="button" data-view="trash"><span class="nav-icon" aria-hidden="true">⌫</span><span>Kosz</span><span class="nav-count" id="count-trash">0</span></button>
       </nav>
+      <a class="admin-link" id="admin-link" href="/admin" hidden><span aria-hidden="true">⚙</span> Panel administracyjny</a>
       <div class="sidebar-bottom">
-        <div class="storage-note"><span class="storage-dot"></span><span>Zapisane na tym urządzeniu</span></div>
+        <div class="storage-note"><span class="storage-dot"></span><span>Zapisane na serwerze</span></div>
         <span class="sidebar-version">NOTKI · 01</span>
       </div>
     </aside>
@@ -40,12 +68,10 @@
           <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Włącz ciemny motyw" title="Włącz ciemny motyw" aria-pressed="false"><span aria-hidden="true">☾</span></button>
           <details class="settings-menu" id="settings-menu">
             <summary class="settings-trigger" aria-label="Ustawienia" title="Ustawienia"><span aria-hidden="true">⚙</span></summary>
-            <div class="settings-popover" role="group" aria-label="Backup i import">
-              <span class="settings-heading">DANE I KOPIE</span>
+            <div class="settings-popover" role="group" aria-label="Konto">
+              <span class="settings-heading">KONTO</span>
               <div class="data-actions">
-                <button class="data-action" id="export-notes" type="button" aria-label="Eksportuj kopię zapasową" title="Pobierz kopię zapasową"><span class="action-icon" aria-hidden="true">↓</span><span class="action-label">Pobierz kopię zapasową</span></button>
-                <button class="data-action" id="import-notes" type="button" aria-label="Importuj notatki" title="Importuj z kopii zapasowej"><span class="action-icon" aria-hidden="true">↑</span><span class="action-label">Importuj notatki</span></button>
-                <input id="import-file" type="file" accept=".json,application/json" hidden>
+                <button class="data-action" id="logout-button" type="button"><span class="action-icon" aria-hidden="true">↪</span><span class="action-label">Wyloguj</span></button>
               </div>
             </div>
           </details>
@@ -84,7 +110,7 @@
   </div>
 
   <div class="modal-backdrop" id="editor-backdrop" hidden></div>
-  <aside class="editor-panel" id="editor-panel" aria-label="Edytor notatki" aria-hidden="true">
+  <aside class="editor-panel" id="editor-panel" aria-label="Edytor notatki" aria-hidden="true" hidden>
     <div class="editor-topbar">
       <button class="icon-button editor-close" id="close-editor" type="button" aria-label="Zamknij edytor" title="Zamknij">×</button>
       <span class="save-state" id="save-state"><span class="save-dot"></span>Zapisano</span>
@@ -111,6 +137,7 @@
         <button class="format-tool clear-format" type="button" data-command="removeFormat" aria-label="Wyczyść formatowanie" title="Wyczyść formatowanie">Tx</button>
       </div>
       <div class="editor-body" id="note-body" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Treść notatki" data-placeholder="Zacznij pisać..."></div>
+      <div class="task-restore-suggestions" id="task-restore-suggestions" role="status" hidden></div>
       <div class="editor-meta"><span id="editor-date"></span><span class="meta-separator">·</span><span id="editor-words">0 słów</span></div>
       <div class="editor-divider"></div>
       <label class="field-label" for="note-tags">ETYKIETY</label>
