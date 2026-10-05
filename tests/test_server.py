@@ -123,7 +123,7 @@ class ServerFlowTests(unittest.TestCase):
             'invite': invite_token,
         })
         self.assertEqual(status, 403)
-        self.assertIn('zaproszenie', error['error'].lower())
+        self.assertIn('invitation', error['error'].lower())
 
     def test_password_change_requires_current_password_and_keeps_session(self):
         status, _ = self.request(self.admin, 'POST', '/api/account/password', {
@@ -165,7 +165,7 @@ class ServerFlowTests(unittest.TestCase):
     def test_admin_route_serves_dashboard(self):
         with self.admin.open(self.base_url + '/admin') as response:
             html = response.read().decode('utf-8')
-        self.assertIn('Panel administracyjny', html)
+        self.assertIn('Admin panel', html)
 
     def test_shared_translation_module_is_served(self):
         with self.admin.open(self.base_url + '/i18n.js') as response:
@@ -200,13 +200,13 @@ class ServerFlowTests(unittest.TestCase):
 
         status, error = self.request(self.new_client(), 'GET', '/api/notes')
         self.assertEqual(status, 401)
-        self.assertEqual(error['error'], 'Zaloguj się, aby kontynuować.')
+        self.assertEqual(error['error'], 'Sign in to continue.')
 
         status, error = self.request(
             self.new_client(), 'GET', '/api/notes', headers={'Accept-Language': 'de-DE,fr;q=0.8'},
         )
         self.assertEqual(status, 401)
-        self.assertEqual(error['error'], 'Zaloguj się, aby kontynuować.')
+        self.assertEqual(error['error'], 'Sign in to continue.')
 
         status, error = self.request(
             self.new_client(), 'GET', '/api/notes', headers={'Accept-Language': 'pl;q=0.2, en;q=0.9'},
@@ -316,7 +316,7 @@ class FirstRunSetupTests(unittest.TestCase):
     def test_first_admin_setup_is_local_and_one_time(self):
         with self.client.open(self.base_url + '/') as response:
             self.assertTrue(response.geturl().endswith('/setup'))
-            self.assertIn('Utwórz administratora', response.read().decode('utf-8'))
+            self.assertIn('Create administrator', response.read().decode('utf-8'))
         status, result = self.request('GET', '/api/setup/status')
         self.assertEqual(status, 200)
         self.assertTrue(result['needsSetup'])
@@ -325,13 +325,13 @@ class FirstRunSetupTests(unittest.TestCase):
             'email': 'admin@example.com', 'password': 'short',
         })
         self.assertEqual(status, 400)
-        self.assertEqual(result['error'], 'Hasło musi mieć co najmniej 12 znaków.')
+        self.assertEqual(result['error'], 'The password must be at least 12 characters long.')
 
         status, result = self.request('POST', '/api/setup/admin', {
             'email': 'admin@example.com', 'password': 'short',
-        }, {'Accept-Language': 'en-US'})
+        }, {'Accept-Language': 'pl-PL'})
         self.assertEqual(status, 400)
-        self.assertEqual(result['error'], 'The password must be at least 12 characters long.')
+        self.assertEqual(result['error'], 'Hasło musi mieć co najmniej 12 znaków.')
 
         status, result = self.request('POST', '/api/setup/admin', {
             'email': 'admin@example.com', 'password': 'secure-first-admin-password',

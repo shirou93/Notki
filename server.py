@@ -31,7 +31,7 @@ MAX_SNAPSHOT_BYTES = 100 * 1024 * 1024
 BACKUP_FILENAME_PATTERN = re.compile(r'^notki-server-\d{8}-\d{6}Z-[a-f0-9]{8}\.tgz$')
 NOTE_COLORS = {'default', 'mint', 'lemon', 'peach', 'lilac', 'sky'}
 STATIC_FILES = {'index.html', 'admin.html', 'admin.js', 'app.js', 'i18n.js', 'theme.js', 'setup.html', 'setup.js', 'styles.css'}
-DEFAULT_LANGUAGE = 'pl'
+DEFAULT_LANGUAGE = 'en'
 SUPPORTED_LANGUAGES = ('pl', 'en')
 
 # Polish messages are the source strings; this catalog provides their English counterparts.

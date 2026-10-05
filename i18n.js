@@ -1,7 +1,7 @@
 /* Shared translation layer for Notki: dictionaries, language persistence and DOM translation. */
 (() => {
   const STORAGE_KEY = 'notki.lang.v1';
-  const FALLBACK_LANGUAGE = 'pl';
+  const FALLBACK_LANGUAGE = 'en';
   const SUPPORTED_LANGUAGES = ['pl', 'en'];
   const HTML_LANGUAGES = { pl: 'pl', en: 'en' };
 

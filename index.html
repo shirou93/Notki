@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="pl">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#173c32">
-  <meta name="description" content="Notki — prywatny notatnik w przeglądarce." data-i18n-content="meta.description">
-  <title data-i18n="meta.title">Notki — Twój notatnik</title>
+  <meta name="description" content="Notki — a private notebook in your browser." data-i18n-content="meta.description">
+  <title data-i18n="meta.title">Notki — Your notebook</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
@@ -18,62 +18,62 @@
   <section class="auth-view" id="auth-view" hidden>
     <div class="auth-content">
       <a class="brand auth-brand" href="/" aria-label="Notki" data-i18n-aria-label="brand.aria"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span>notki<span class="brand-period">.</span></span></a>
-      <p class="eyebrow" data-i18n="auth.eyebrow">NOTATKI PRYWATNE</p>
-      <h1 id="auth-heading"><span data-i18n="auth.heading.login">Zaloguj się</span><span class="heading-period">.</span></h1>
-      <p class="auth-description" id="auth-description" data-i18n="auth.description.login">Zaloguj się na swoje konto, aby otworzyć notatki.</p>
+      <p class="eyebrow" data-i18n="auth.eyebrow">PRIVATE NOTES</p>
+      <h1 id="auth-heading"><span data-i18n="auth.heading.login">Sign in</span><span class="heading-period">.</span></h1>
+      <p class="auth-description" id="auth-description" data-i18n="auth.description.login">Sign in to your account to open your notes.</p>
       <p class="auth-message" id="auth-message" role="alert" hidden></p>
       <form class="auth-form" id="login-form">
         <label class="field-label" for="login-email" data-i18n="auth.email">E-MAIL</label>
         <input class="auth-input" id="login-email" type="email" autocomplete="username" required maxlength="254">
-        <label class="field-label" for="login-password" data-i18n="auth.password">HASŁO</label>
+        <label class="field-label" for="login-password" data-i18n="auth.password">PASSWORD</label>
         <input class="auth-input" id="login-password" type="password" autocomplete="current-password" required>
-        <button class="button-primary" type="submit" data-i18n="auth.submit.login">Zaloguj się</button>
+        <button class="button-primary" type="submit" data-i18n="auth.submit.login">Sign in</button>
       </form>
       <form class="auth-form" id="register-form" hidden>
         <label class="field-label" for="register-email" data-i18n="auth.email">E-MAIL</label>
         <input class="auth-input" id="register-email" type="email" autocomplete="email" required maxlength="254">
-        <label class="field-label" for="register-password" data-i18n="auth.password">HASŁO</label>
+        <label class="field-label" for="register-password" data-i18n="auth.password">PASSWORD</label>
         <input class="auth-input" id="register-password" type="password" autocomplete="new-password" required minlength="12">
-        <label class="field-label" for="register-confirm" data-i18n="auth.confirmPassword">POWTÓRZ HASŁO</label>
+        <label class="field-label" for="register-confirm" data-i18n="auth.confirmPassword">CONFIRM PASSWORD</label>
         <input class="auth-input" id="register-confirm" type="password" autocomplete="new-password" required minlength="12">
-        <button class="button-primary" type="submit" data-i18n="auth.submit.register">Utwórz konto</button>
+        <button class="button-primary" type="submit" data-i18n="auth.submit.register">Create account</button>
       </form>
       <button class="auth-switch" id="auth-switch" type="button" hidden></button>
     </div>
   </section>
 
   <div class="app-shell" id="app-shell" hidden>
-    <aside class="sidebar" aria-label="Nawigacja" data-i18n-aria-label="nav.aria">
-      <a class="brand" href="#all" aria-label="Notki, wszystkie notatki" data-i18n-aria-label="brand.homeAria">
+    <aside class="sidebar" aria-label="Navigation" data-i18n-aria-label="nav.aria">
+      <a class="brand" href="#all" aria-label="Notki, all notes" data-i18n-aria-label="brand.homeAria">
         <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
         <span>notki<span class="brand-period">.</span></span>
       </a>
-      <nav class="nav-list" aria-label="Widoki notatek" data-i18n-aria-label="nav.viewsAria">
-        <button class="nav-item is-active" type="button" data-view="all"><span class="nav-icon" aria-hidden="true">▤</span><span data-i18n="nav.all">Wszystkie</span><span class="nav-count" id="count-all">0</span></button>
-        <button class="nav-item" type="button" data-view="pinned"><span class="nav-icon" aria-hidden="true">⌖</span><span data-i18n="nav.pinned">Przypięte</span><span class="nav-count" id="count-pinned">0</span></button>
-        <button class="nav-item" type="button" data-view="archive"><span class="nav-icon" aria-hidden="true">▣</span><span data-i18n="nav.archive">Archiwum</span><span class="nav-count" id="count-archive">0</span></button>
-        <button class="nav-item" type="button" data-view="trash"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></span><span data-i18n="nav.trash">Kosz</span><span class="nav-count" id="count-trash">0</span></button>
+      <nav class="nav-list" aria-label="Note views" data-i18n-aria-label="nav.viewsAria">
+        <button class="nav-item is-active" type="button" data-view="all"><span class="nav-icon" aria-hidden="true">▤</span><span data-i18n="nav.all">All</span><span class="nav-count" id="count-all">0</span></button>
+        <button class="nav-item" type="button" data-view="pinned"><span class="nav-icon" aria-hidden="true">⌖</span><span data-i18n="nav.pinned">Pinned</span><span class="nav-count" id="count-pinned">0</span></button>
+        <button class="nav-item" type="button" data-view="archive"><span class="nav-icon" aria-hidden="true">▣</span><span data-i18n="nav.archive">Archive</span><span class="nav-count" id="count-archive">0</span></button>
+        <button class="nav-item" type="button" data-view="trash"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></span><span data-i18n="nav.trash">Trash</span><span class="nav-count" id="count-trash">0</span></button>
       </nav>
-      <a class="admin-link" id="admin-link" href="/admin" hidden><span aria-hidden="true">⚙</span> <span data-i18n="nav.adminPanel">Panel administracyjny</span></a>
+      <a class="admin-link" id="admin-link" href="/admin" hidden><span aria-hidden="true">⚙</span> <span data-i18n="nav.adminPanel">Admin panel</span></a>
       <div class="sidebar-bottom">
-        <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Zapisane na serwerze</span></div>
+        <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
         <span class="sidebar-version">NOTKI · ALPHA 0.1.0</span>
       </div>
     </aside>
 
     <main class="main-content">
       <header class="topbar">
-        <div class="breadcrumbs"><span data-i18n="topbar.breadcrumb">TWÓJ NOTATNIK</span><span class="breadcrumb-slash">/</span><span id="breadcrumb-view">Wszystkie</span></div>
+        <div class="breadcrumbs"><span data-i18n="topbar.breadcrumb">YOUR NOTEBOOK</span><span class="breadcrumb-slash">/</span><span id="breadcrumb-view">All</span></div>
         <div class="topbar-actions">
-          <label class="search-box" for="search-input"><span class="search-icon" aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="Szukaj w notatkach" autocomplete="off" data-i18n-placeholder="topbar.search"><kbd>⌘ K</kbd></label>
-          <button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle data-theme-icon-light="☾" data-theme-icon-dark="☀" aria-label="Włącz ciemny motyw" title="Włącz ciemny motyw" aria-pressed="false"><span aria-hidden="true">☾</span></button>
+          <label class="search-box" for="search-input"><span class="search-icon" aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="Search notes" autocomplete="off" data-i18n-placeholder="topbar.search"><kbd>⌘ K</kbd></label>
+          <button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle data-theme-icon-light="☾" data-theme-icon-dark="☀" aria-label="Enable dark theme" title="Enable dark theme" aria-pressed="false"><span aria-hidden="true">☾</span></button>
           <details class="settings-menu" id="settings-menu">
-            <summary class="avatar" id="avatar" aria-label="Profil lokalny" title="Profil lokalny" data-i18n-aria-label="topbar.profile" data-i18n-title="topbar.profile">N</summary>
-            <div class="settings-popover" role="group" aria-label="Konto" data-i18n-aria-label="topbar.account">
-              <span class="settings-heading" data-i18n="topbar.account">KONTO</span>
+            <summary class="avatar" id="avatar" aria-label="Local profile" title="Local profile" data-i18n-aria-label="topbar.profile" data-i18n-title="topbar.profile">N</summary>
+            <div class="settings-popover" role="group" aria-label="Account" data-i18n-aria-label="topbar.account">
+              <span class="settings-heading" data-i18n="topbar.account">ACCOUNT</span>
               <div class="data-actions">
-                <button class="data-action" id="profile-button" type="button"><span class="action-icon" aria-hidden="true">◍</span><span class="action-label" data-i18n="topbar.profileMenu">Profil</span></button>
-                <button class="data-action" id="logout-button" type="button"><span class="action-icon" aria-hidden="true">↪</span><span class="action-label" data-i18n="topbar.logout">Wyloguj</span></button>
+                <button class="data-action" id="profile-button" type="button"><span class="action-icon" aria-hidden="true">◍</span><span class="action-label" data-i18n="topbar.profileMenu">Profile</span></button>
+                <button class="data-action" id="logout-button" type="button"><span class="action-icon" aria-hidden="true">↪</span><span class="action-label" data-i18n="topbar.logout">Sign out</span></button>
               </div>
             </div>
           </details>
@@ -81,114 +81,114 @@
       </header>
 
       <section class="page-heading">
-        <div><p class="eyebrow" id="note-count-label" data-i18n="page.countLabel">TWÓJ SPOKÓJ, TWOJE NOTATKI</p><h1 id="page-title">Wszystkie notatki<span class="heading-period">.</span></h1></div>
-        <button class="new-note-link" id="create-note-heading" type="button"><span aria-hidden="true">+</span> <span data-i18n="page.addNote">Dodaj notatkę</span></button>
+        <div><p class="eyebrow" id="note-count-label" data-i18n="page.countLabel">YOUR CALM, YOUR NOTES</p><h1 id="page-title">All notes<span class="heading-period">.</span></h1></div>
+        <button class="new-note-link" id="create-note-heading" type="button"><span aria-hidden="true">+</span> <span data-i18n="page.addNote">Add a note</span></button>
       </section>
 
-      <section class="capture-wrap" aria-label="Szybka notatka" data-i18n-aria-label="capture.aria">
-        <button class="capture-box" id="capture-note" type="button"><span class="capture-plus" aria-hidden="true">+</span><span data-i18n="capture.placeholder">Zapisz myśl, zanim ucieknie...</span><span class="capture-shortcut">N</span></button>
+      <section class="capture-wrap" aria-label="Quick note" data-i18n-aria-label="capture.aria">
+        <button class="capture-box" id="capture-note" type="button"><span class="capture-plus" aria-hidden="true">+</span><span data-i18n="capture.placeholder">Save the thought before it escapes...</span><span class="capture-shortcut">N</span></button>
       </section>
 
       <section class="shared-banner" id="shared-banner" hidden aria-live="polite">
-        <div><span class="shared-kicker" data-i18n="shared.kicker">NOTATKA OD KOGOŚ</span><strong id="shared-title" data-i18n="shared.title">Udostępniona notatka</strong><p id="shared-preview"></p></div>
-        <div class="shared-actions"><button class="button-secondary" id="dismiss-shared" type="button" data-i18n="shared.dismiss">Odrzuć</button><button class="button-primary" id="save-shared" type="button" data-i18n="shared.save">Zapisz u siebie</button></div>
+        <div><span class="shared-kicker" data-i18n="shared.kicker">A NOTE FROM SOMEONE</span><strong id="shared-title" data-i18n="shared.title">Shared note</strong><p id="shared-preview"></p></div>
+        <div class="shared-actions"><button class="button-secondary" id="dismiss-shared" type="button" data-i18n="shared.dismiss">Dismiss</button><button class="button-primary" id="save-shared" type="button" data-i18n="shared.save">Save to my notes</button></div>
       </section>
 
       <section class="notes-area" aria-live="polite">
-        <div class="section-label" id="pinned-label" hidden><span data-i18n="section.pinned">PRZYPIĘTE</span><span class="section-rule"></span></div>
+        <div class="section-label" id="pinned-label" hidden><span data-i18n="section.pinned">PINNED</span><span class="section-rule"></span></div>
         <div class="notes-grid" id="pinned-grid"></div>
-        <div class="section-label" id="other-label" hidden><span id="other-label-text" data-i18n="section.other">POZOSTAŁE</span><span class="section-rule"></span></div>
+        <div class="section-label" id="other-label" hidden><span id="other-label-text" data-i18n="section.other">OTHER</span><span class="section-rule"></span></div>
         <div class="notes-grid" id="notes-grid"></div>
         <div class="empty-state" id="empty-state" hidden>
           <div class="empty-art" aria-hidden="true"><span class="empty-sheet"></span><span class="empty-spark">✳</span></div>
-          <h2 id="empty-title">Tu zaczyna się dobra myśl.</h2>
-          <p id="empty-copy">Zapisz pierwszą notatkę. Będzie czekać na Ciebie właśnie tutaj.</p>
-          <button class="button-primary" id="empty-create" type="button" data-i18n="empty.create">+ Napisz pierwszą notatkę</button>
+          <h2 id="empty-title">A good thought starts here.</h2>
+          <p id="empty-copy">Write your first note. It will be waiting for you right here.</p>
+          <button class="button-primary" id="empty-create" type="button" data-i18n="empty.create">+ Write your first note</button>
         </div>
       </section>
-      <footer class="page-footer"><span id="footer-count">0 notatek</span><span data-i18n="footer.privacy">Twoje pomysły są tylko Twoje.</span></footer>
+      <footer class="page-footer"><span id="footer-count">0 notes</span><span data-i18n="footer.privacy">Your ideas stay yours.</span></footer>
     </main>
   </div>
 
   <div class="modal-backdrop" id="profile-backdrop" hidden></div>
   <section class="profile-panel" id="profile-panel" role="dialog" aria-modal="true" aria-labelledby="profile-title" aria-hidden="true" hidden>
     <div class="profile-topbar">
-      <h2 class="profile-title" id="profile-title" data-i18n="topbar.profileTitle">Profil</h2>
-      <button class="icon-button editor-close" id="close-profile" type="button" aria-label="Zamknij" title="Zamknij" data-i18n-aria-label="topbar.close" data-i18n-title="topbar.close">×</button>
+      <h2 class="profile-title" id="profile-title" data-i18n="topbar.profileTitle">Profile</h2>
+      <button class="icon-button editor-close" id="close-profile" type="button" aria-label="Close" title="Close" data-i18n-aria-label="topbar.close" data-i18n-title="topbar.close">×</button>
     </div>
     <div class="profile-content">
       <p class="profile-account" id="profile-account"></p>
-      <p class="profile-description" data-i18n="topbar.profileDescription">Zmień język interfejsu lub hasło do swojego konta.</p>
-      <label class="field-label" for="profile-language" data-i18n="topbar.language">JĘZYK</label>
-      <select class="auth-input profile-select" id="profile-language" data-language-select aria-label="Zmień język" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option></select>
+      <p class="profile-description" data-i18n="topbar.profileDescription">Change the interface language or your account password.</p>
+      <label class="field-label" for="profile-language" data-i18n="topbar.language">LANGUAGE</label>
+      <select class="auth-input profile-select" id="profile-language" data-language-select aria-label="Change language" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option></select>
       <form class="profile-form" id="password-form">
-        <p class="field-label" data-i18n="topbar.changePassword">ZMIANA HASŁA</p>
-        <label class="field-label" for="current-password" data-i18n="topbar.currentPassword">AKTUALNE HASŁO</label>
+        <p class="field-label" data-i18n="topbar.changePassword">CHANGE PASSWORD</p>
+        <label class="field-label" for="current-password" data-i18n="topbar.currentPassword">CURRENT PASSWORD</label>
         <input class="auth-input" id="current-password" type="password" autocomplete="current-password" required>
-        <label class="field-label" for="new-password" data-i18n="topbar.newPassword">NOWE HASŁO</label>
+        <label class="field-label" for="new-password" data-i18n="topbar.newPassword">NEW PASSWORD</label>
         <input class="auth-input" id="new-password" type="password" autocomplete="new-password" required minlength="12" aria-describedby="profile-password-hint">
-        <small class="setup-hint" id="profile-password-hint" data-i18n="topbar.passwordHint">Minimum 12 znaków.</small>
-        <label class="field-label" for="confirm-password" data-i18n="topbar.confirmPassword">POWTÓRZ NOWE HASŁO</label>
+        <small class="setup-hint" id="profile-password-hint" data-i18n="topbar.passwordHint">At least 12 characters.</small>
+        <label class="field-label" for="confirm-password" data-i18n="topbar.confirmPassword">CONFIRM NEW PASSWORD</label>
         <input class="auth-input" id="confirm-password" type="password" autocomplete="new-password" required minlength="12">
         <p class="auth-message" id="profile-message" role="alert" hidden></p>
-        <button class="button-primary" type="submit" data-i18n="topbar.changePassword">ZMIANA HASŁA</button>
+        <button class="button-primary" type="submit" data-i18n="topbar.changePassword">CHANGE PASSWORD</button>
       </form>
     </div>
   </section>
 
   <div class="modal-backdrop" id="editor-backdrop" hidden></div>
-  <aside class="editor-panel" id="editor-panel" aria-label="Edytor notatki" aria-hidden="true" hidden>
+  <aside class="editor-panel" id="editor-panel" aria-label="Note editor" aria-hidden="true" hidden>
     <div class="editor-topbar">
-      <button class="icon-button editor-close" id="close-editor" type="button" aria-label="Zamknij edytor" title="Zamknij" data-i18n-aria-label="editor.close" data-i18n-title="editor.closeTitle">×</button>
-      <span class="save-state" id="save-state"><span class="save-dot"></span><span data-i18n="editor.saved">Zapisano</span></span>
+      <button class="icon-button editor-close" id="close-editor" type="button" aria-label="Close editor" title="Close" data-i18n-aria-label="editor.close" data-i18n-title="editor.closeTitle">×</button>
+      <span class="save-state" id="save-state"><span class="save-dot"></span><span data-i18n="editor.saved">Saved</span></span>
       <div class="editor-tools">
-        <button class="icon-button" id="pin-note" type="button" aria-label="Przypnij notatkę" title="Przypnij" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle">⌖</button>
-        <button class="icon-button" id="archive-note" type="button" aria-label="Archiwizuj notatkę" title="Archiwizuj" data-i18n-aria-label="editor.archive" data-i18n-title="editor.archiveTitle">▣</button>
-        <button class="icon-button" id="share-note" type="button" aria-label="Udostępnij notatkę" title="Udostępnij link" data-i18n-aria-label="editor.share" data-i18n-title="editor.shareTitle">↗</button>
-        <button class="icon-button danger-icon" id="delete-note" type="button" aria-label="Przenieś do kosza" title="Przenieś do kosza" data-i18n-aria-label="editor.delete" data-i18n-title="editor.delete"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></button>
+        <button class="icon-button" id="pin-note" type="button" aria-label="Pin note" title="Pin" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle">⌖</button>
+        <button class="icon-button" id="archive-note" type="button" aria-label="Archive note" title="Archive" data-i18n-aria-label="editor.archive" data-i18n-title="editor.archiveTitle">▣</button>
+        <button class="icon-button" id="share-note" type="button" aria-label="Share note" title="Share link" data-i18n-aria-label="editor.share" data-i18n-title="editor.shareTitle">↗</button>
+        <button class="icon-button danger-icon" id="delete-note" type="button" aria-label="Move to trash" title="Move to trash" data-i18n-aria-label="editor.delete" data-i18n-title="editor.delete"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></button>
       </div>
     </div>
     <div class="editor-content">
-      <label class="sr-only" for="note-title" data-i18n="editor.titleLabel">Tytuł notatki</label>
-      <input class="editor-title" id="note-title" type="text" placeholder="Tytuł" maxlength="160" autocomplete="off" data-i18n-placeholder="editor.titlePlaceholder">
-      <label class="sr-only" for="note-body" data-i18n="editor.bodyLabel">Treść notatki</label>
-      <div class="format-toolbar" id="format-toolbar" role="toolbar" aria-label="Formatowanie notatki" data-i18n-aria-label="editor.toolbar">
-        <button class="format-tool" type="button" data-command="bold" aria-label="Pogrubienie" title="Pogrubienie" data-i18n-aria-label="editor.bold" data-i18n-title="editor.bold"><strong>B</strong></button>
-        <button class="format-tool" type="button" data-command="italic" aria-label="Kursywa" title="Kursywa" data-i18n-aria-label="editor.italic" data-i18n-title="editor.italic"><em>I</em></button>
-        <button class="format-tool" type="button" data-command="underline" aria-label="Podkreślenie" title="Podkreślenie" data-i18n-aria-label="editor.underline" data-i18n-title="editor.underline"><span class="underline-icon">U</span></button>
+      <label class="sr-only" for="note-title" data-i18n="editor.titleLabel">Note title</label>
+      <input class="editor-title" id="note-title" type="text" placeholder="Title" maxlength="160" autocomplete="off" data-i18n-placeholder="editor.titlePlaceholder">
+      <label class="sr-only" for="note-body" data-i18n="editor.bodyLabel">Note body</label>
+      <div class="format-toolbar" id="format-toolbar" role="toolbar" aria-label="Note formatting" data-i18n-aria-label="editor.toolbar">
+        <button class="format-tool" type="button" data-command="bold" aria-label="Bold" title="Bold" data-i18n-aria-label="editor.bold" data-i18n-title="editor.bold"><strong>B</strong></button>
+        <button class="format-tool" type="button" data-command="italic" aria-label="Italic" title="Italic" data-i18n-aria-label="editor.italic" data-i18n-title="editor.italic"><em>I</em></button>
+        <button class="format-tool" type="button" data-command="underline" aria-label="Underline" title="Underline" data-i18n-aria-label="editor.underline" data-i18n-title="editor.underline"><span class="underline-icon">U</span></button>
         <span class="format-separator" aria-hidden="true"></span>
-        <button class="format-tool" type="button" data-command="insertUnorderedList" aria-label="Lista punktowana" title="Lista punktowana" data-i18n-aria-label="editor.bulletList" data-i18n-title="editor.bulletList">•≡</button>
-        <button class="format-tool" type="button" data-command="insertOrderedList" aria-label="Lista numerowana" title="Lista numerowana" data-i18n-aria-label="editor.numberedList" data-i18n-title="editor.numberedList">1.</button>
-        <button class="format-tool" type="button" data-insert-checklist aria-label="Dodaj checkbox" title="Dodaj checkbox" data-i18n-aria-label="editor.checklist" data-i18n-title="editor.checklist">☐</button>
+        <button class="format-tool" type="button" data-command="insertUnorderedList" aria-label="Bulleted list" title="Bulleted list" data-i18n-aria-label="editor.bulletList" data-i18n-title="editor.bulletList">•≡</button>
+        <button class="format-tool" type="button" data-command="insertOrderedList" aria-label="Numbered list" title="Numbered list" data-i18n-aria-label="editor.numberedList" data-i18n-title="editor.numberedList">1.</button>
+        <button class="format-tool" type="button" data-insert-checklist aria-label="Add checkbox" title="Add checkbox" data-i18n-aria-label="editor.checklist" data-i18n-title="editor.checklist">☐</button>
         <span class="format-separator" aria-hidden="true"></span>
-        <button class="format-tool clear-format" type="button" data-command="removeFormat" aria-label="Wyczyść formatowanie" title="Wyczyść formatowanie" data-i18n-aria-label="editor.clearFormat" data-i18n-title="editor.clearFormat">Tx</button>
+        <button class="format-tool clear-format" type="button" data-command="removeFormat" aria-label="Clear formatting" title="Clear formatting" data-i18n-aria-label="editor.clearFormat" data-i18n-title="editor.clearFormat">Tx</button>
       </div>
-      <div class="editor-body" id="note-body" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Treść notatki" data-placeholder="Zacznij pisać..." data-i18n-aria-label="editor.bodyLabel" data-i18n-data-placeholder="editor.bodyPlaceholder"></div>
+      <div class="editor-body" id="note-body" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Note body" data-placeholder="Start writing..." data-i18n-aria-label="editor.bodyLabel" data-i18n-data-placeholder="editor.bodyPlaceholder"></div>
       <div class="task-restore-suggestions" id="task-restore-suggestions" role="status" hidden></div>
-      <div class="editor-meta"><span id="editor-date"></span><span class="meta-separator">·</span><span id="editor-words">0 słów</span></div>
+      <div class="editor-meta"><span id="editor-date"></span><span class="meta-separator">·</span><span id="editor-words">0 words</span></div>
       <div class="editor-divider"></div>
-      <label class="field-label" for="note-tags" data-i18n="editor.tags">ETYKIETY</label>
-      <input class="tags-input" id="note-tags" type="text" placeholder="np. praca, pomysły" autocomplete="off" data-i18n-placeholder="editor.tagsPlaceholder">
-      <div class="field-label color-label" data-i18n="editor.color">KOLOR NOTATKI</div>
-      <div class="color-picker" role="group" aria-label="Kolor notatki" data-i18n-aria-label="editor.colorGroup">
-        <button class="color-swatch swatch-default is-selected" data-color="default" type="button" aria-label="Domyślny" title="Domyślny" data-i18n-aria-label="editor.color.default" data-i18n-title="editor.color.default"></button>
-        <button class="color-swatch swatch-mint" data-color="mint" type="button" aria-label="Miętowy" title="Miętowy" data-i18n-aria-label="editor.color.mint" data-i18n-title="editor.color.mint"></button>
-        <button class="color-swatch swatch-lemon" data-color="lemon" type="button" aria-label="Cytrynowy" title="Cytrynowy" data-i18n-aria-label="editor.color.lemon" data-i18n-title="editor.color.lemon"></button>
-        <button class="color-swatch swatch-peach" data-color="peach" type="button" aria-label="Brzoskwiniowy" title="Brzoskwiniowy" data-i18n-aria-label="editor.color.peach" data-i18n-title="editor.color.peach"></button>
-        <button class="color-swatch swatch-lilac" data-color="lilac" type="button" aria-label="Lawendowy" title="Lawendowy" data-i18n-aria-label="editor.color.lilac" data-i18n-title="editor.color.lilac"></button>
-        <button class="color-swatch swatch-sky" data-color="sky" type="button" aria-label="Błękitny" title="Błękitny" data-i18n-aria-label="editor.color.sky" data-i18n-title="editor.color.sky"></button>
+      <label class="field-label" for="note-tags" data-i18n="editor.tags">TAGS</label>
+      <input class="tags-input" id="note-tags" type="text" placeholder="e.g. work, ideas" autocomplete="off" data-i18n-placeholder="editor.tagsPlaceholder">
+      <div class="field-label color-label" data-i18n="editor.color">NOTE COLOR</div>
+      <div class="color-picker" role="group" aria-label="Note color" data-i18n-aria-label="editor.colorGroup">
+        <button class="color-swatch swatch-default is-selected" data-color="default" type="button" aria-label="Default" title="Default" data-i18n-aria-label="editor.color.default" data-i18n-title="editor.color.default"></button>
+        <button class="color-swatch swatch-mint" data-color="mint" type="button" aria-label="Mint" title="Mint" data-i18n-aria-label="editor.color.mint" data-i18n-title="editor.color.mint"></button>
+        <button class="color-swatch swatch-lemon" data-color="lemon" type="button" aria-label="Lemon" title="Lemon" data-i18n-aria-label="editor.color.lemon" data-i18n-title="editor.color.lemon"></button>
+        <button class="color-swatch swatch-peach" data-color="peach" type="button" aria-label="Peach" title="Peach" data-i18n-aria-label="editor.color.peach" data-i18n-title="editor.color.peach"></button>
+        <button class="color-swatch swatch-lilac" data-color="lilac" type="button" aria-label="Lilac" title="Lilac" data-i18n-aria-label="editor.color.lilac" data-i18n-title="editor.color.lilac"></button>
+        <button class="color-swatch swatch-sky" data-color="sky" type="button" aria-label="Sky" title="Sky" data-i18n-aria-label="editor.color.sky" data-i18n-title="editor.color.sky"></button>
       </div>
-      <div class="editor-bottom-note"><span class="lock-mark" aria-hidden="true">◈</span> <span data-i18n="editor.privacy">Ta notatka jest prywatna, dopóki jej nie udostępnisz.</span></div>
+      <div class="editor-bottom-note"><span class="lock-mark" aria-hidden="true">◈</span> <span data-i18n="editor.privacy">This note stays private until you share it.</span></div>
     </div>
   </aside>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <template id="note-template">
     <article class="note-card">
-      <div class="card-topline"><span class="card-date"></span><div class="card-tools"><button class="card-drag" type="button" aria-label="Zmień kolejność notatki" title="Przeciągnij, aby zmienić kolejność" data-i18n-aria-label="card.drag" data-i18n-title="card.dragTitle">⠿</button><button class="card-pin" type="button" aria-label="Przypnij notatkę" title="Przypnij" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle">⌖</button></div></div>
+      <div class="card-topline"><span class="card-date"></span><div class="card-tools"><button class="card-drag" type="button" aria-label="Reorder note" title="Drag to reorder" data-i18n-aria-label="card.drag" data-i18n-title="card.dragTitle">⠿</button><button class="card-pin" type="button" aria-label="Pin note" title="Pin" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle">⌖</button></div></div>
       <h2 class="card-title"></h2>
       <p class="card-body"></p>
-      <div class="card-bottom"><div class="card-tags"></div><button class="card-share" type="button" aria-label="Udostępnij notatkę" title="Udostępnij link" data-i18n-aria-label="editor.share" data-i18n-title="editor.shareTitle">↗</button></div>
+      <div class="card-bottom"><div class="card-tags"></div><button class="card-share" type="button" aria-label="Share note" title="Share link" data-i18n-aria-label="editor.share" data-i18n-title="editor.shareTitle">↗</button></div>
     </article>
   </template>
 </body>

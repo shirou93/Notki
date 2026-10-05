@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="pl">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <meta name="description" content="Notki — prywatny notatnik w przeglądarce." data-i18n-content="meta.description">
-  <title data-i18n="meta.adminTitle">Panel administracyjny — Notki</title>
+  <meta name="description" content="Notki — a private notebook in your browser." data-i18n-content="meta.description">
+  <title data-i18n="meta.adminTitle">Admin panel — Notki</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
@@ -15,52 +15,52 @@
   <script src="admin.js" defer></script></head>
 <body class="admin-page">
   <div class="app-shell">
-    <aside class="sidebar" aria-label="Nawigacja" data-i18n-aria-label="nav.aria">
-      <a class="brand" href="/" aria-label="Notki, wróć do notatek" data-i18n-aria-label="brand.adminAria">
+    <aside class="sidebar" aria-label="Navigation" data-i18n-aria-label="nav.aria">
+      <a class="brand" href="/" aria-label="Notki, back to notes" data-i18n-aria-label="brand.adminAria">
         <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
         <span>notki<span class="brand-period">.</span></span>
       </a>
-      <nav class="nav-list" aria-label="Widoki notatek" data-i18n-aria-label="nav.viewsAria">
-        <a class="nav-item" href="/#all"><span class="nav-icon" aria-hidden="true">▤</span><span data-i18n="nav.all">Wszystkie</span></a>
-        <a class="nav-item" href="/#pinned"><span class="nav-icon" aria-hidden="true">⌖</span><span data-i18n="nav.pinned">Przypięte</span></a>
-        <a class="nav-item" href="/#archive"><span class="nav-icon" aria-hidden="true">▣</span><span data-i18n="nav.archive">Archiwum</span></a>
-        <a class="nav-item" href="/#trash"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></span><span data-i18n="nav.trash">Kosz</span></a>
+      <nav class="nav-list" aria-label="Note views" data-i18n-aria-label="nav.viewsAria">
+        <a class="nav-item" href="/#all"><span class="nav-icon" aria-hidden="true">▤</span><span data-i18n="nav.all">All</span></a>
+        <a class="nav-item" href="/#pinned"><span class="nav-icon" aria-hidden="true">⌖</span><span data-i18n="nav.pinned">Pinned</span></a>
+        <a class="nav-item" href="/#archive"><span class="nav-icon" aria-hidden="true">▣</span><span data-i18n="nav.archive">Archive</span></a>
+        <a class="nav-item" href="/#trash"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></span><span data-i18n="nav.trash">Trash</span></a>
       </nav>
-      <a class="admin-link is-active" href="/admin" aria-current="page"><span aria-hidden="true">⚙</span> <span data-i18n="nav.adminPanel">Panel administracyjny</span></a>
+      <a class="admin-link is-active" href="/admin" aria-current="page"><span aria-hidden="true">⚙</span> <span data-i18n="nav.adminPanel">Admin panel</span></a>
       <div class="sidebar-bottom">
-        <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Zapisane na serwerze</span></div>
+        <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
         <span class="sidebar-version">NOTKI · ALPHA 0.1.0</span>
       </div>
     </aside>
 
     <main class="main-content">
       <header class="topbar">
-        <div class="breadcrumbs"><span data-i18n="topbar.breadcrumb">TWÓJ NOTATNIK</span><span class="breadcrumb-slash">/</span><span data-i18n="nav.adminPanel">Panel administracyjny</span></div>
+        <div class="breadcrumbs"><span data-i18n="topbar.breadcrumb">YOUR NOTEBOOK</span><span class="breadcrumb-slash">/</span><span data-i18n="nav.adminPanel">Admin panel</span></div>
         <div class="topbar-actions">
-          <button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle data-theme-icon-light="☾︎" data-theme-icon-dark="☀︎" aria-label="Włącz ciemny motyw" title="Włącz ciemny motyw" aria-pressed="false"><span aria-hidden="true">☾︎</span></button>
-          <button class="button-secondary" id="admin-logout" type="button" data-i18n="admin.logout">Wyloguj</button>
+          <button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle data-theme-icon-light="☾︎" data-theme-icon-dark="☀︎" aria-label="Enable dark theme" title="Enable dark theme" aria-pressed="false"><span aria-hidden="true">☾︎</span></button>
+          <button class="button-secondary" id="admin-logout" type="button" data-i18n="admin.logout">Sign out</button>
         </div>
       </header>
 
       <div class="admin-main">
     <header class="admin-heading">
       <div>
-        <p class="eyebrow" data-i18n="admin.eyebrow">ZARZĄDZANIE SERWEREM</p>
-        <h1><span data-i18n="admin.heading">Panel administracyjny</span><span class="heading-period">.</span></h1>
+        <p class="eyebrow" data-i18n="admin.eyebrow">SERVER MANAGEMENT</p>
+        <h1><span data-i18n="admin.heading">Admin panel</span><span class="heading-period">.</span></h1>
         <p id="admin-account"></p>
       </div>
     </header>
-    <div class="admin-stats" id="admin-stats" aria-label="Statystyki serwera" aria-live="polite" data-i18n-aria-label="admin.statsAria"></div>
+    <div class="admin-stats" id="admin-stats" aria-label="Server statistics" aria-live="polite" data-i18n-aria-label="admin.statsAria"></div>
 
     <section class="admin-section">
       <header class="admin-section-header">
-        <div><h2 data-i18n="admin.backups.title">Backupy całego serwera</h2><p data-i18n="admin.backups.description">Archiwa zawierają konta, notatki i zaproszenia. Sesje nie są zapisywane.</p></div>
-        <button class="button-primary" id="create-backup" type="button" data-i18n="admin.backups.create">+ Utwórz backup .tgz</button>
+        <div><h2 data-i18n="admin.backups.title">Server-wide backups</h2><p data-i18n="admin.backups.description">Archives contain accounts, notes, and invitations. Sessions are not saved.</p></div>
+        <button class="button-primary" id="create-backup" type="button" data-i18n="admin.backups.create">+ Create .tgz backup</button>
       </header>
       <p class="admin-message" id="backup-message" role="status" hidden></p>
       <div class="admin-table-wrap">
         <table class="admin-table">
-          <thead><tr><th data-i18n="admin.table.file">PLIK</th><th data-i18n="admin.table.created">UTWORZONO</th><th data-i18n="admin.table.size">ROZMIAR</th><th data-i18n="admin.table.actions">AKCJE</th></tr></thead>
+          <thead><tr><th data-i18n="admin.table.file">FILE</th><th data-i18n="admin.table.created">CREATED</th><th data-i18n="admin.table.size">SIZE</th><th data-i18n="admin.table.actions">ACTIONS</th></tr></thead>
           <tbody id="server-backups"></tbody>
         </table>
       </div>
@@ -68,11 +68,11 @@
 
     <section class="admin-section">
       <header class="admin-section-header">
-        <div><h2 data-i18n="admin.users.title">Użytkownicy</h2><p data-i18n="admin.users.description">Lista kont i liczba przypisanych notatek.</p></div>
+        <div><h2 data-i18n="admin.users.title">Users</h2><p data-i18n="admin.users.description">Account list with the number of assigned notes.</p></div>
       </header>
       <div class="admin-table-wrap">
         <table class="admin-table">
-          <thead><tr><th data-i18n="admin.table.email">E-MAIL</th><th data-i18n="admin.table.role">ROLA</th><th data-i18n="admin.table.created">UTWORZONO</th><th data-i18n="admin.table.notes">NOTATKI</th></tr></thead>
+          <thead><tr><th data-i18n="admin.table.email">E-MAIL</th><th data-i18n="admin.table.role">ROLE</th><th data-i18n="admin.table.created">CREATED</th><th data-i18n="admin.table.notes">NOTES</th></tr></thead>
           <tbody id="admin-users"></tbody>
         </table>
       </div>
@@ -80,18 +80,18 @@
 
     <section class="admin-section">
       <header class="admin-section-header">
-        <div><h2 data-i18n="admin.invites.title">Zaproszenia</h2><p data-i18n="admin.invites.description">Link rejestracyjny jest jednorazowy i wygasa po 7 dniach.</p></div>
-        <button class="button-primary" id="create-invite" type="button" data-i18n="admin.invites.create">+ Utwórz zaproszenie</button>
+        <div><h2 data-i18n="admin.invites.title">Invitations</h2><p data-i18n="admin.invites.description">A registration link works once and expires after seven days.</p></div>
+        <button class="button-primary" id="create-invite" type="button" data-i18n="admin.invites.create">+ Create invitation</button>
       </header>
       <p class="admin-message" id="invite-message" role="status" hidden></p>
       <div class="invite-result" id="invite-result" hidden>
-        <label for="invite-url" data-i18n="admin.invites.link">LINK DO REJESTRACJI</label>
-        <div class="invite-url-row"><input id="invite-url" type="text" readonly><button class="button-secondary" id="copy-invite" type="button" data-i18n="admin.invites.copy">Kopiuj link</button></div>
+        <label for="invite-url" data-i18n="admin.invites.link">REGISTRATION LINK</label>
+        <div class="invite-url-row"><input id="invite-url" type="text" readonly><button class="button-secondary" id="copy-invite" type="button" data-i18n="admin.invites.copy">Copy link</button></div>
         <small id="invite-expiry"></small>
       </div>
       <div class="admin-table-wrap">
         <table class="admin-table">
-          <thead><tr><th data-i18n="admin.table.created">UTWORZONO</th><th data-i18n="admin.table.expires">WYGASA</th><th data-i18n="admin.table.status">STATUS</th></tr></thead>
+          <thead><tr><th data-i18n="admin.table.created">CREATED</th><th data-i18n="admin.table.expires">EXPIRES</th><th data-i18n="admin.table.status">STATUS</th></tr></thead>
           <tbody id="admin-invites"></tbody>
         </table>
       </div>

@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="pl">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <meta name="description" content="Notki — prywatny notatnik w przeglądarce." data-i18n-content="meta.description">
-  <title data-i18n="meta.setupTitle">Pierwsza konfiguracja — Notki</title>
+  <meta name="description" content="Notki — a private notebook in your browser." data-i18n-content="meta.description">
+  <title data-i18n="meta.setupTitle">First-time setup — Notki</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
@@ -18,32 +18,32 @@
   <section class="auth-view">
     <div class="auth-content">
       <a class="brand auth-brand" href="/" aria-label="Notki" data-i18n-aria-label="brand.aria"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span>notki<span class="brand-period">.</span></span></a>
-      <p class="eyebrow" data-i18n="setup.eyebrow">PIERWSZE URUCHOMIENIE</p>
-      <h1><span data-i18n="setup.heading">Utwórz administratora</span><span class="heading-period">.</span></h1>
-      <p class="auth-description" data-i18n="setup.description">To konto będzie zarządzać użytkownikami, zaproszeniami i statystykami serwera.</p>
+      <p class="eyebrow" data-i18n="setup.eyebrow">FIRST RUN</p>
+      <h1><span data-i18n="setup.heading">Create administrator</span><span class="heading-period">.</span></h1>
+      <p class="auth-description" data-i18n="setup.description">This account will manage users, invitations, and server statistics.</p>
       <div class="auth-controls">
-        <label class="language-picker"><span class="sr-only" data-i18n="language.label">Język</span><select id="language-select" data-language-select aria-label="Zmień język" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option></select></label>
-        <button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle data-theme-icon-light="☾" data-theme-icon-dark="☀" aria-label="Włącz ciemny motyw" title="Włącz ciemny motyw" aria-pressed="false"><span aria-hidden="true">☾</span></button>
+        <label class="language-picker"><span class="sr-only" data-i18n="language.label">Language</span><select id="language-select" data-language-select aria-label="Change language" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option></select></label>
+        <button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle data-theme-icon-light="☾" data-theme-icon-dark="☀" aria-label="Enable dark theme" title="Enable dark theme" aria-pressed="false"><span aria-hidden="true">☾</span></button>
       </div>
       <p class="auth-message" id="setup-message" role="alert" hidden></p>
       <section class="setup-import" aria-labelledby="snapshot-heading">
-        <p class="field-label" id="snapshot-heading" data-i18n="setup.snapshotHeading">MASZ BACKUP SERWERA?</p>
-        <p class="setup-hint" data-i18n="setup.snapshotHint">Import zastępuje tę pustą instalację kontami, notatkami i zaproszeniami z backupu. Po imporcie zaloguj się danymi z archiwum.</p>
-        <label class="field-label" for="snapshot-file" data-i18n="setup.snapshotLabel">ARCHIWUM BACKUPU (.TGZ)</label>
+        <p class="field-label" id="snapshot-heading" data-i18n="setup.snapshotHeading">HAVE A SERVER BACKUP?</p>
+        <p class="setup-hint" data-i18n="setup.snapshotHint">Importing replaces this empty installation with the accounts, notes, and invitations from the backup. After importing, sign in with the credentials from the archive.</p>
+        <label class="field-label" for="snapshot-file" data-i18n="setup.snapshotLabel">BACKUP ARCHIVE (.TGZ)</label>
         <input class="auth-input" id="snapshot-file" type="file" accept=".tgz,.json,application/gzip,application/json">
-        <button class="button-secondary" id="import-snapshot" type="button" disabled data-i18n="setup.snapshotImport">Importuj backup</button>
+        <button class="button-secondary" id="import-snapshot" type="button" disabled data-i18n="setup.snapshotImport">Import backup</button>
         <p class="admin-message" id="snapshot-message" role="status" hidden></p>
       </section>
-      <p class="setup-divider" data-i18n="setup.divider">albo utwórz nowe konto administratora</p>
+      <p class="setup-divider" data-i18n="setup.divider">or create a new administrator account</p>
       <form class="auth-form" id="setup-form">
         <label class="field-label" for="setup-email" data-i18n="auth.email">E-MAIL</label>
         <input class="auth-input" id="setup-email" type="email" autocomplete="username" required maxlength="254">
-        <label class="field-label" for="setup-password" data-i18n="auth.password">HASŁO</label>
+        <label class="field-label" for="setup-password" data-i18n="auth.password">PASSWORD</label>
         <input class="auth-input" id="setup-password" type="password" autocomplete="new-password" required minlength="12" aria-describedby="password-hint">
-        <small class="setup-hint" id="password-hint" data-i18n="setup.passwordHint">Minimum 12 znaków.</small>
-        <label class="field-label" for="setup-confirm" data-i18n="auth.confirmPassword">POWTÓRZ HASŁO</label>
+        <small class="setup-hint" id="password-hint" data-i18n="setup.passwordHint">At least 12 characters.</small>
+        <label class="field-label" for="setup-confirm" data-i18n="auth.confirmPassword">CONFIRM PASSWORD</label>
         <input class="auth-input" id="setup-confirm" type="password" autocomplete="new-password" required minlength="12">
-        <button class="button-primary" type="submit" data-i18n="setup.submit">Utwórz konto administratora</button>
+        <button class="button-primary" type="submit" data-i18n="setup.submit">Create administrator account</button>
       </form>
     </div>
   </section>

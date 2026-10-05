@@ -48,7 +48,7 @@ Clicking the avatar in the top-right corner opens a menu with **Profile** and **
 
 ## Languages and themes
 
-The interface is available in Polish and English. The initial language follows the browser's `Accept-Language` header and falls back to Polish; the choice is stored in `localStorage` under `notki.lang.v1`. Server-side messages are translated from the same header, so API errors arrive in the selected language.
+The interface is available in Polish and English. The initial language follows the browser's `Accept-Language` header and falls back to English; the choice is stored in `localStorage` under `notki.lang.v1`. Server-side messages are translated from the same header, so API errors arrive in the selected language.
 
 All pages share `theme.js`. The theme follows the operating system setting until the toggle is used; the explicit choice is stored in `localStorage` under `notki.theme.v1`.
 
