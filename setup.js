@@ -1,13 +1,15 @@
 (() => {
+  const t = (key, params) => window.i18n.t(key, params);
   const form = document.querySelector('#setup-form');
   const message = document.querySelector('#setup-message');
 
   async function api(path, options = {}) {
     const headers = new Headers(options.headers || {});
     if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+    headers.set('Accept-Language', window.i18n.getLanguage());
     const response = await fetch(path, { ...options, headers, credentials: 'same-origin' });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || 'Nie udało się połączyć z serwerem.');
+    if (!response.ok) throw new Error(data.error || t('setup.connectionFailed'));
     return data;
   }
 
@@ -17,6 +19,7 @@
       if (!needsSetup) window.location.replace('/');
     } catch (error) {
       message.textContent = error.message;
+      message.dataset.kind = 'connection';
       message.hidden = false;
     }
   }
@@ -25,7 +28,7 @@
     event.preventDefault();
     const password = document.querySelector('#setup-password').value;
     if (password !== document.querySelector('#setup-confirm').value) {
-      message.textContent = 'Hasła nie są takie same.';
+      message.textContent = t('setup.passwordMismatch');
       message.hidden = false;
       return;
     }
@@ -57,7 +60,7 @@
     const file = snapshotFile.files[0];
     if (!file) return;
     if (file.size > 100 * 1024 * 1024) {
-      snapshotMessage.textContent = 'Snapshot przekracza limit 100 MB.';
+      snapshotMessage.textContent = t('setup.importTooLarge');
       snapshotMessage.hidden = false;
       return;
     }
@@ -67,25 +70,29 @@
       if (file.name.toLowerCase().endsWith('.tgz')) {
         const response = await fetch('/api/setup/import-backup', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/gzip' },
+          headers: { 'Content-Type': 'application/gzip', 'Accept-Language': window.i18n.getLanguage() },
           body: file,
           credentials: 'same-origin',
         });
         const result = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(result.error || 'Nie udało się przywrócić backupu.');
+        if (!response.ok) throw new Error(result.error || t('setup.importFailed'));
       } else {
         const snapshot = JSON.parse(await file.text());
         await api('/api/setup/import', { method: 'POST', body: JSON.stringify({ snapshot }) });
       }
-      snapshotMessage.textContent = 'Backup przywrócony. Przekierowuję do logowania.';
+      snapshotMessage.textContent = t('setup.importRestored');
       snapshotMessage.hidden = false;
       window.location.replace('/');
     } catch (error) {
-      snapshotMessage.textContent = error instanceof SyntaxError ? 'Plik nie zawiera poprawnego JSON-u.' : error.message;
+      snapshotMessage.textContent = error instanceof SyntaxError ? t('setup.importInvalidJson') : error.message;
       snapshotMessage.hidden = false;
       importButton.disabled = false;
     }
   });
 
   checkSetup();
+
+  window.i18n.onChange(() => {
+    if (!message.hidden && message.dataset.kind === 'connection') checkSetup();
+  });
 })();

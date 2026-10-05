@@ -4,44 +4,47 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>Panel administracyjny — Notki</title>
+  <meta name="description" content="Notki — prywatny notatnik w przeglądarce." data-i18n-content="meta.description">
+  <title data-i18n="meta.adminTitle">Panel administracyjny — Notki</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <script src="admin.js" defer></script>
-</head>
+  <script src="i18n.js" defer></script>
+  <script src="theme.js" defer></script>
+  <script src="admin.js" defer></script></head>
 <body class="admin-page">
   <header class="admin-topbar">
-    <a class="brand" href="/" aria-label="Notki, wróć do notatek">
+    <a class="brand" href="/" aria-label="Notki, wróć do notatek" data-i18n-aria-label="brand.adminAria">
       <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
       <span>notki<span class="brand-period">.</span></span>
     </a>
     <div class="admin-topbar-actions">
-      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Włącz ciemny motyw" title="Włącz ciemny motyw" aria-pressed="false"><span aria-hidden="true">☾︎</span></button>
-      <a class="button-secondary admin-back" href="/">Do notatek</a>
-      <button class="button-secondary" id="admin-logout" type="button">Wyloguj</button>
+      <label class="language-picker"><span class="sr-only" data-i18n="language.label">Język</span><select id="language-select" data-language-select aria-label="Zmień język" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option></select></label>
+      <button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle data-theme-icon-light="☾︎" data-theme-icon-dark="☀︎" aria-label="Włącz ciemny motyw" title="Włącz ciemny motyw" aria-pressed="false"><span aria-hidden="true">☾︎</span></button>
+      <a class="button-secondary admin-back" href="/" data-i18n="admin.back">Do notatek</a>
+      <button class="button-secondary" id="admin-logout" type="button" data-i18n="admin.logout">Wyloguj</button>
     </div>
   </header>
   <main class="admin-main">
     <header class="admin-heading">
       <div>
-        <p class="eyebrow">ZARZĄDZANIE SERWEREM</p>
-        <h1>Panel administracyjny<span class="heading-period">.</span></h1>
+        <p class="eyebrow" data-i18n="admin.eyebrow">ZARZĄDZANIE SERWEREM</p>
+        <h1><span data-i18n="admin.heading">Panel administracyjny</span><span class="heading-period">.</span></h1>
         <p id="admin-account"></p>
       </div>
     </header>
-    <div class="admin-stats" id="admin-stats" aria-label="Statystyki serwera" aria-live="polite"></div>
+    <div class="admin-stats" id="admin-stats" aria-label="Statystyki serwera" aria-live="polite" data-i18n-aria-label="admin.statsAria"></div>
 
     <section class="admin-section">
       <header class="admin-section-header">
-        <div><h2>Backupy całego serwera</h2><p>Archiwa zawierają konta, notatki i zaproszenia. Sesje nie są zapisywane.</p></div>
-        <button class="button-primary" id="create-backup" type="button">+ Utwórz backup .tgz</button>
+        <div><h2 data-i18n="admin.backups.title">Backupy całego serwera</h2><p data-i18n="admin.backups.description">Archiwa zawierają konta, notatki i zaproszenia. Sesje nie są zapisywane.</p></div>
+        <button class="button-primary" id="create-backup" type="button" data-i18n="admin.backups.create">+ Utwórz backup .tgz</button>
       </header>
       <p class="admin-message" id="backup-message" role="status" hidden></p>
       <div class="admin-table-wrap">
         <table class="admin-table">
-          <thead><tr><th>PLIK</th><th>UTWORZONO</th><th>ROZMIAR</th><th>AKCJE</th></tr></thead>
+          <thead><tr><th data-i18n="admin.table.file">PLIK</th><th data-i18n="admin.table.created">UTWORZONO</th><th data-i18n="admin.table.size">ROZMIAR</th><th data-i18n="admin.table.actions">AKCJE</th></tr></thead>
           <tbody id="server-backups"></tbody>
         </table>
       </div>
@@ -49,11 +52,11 @@
 
     <section class="admin-section">
       <header class="admin-section-header">
-        <div><h2>Użytkownicy</h2><p>Lista kont i liczba przypisanych notatek.</p></div>
+        <div><h2 data-i18n="admin.users.title">Użytkownicy</h2><p data-i18n="admin.users.description">Lista kont i liczba przypisanych notatek.</p></div>
       </header>
       <div class="admin-table-wrap">
         <table class="admin-table">
-          <thead><tr><th>E-MAIL</th><th>ROLA</th><th>UTWORZONO</th><th>NOTATKI</th></tr></thead>
+          <thead><tr><th data-i18n="admin.table.email">E-MAIL</th><th data-i18n="admin.table.role">ROLA</th><th data-i18n="admin.table.created">UTWORZONO</th><th data-i18n="admin.table.notes">NOTATKI</th></tr></thead>
           <tbody id="admin-users"></tbody>
         </table>
       </div>
@@ -61,18 +64,18 @@
 
     <section class="admin-section">
       <header class="admin-section-header">
-        <div><h2>Zaproszenia</h2><p>Link rejestracyjny jest jednorazowy i wygasa po 7 dniach.</p></div>
-        <button class="button-primary" id="create-invite" type="button">+ Utwórz zaproszenie</button>
+        <div><h2 data-i18n="admin.invites.title">Zaproszenia</h2><p data-i18n="admin.invites.description">Link rejestracyjny jest jednorazowy i wygasa po 7 dniach.</p></div>
+        <button class="button-primary" id="create-invite" type="button" data-i18n="admin.invites.create">+ Utwórz zaproszenie</button>
       </header>
       <p class="admin-message" id="invite-message" role="status" hidden></p>
       <div class="invite-result" id="invite-result" hidden>
-        <label for="invite-url">LINK DO REJESTRACJI</label>
-        <div class="invite-url-row"><input id="invite-url" type="text" readonly><button class="button-secondary" id="copy-invite" type="button">Kopiuj link</button></div>
+        <label for="invite-url" data-i18n="admin.invites.link">LINK DO REJESTRACJI</label>
+        <div class="invite-url-row"><input id="invite-url" type="text" readonly><button class="button-secondary" id="copy-invite" type="button" data-i18n="admin.invites.copy">Kopiuj link</button></div>
         <small id="invite-expiry"></small>
       </div>
       <div class="admin-table-wrap">
         <table class="admin-table">
-          <thead><tr><th>UTWORZONO</th><th>WYGASA</th><th>STATUS</th></tr></thead>
+          <thead><tr><th data-i18n="admin.table.created">UTWORZONO</th><th data-i18n="admin.table.expires">WYGASA</th><th data-i18n="admin.table.status">STATUS</th></tr></thead>
           <tbody id="admin-invites"></tbody>
         </table>
       </div>

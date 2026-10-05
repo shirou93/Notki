@@ -1,40 +1,18 @@
 (() => {
-  const THEME_STORAGE_KEY = 'notki.theme.v1';
-  const themeToggle = document.querySelector('#theme-toggle');
-  const systemColorScheme = window.matchMedia('(prefers-color-scheme: dark)');
-
-  function applyTheme(theme) {
-    document.documentElement.dataset.theme = theme;
-    const nextTheme = theme === 'dark' ? 'jasny' : 'ciemny';
-    themeToggle.querySelector('span').textContent = theme === 'dark' ? '☀︎' : '☾︎';
-    themeToggle.setAttribute('aria-label', `Włącz ${nextTheme} motyw`);
-    themeToggle.title = `Włącz ${nextTheme} motyw`;
-    themeToggle.setAttribute('aria-pressed', String(theme === 'dark'));
-  }
-
-  const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
-  applyTheme(savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : systemColorScheme.matches ? 'dark' : 'light');
-  systemColorScheme.addEventListener('change', event => {
-    if (!localStorage.getItem(THEME_STORAGE_KEY)) applyTheme(event.matches ? 'dark' : 'light');
-  });
-  themeToggle.addEventListener('click', () => {
-    const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
-    applyTheme(theme);
-  });
+  const t = (key, params) => window.i18n.t(key, params);
 
   async function api(path, options = {}) {
     const headers = new Headers(options.headers || {});
     if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+    headers.set('Accept-Language', window.i18n.getLanguage());
     const response = await fetch(path, { ...options, headers, credentials: 'same-origin' });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw Object.assign(new Error(data.error || 'Błąd serwera.'), { status: response.status });
+    if (!response.ok) throw Object.assign(new Error(data.error || t('admin.error.server')), { status: response.status });
     return data;
   }
 
   function formatDate(value) {
-    if (!value) return '—';
-    return new Intl.DateTimeFormat('pl-PL', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+    return window.i18n.formatDateTime(value);
   }
 
   function tableCell(value) {
@@ -45,14 +23,14 @@
 
   function renderStats(stats) {
     const items = [
-      ['Użytkownicy', stats.users], ['Notatki razem', stats.notes], ['Aktywne', stats.active],
-      ['Archiwum', stats.archived], ['Kosz', stats.trash], ['Oczekujące zaproszenia', stats.pendingInvites],
+      ['admin.stats.users', stats.users], ['admin.stats.notes', stats.notes], ['admin.stats.active', stats.active],
+      ['admin.stats.archived', stats.archived], ['admin.stats.trash', stats.trash], ['admin.stats.pendingInvites', stats.pendingInvites],
     ];
-    document.querySelector('#admin-stats').replaceChildren(...items.map(([label, value]) => {
+    document.querySelector('#admin-stats').replaceChildren(...items.map(([labelKey, value]) => {
       const item = document.createElement('div');
       item.className = 'admin-stat';
       const name = document.createElement('span');
-      name.textContent = label;
+      name.textContent = t(labelKey);
       const count = document.createElement('strong');
       count.textContent = String(value ?? 0);
       item.append(name, count);
@@ -65,7 +43,7 @@
       const row = document.createElement('tr');
       row.append(
         tableCell(user.email),
-        tableCell(user.role === 'admin' ? 'Administrator' : 'Użytkownik'),
+        tableCell(t(user.role === 'admin' ? 'admin.role.admin' : 'admin.role.user')),
         tableCell(formatDate(user.createdAt)),
         tableCell(String(user.notes)),
       );
@@ -81,7 +59,7 @@
       row.append(
         tableCell(formatDate(invite.createdAt)),
         tableCell(formatDate(invite.expiresAt)),
-        tableCell(invite.usedAt ? 'Wykorzystane' : expired ? 'Wygasłe' : 'Oczekujące'),
+        tableCell(t(invite.usedAt ? 'admin.invites.used' : expired ? 'admin.invites.expired' : 'admin.invites.pending')),
       );
       return row;
     });
@@ -103,7 +81,7 @@
     const body = document.querySelector('#server-backups');
     if (!backups.length) {
       const row = document.createElement('tr');
-      const empty = tableCell('Brak zapisanych backupów.');
+      const empty = tableCell(t('admin.backups.empty'));
       empty.colSpan = 4;
       empty.className = 'admin-empty-cell';
       row.append(empty);
@@ -114,13 +92,13 @@
       const row = document.createElement('tr');
       const filename = tableCell(backup.filename);
       filename.className = 'backup-filename';
-      const size = `${(backup.sizeBytes / 1024 / 1024).toLocaleString('pl-PL', { maximumFractionDigits: 2 })} MB`;
+      const size = `${window.i18n.formatNumber(backup.sizeBytes / 1024 / 1024, { maximumFractionDigits: 2 })} MB`;
       const actions = document.createElement('td');
       actions.className = 'backup-actions';
       actions.append(
-        backupAction('↓', 'Pobierz ten backup', () => downloadBackup(backup.filename)),
-        backupAction('↻', 'Przywróć ten backup', () => restoreBackup(backup.filename)),
-        backupAction('×', 'Usuń ten backup', () => deleteBackup(backup.filename)),
+        backupAction('↓', t('admin.backups.download'), () => downloadBackup(backup.filename)),
+        backupAction('↻', t('admin.backups.restore'), () => restoreBackup(backup.filename)),
+        backupAction('×', t('admin.backups.delete'), () => deleteBackup(backup.filename)),
       );
       row.append(filename, tableCell(formatDate(backup.createdAt)), tableCell(size), actions);
       return row;
@@ -151,7 +129,7 @@
       const response = await fetch(`/api/admin/backups/${encodeURIComponent(filename)}`, { credentials: 'same-origin' });
       if (!response.ok) {
         const result = await response.json().catch(() => ({}));
-        throw new Error(result.error || 'Nie udało się pobrać backupu.');
+        throw new Error(result.error || t('admin.backups.downloadFailed'));
       }
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement('a');
@@ -167,7 +145,7 @@
   }
 
   async function restoreBackup(filename) {
-    const confirmed = window.confirm(`Przywrócić ${filename}? Zastąpi to wszystkie konta, notatki i zaproszenia. Wszyscy użytkownicy zostaną wylogowani.`);
+    const confirmed = window.confirm(t('admin.backups.confirmRestore', { filename }));
     if (!confirmed) return;
     try {
       await api(`/api/admin/backups/${encodeURIComponent(filename)}/restore`, { method: 'POST', body: '{}' });
@@ -178,10 +156,10 @@
   }
 
   async function deleteBackup(filename) {
-    if (!window.confirm(`Usunąć backup ${filename}? Tej operacji nie można cofnąć.`)) return;
+    if (!window.confirm(t('admin.backups.confirmDelete', { filename }))) return;
     try {
       await api(`/api/admin/backups/${encodeURIComponent(filename)}`, { method: 'DELETE' });
-      setBackupMessage(`Usunięto ${filename}.`);
+      setBackupMessage(t('admin.backups.deleted', { filename }));
       await refresh();
     } catch (error) {
       setBackupMessage(error.message, true);
@@ -209,7 +187,7 @@
     try {
       const invite = await api('/api/admin/invites', { method: 'POST', body: '{}' });
       document.querySelector('#invite-url').value = invite.url;
-      document.querySelector('#invite-expiry').textContent = `Link jest ważny do ${formatDate(invite.expiresAt)}.`;
+      document.querySelector('#invite-expiry').textContent = t('admin.invites.expiry', { date: formatDate(invite.expiresAt) });
       document.querySelector('#invite-result').hidden = false;
       await refresh();
     } catch (error) {
@@ -223,8 +201,8 @@
     const button = event.currentTarget;
     try {
       await navigator.clipboard.writeText(document.querySelector('#invite-url').value);
-      button.textContent = 'Skopiowano';
-      window.setTimeout(() => { button.textContent = 'Kopiuj link'; }, 1600);
+      button.textContent = t('admin.invites.copied');
+      window.setTimeout(() => { button.textContent = t('admin.invites.copy'); }, 1600);
     } catch {
       const input = document.querySelector('#invite-url');
       input.select();
@@ -235,10 +213,10 @@
   document.querySelector('#create-backup').addEventListener('click', async event => {
     const button = event.currentTarget;
     button.disabled = true;
-    setBackupMessage('Tworzenie backupu serwera...');
+    setBackupMessage(t('admin.backups.creating'));
     try {
       const backup = await api('/api/admin/backups', { method: 'POST', body: '{}' });
-      setBackupMessage(`Zapisano backup ${backup.filename} na serwerze. Archiwum zawiera hashe haseł; ogranicz do niego dostęp.`);
+      setBackupMessage(t('admin.backups.created', { filename: backup.filename }));
       await refresh();
     } catch (error) {
       setBackupMessage(error.message, true);
@@ -254,6 +232,10 @@
     } catch (error) {
       document.querySelector('#admin-message').textContent = error.message;
     }
+  });
+
+  window.i18n.onChange(() => {
+    if (document.querySelector('#admin-account').textContent) refresh().catch(() => {});
   });
 
   start();

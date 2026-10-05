@@ -24,6 +24,14 @@ The first administrator can also be created from a terminal with `python server.
 
 The SQLite database is stored at `data/notki.sqlite3`. Existing browser-only notes are offered for migration the first time an account with no server notes signs in.
 
+## Languages
+
+The interface is available in Polish and English. Every page — the notes app, the admin panel, and the first-run setup — shows a language picker next to the theme toggle. The initial language follows the browser's `Accept-Language` header and falls back to Polish; the choice made in the picker is stored in `localStorage` under `notki.lang.v1` and applied on later visits. Server-side messages are translated from the same `Accept-Language` header, so API errors arrive in the selected language. Translation strings live in `i18n.js` (interface) and in `ENGLISH_MESSAGES` in `server.py` (API and setup messages).
+
+## Themes
+
+All three pages share `theme.js`. On the first visit the theme follows the operating system setting (`prefers-color-scheme`) and keeps following it while the system preference changes; once the toggle is used, the explicit choice is stored in `localStorage` under `notki.theme.v1` and wins over the system setting on every page.
+
 ## Uruchomienie na Linuksie
 
 Wymagany jest Python 3.9 lub nowszy. SQLite i pozostałe zależności są w bibliotece standardowej, więc nie trzeba instalować pakietów przez `pip`.
@@ -99,6 +107,14 @@ journalctl -u notki -f
 ```
 
 Plik SQLite oraz archiwa backupów będą w `/opt/notki/data`. Nie udostępniaj tego katalogu publicznie; snapshoty `.tgz` zawierają hashe haseł.
+
+## Języki interfejsu
+
+Interfejs jest dostępny w języku polskim i angielskim. Każda strona — aplikacja notatek, panel administracyjny oraz pierwsza konfiguracja — ma przełącznik języka obok przycisku motywu. Język początkowy wynika z nagłówka `Accept-Language` przeglądarki, a gdy go brak, używany jest polski. Wybór z listy jest zapisywany w `localStorage` pod kluczem `notki.lang.v1` i stosowany przy kolejnych odwiedzinach. Komunikaty serwera są tłumaczone na podstawie tego samego nagłówka, więc błędy API wracają w wybranym języku. Teksty interfejsu są w `i18n.js`, a komunikaty serwera w `ENGLISH_MESSAGES` w `server.py`.
+
+## Motywy
+
+Wszystkie trzy strony korzystają ze wspólnego `theme.js`. Przy pierwszej wizycie motyw wynika z ustawień systemu (`prefers-color-scheme`) i nadal podąża za zmianami systemowymi; po użyciu przycisku wybór jest zapisywany w `localStorage` pod kluczem `notki.theme.v1` i ma pierwszeństwo nad ustawieniem systemowym na każdej stronie.
 
 ## Configuration
 

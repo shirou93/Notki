@@ -30,7 +30,98 @@ MAX_REQUEST_BYTES = 3 * 1024 * 1024
 MAX_SNAPSHOT_BYTES = 100 * 1024 * 1024
 BACKUP_FILENAME_PATTERN = re.compile(r'^notki-server-\d{8}-\d{6}Z-[a-f0-9]{8}\.tgz$')
 NOTE_COLORS = {'default', 'mint', 'lemon', 'peach', 'lilac', 'sky'}
-STATIC_FILES = {'index.html', 'admin.html', 'admin.js', 'app.js', 'setup.html', 'setup.js', 'styles.css'}
+STATIC_FILES = {'index.html', 'admin.html', 'admin.js', 'app.js', 'i18n.js', 'theme.js', 'setup.html', 'setup.js', 'styles.css'}
+DEFAULT_LANGUAGE = 'pl'
+SUPPORTED_LANGUAGES = ('pl', 'en')
+
+# Polish messages are the source strings; this catalog provides their English counterparts.
+ENGLISH_MESSAGES = {
+    'Podaj poprawny adres e-mail.': 'Enter a valid e-mail address.',
+    'Hasło musi mieć co najmniej 12 znaków.': 'The password must be at least 12 characters long.',
+    'Hasło jest zbyt długie.': 'The password is too long.',
+    'Podane hasła nie są takie same.': 'The passwords do not match.',
+    'Nieprawidłowy rozmiar żądania.': 'Invalid request size.',
+    'Żądanie jest zbyt duże.': 'The request is too large.',
+    'Oczekiwano danych JSON.': 'JSON data was expected.',
+    'Oczekiwano archiwum .tgz.': 'A .tgz archive was expected.',
+    'Nieprawidłowy format JSON.': 'Invalid JSON format.',
+    'Nieprawidłowe dane żądania.': 'Invalid request data.',
+    'Żądanie z innej domeny zostało zablokowane.': 'A cross-origin request was blocked.',
+    'Zaloguj się, aby kontynuować.': 'Sign in to continue.',
+    'Ta sekcja jest dostępna tylko dla administratora.': 'This section is available only to the administrator.',
+    'Pierwszą konfigurację można wykonać wyłącznie lokalnie.': 'The first-time setup can only be completed locally.',
+    'Pierwsza konfiguracja administratora wymaga dostępu lokalnego.': 'Creating the first administrator requires local access.',
+    'Nie znaleziono endpointu.': 'Endpoint not found.',
+    'Nie znaleziono strony.': 'Page not found.',
+    'Nie znaleziono pliku.': 'File not found.',
+    'Konto administratora zostało już utworzone.': 'The administrator account has already been created.',
+    'Konto z tym adresem e-mail już istnieje.': 'An account with this e-mail address already exists.',
+    'Nieprawidłowy e-mail lub hasło.': 'Invalid e-mail or password.',
+    'Rejestracja wymaga ważnego zaproszenia.': 'Registration requires a valid invitation.',
+    'Zaproszenie jest nieprawidłowe lub wygasło.': 'The invitation is invalid or has expired.',
+    'Snapshot przekracza limit 100 MB.': 'The snapshot exceeds the 100 MB limit.',
+    'Nie udało się zapisać backupu na serwerze.': 'Could not save the backup on the server.',
+    'Nie znaleziono backupu.': 'Backup not found.',
+    'Plik backupu przekracza limit rozmiaru.': 'The backup file exceeds the size limit.',
+    'Nie można odczytać archiwum backupu.': 'The backup archive cannot be read.',
+    'Archiwum backupu ma nieprawidłową zawartość.': 'The backup archive has invalid contents.',
+    'Nie można odczytać snapshotu z archiwum.': 'The snapshot cannot be read from the archive.',
+    'Import snapshotu jest dostępny tylko lokalnie.': 'Snapshot import is available only locally.',
+    'Plik nie jest prawidłowym snapshotem serwera Notki.': 'The file is not a valid Notki server snapshot.',
+    'Snapshot nie zawiera kompletnej listy kont, notatek i zaproszeń.': 'The snapshot does not contain a complete list of accounts, notes, and invitations.',
+    'Snapshot jest pusty lub przekracza limit danych.': 'The snapshot is empty or exceeds the data limit.',
+    'Nieprawidłowe konto w snapshocie.': 'Invalid account in the snapshot.',
+    'Nieprawidłowy identyfikator konta w snapshocie.': 'Invalid account identifier in the snapshot.',
+    'Nieprawidłowy adres lub rola konta w snapshocie.': 'Invalid account address or role in the snapshot.',
+    'Snapshot zawiera nieprawidłowy hash hasła.': 'The snapshot contains an invalid password hash.',
+    'Snapshot musi zawierać konto administratora.': 'The snapshot must contain an administrator account.',
+    'Nieprawidłowa notatka w snapshocie.': 'Invalid note in the snapshot.',
+    'Nieprawidłowa notatka lub właściciel w snapshocie.': 'Invalid note or owner in the snapshot.',
+    'Notatka w snapshocie przekracza limit rozmiaru.': 'A note in the snapshot exceeds the size limit.',
+    'Nieprawidłowa kolejność notatek w snapshocie.': 'Invalid note order in the snapshot.',
+    'Nieprawidłowe zaproszenie w snapshocie.': 'Invalid invitation in the snapshot.',
+    'Nieprawidłowy hash zaproszenia w snapshocie.': 'Invalid invitation hash in the snapshot.',
+    'Nieprawidłowe zaproszenie lub administrator w snapshocie.': 'Invalid invitation or administrator in the snapshot.',
+    'Import jest możliwy tylko do całkowicie pustej bazy danych.': 'Import is possible only into a completely empty database.',
+    'Snapshot zawiera nieprawidłową datę.': 'The snapshot contains an invalid date.',
+    'Snapshot zawiera datę bez strefy czasowej.': 'The snapshot contains a date without a time zone.',
+    'Nieprawidłowa lista notatek.': 'Invalid note list.',
+    'Nieprawidłowa notatka.': 'Invalid note.',
+    'Dane notatki są nieprawidłowe lub zbyt duże.': 'The note data is invalid or too large.',
+    'Nieprawidłowa kolejność notatek.': 'Invalid note order.',
+}
+
+
+def parse_language(header_value):
+    """Pick the highest-priority supported language from an Accept-Language header."""
+    best = None
+    for index, chunk in enumerate(str(header_value or '').split(',')):
+        parts = chunk.split(';')
+        tag = parts[0].strip().lower()
+        if not tag:
+            continue
+        quality = 1.0
+        for parameter in parts[1:]:
+            name, _, value = parameter.partition('=')
+            if name.strip().lower() == 'q':
+                try:
+                    quality = float(value.strip())
+                except ValueError:
+                    quality = 0.0
+        if quality <= 0 or tag == '*':
+            continue
+        language = tag.split('-', 1)[0]
+        if language not in SUPPORTED_LANGUAGES:
+            continue
+        if best is None or quality > best[0]:
+            best = (quality, index, language)
+    return best[2] if best else DEFAULT_LANGUAGE
+
+
+def translate_message(message, language):
+    if language == 'en':
+        return ENGLISH_MESSAGES.get(message, message)
+    return message
 
 
 def utc_now():
@@ -171,6 +262,16 @@ class APIError(Exception):
 class NotkiHandler(BaseHTTPRequestHandler):
     server_version = 'NotkiServer/1.0'
 
+    @property
+    def language(self):
+        return parse_language(self.headers.get('Accept-Language'))
+
+    def error_message(self, message):
+        return translate_message(message, self.language)
+
+    def send_error_json(self, message, status=400):
+        self.send_json({'error': self.error_message(message)}, status)
+
     def send_json(self, payload, status=200, extra_headers=()):
         data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
         self.send_response(status)
@@ -274,7 +375,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 if self.has_admin():
                     self.send_redirect('/')
                 elif not self.is_local_setup_request():
-                    self.send_json({'error': 'Pierwszą konfigurację można wykonać wyłącznie lokalnie.'}, 403)
+                    self.send_error_json('Pierwszą konfigurację można wykonać wyłącznie lokalnie.', 403)
                 else:
                     self.serve_static('setup.html')
             elif path == '/api/session':
@@ -318,23 +419,23 @@ class NotkiHandler(BaseHTTPRequestHandler):
             elif path.startswith('/api/admin/backups/'):
                 filename = path.removeprefix('/api/admin/backups/')
                 self.download_server_backup(filename)
-            elif path in ('/', '/index.html', '/admin', '/admin.html', '/app.js', '/admin.js', '/setup.js', '/styles.css'):
+            elif path in ('/', '/index.html', '/admin', '/admin.html') or path.lstrip('/') in STATIC_FILES:
                 if path in ('/', '/index.html') and not self.has_admin():
                     if not self.is_local_setup_request():
-                        self.send_json({'error': 'Pierwsza konfiguracja administratora wymaga dostępu lokalnego.'}, 403)
+                        self.send_error_json('Pierwsza konfiguracja administratora wymaga dostępu lokalnego.', 403)
                         return
                     self.send_redirect('/setup')
                     return
                 filename = 'index.html' if path == '/' else 'admin.html' if path == '/admin' else path.lstrip('/')
                 self.serve_static(filename)
             elif path.startswith('/api/'):
-                self.send_json({'error': 'Nie znaleziono endpointu.'}, 404)
+                self.send_error_json('Nie znaleziono endpointu.', 404)
             else:
-                self.send_json({'error': 'Nie znaleziono strony.'}, 404)
+                self.send_error_json('Nie znaleziono strony.', 404)
         except APIError as error:
-            self.send_json({'error': str(error)}, error.status)
+            self.send_error_json(str(error), error.status)
         except ValueError as error:
-            self.send_json({'error': str(error)}, 400)
+            self.send_error_json(str(error), 400)
 
     def do_POST(self):
         try:
@@ -363,15 +464,15 @@ class NotkiHandler(BaseHTTPRequestHandler):
             elif path.startswith('/api/admin/backups/'):
                 match = re.fullmatch(r'/api/admin/backups/([^/]+)/restore', path)
                 if not match:
-                    self.send_json({'error': 'Nie znaleziono endpointu.'}, 404)
+                    self.send_error_json('Nie znaleziono endpointu.', 404)
                 else:
                     self.restore_server_backup(match.group(1))
             else:
-                self.send_json({'error': 'Nie znaleziono endpointu.'}, 404)
+                self.send_error_json('Nie znaleziono endpointu.', 404)
         except APIError as error:
-            self.send_json({'error': str(error)}, error.status)
+            self.send_error_json(str(error), error.status)
         except ValueError as error:
-            self.send_json({'error': str(error)}, 400)
+            self.send_error_json(str(error), 400)
 
     def do_DELETE(self):
         try:
@@ -379,11 +480,11 @@ class NotkiHandler(BaseHTTPRequestHandler):
             path = unquote(urlsplit(self.path).path)
             match = re.fullmatch(r'/api/admin/backups/([^/]+)', path)
             if not match:
-                self.send_json({'error': 'Nie znaleziono endpointu.'}, 404)
+                self.send_error_json('Nie znaleziono endpointu.', 404)
                 return
             self.delete_server_backup(match.group(1))
         except APIError as error:
-            self.send_json({'error': str(error)}, error.status)
+            self.send_error_json(str(error), error.status)
 
     def create_first_admin(self, payload):
         if not self.is_local_setup_request():
@@ -698,27 +799,27 @@ class NotkiHandler(BaseHTTPRequestHandler):
         try:
             self.check_origin()
             if urlsplit(self.path).path != '/api/notes':
-                self.send_json({'error': 'Nie znaleziono endpointu.'}, 404)
+                self.send_error_json('Nie znaleziono endpointu.', 404)
                 return
             user = self.require_user()
             payload = self.read_json()
             self.save_notes(user['id'], payload.get('notes'))
             self.send_json({'saved': True})
         except APIError as error:
-            self.send_json({'error': str(error)}, error.status)
+            self.send_error_json(str(error), error.status)
         except ValueError as error:
-            self.send_json({'error': str(error)}, 400)
+            self.send_error_json(str(error), 400)
 
     def login(self, payload):
         email = normalize_email(payload.get('email'))
         password = str(payload.get('password') or '')
         if len(password) > 1024:
-            self.send_json({'error': 'Nieprawidłowy e-mail lub hasło.'}, 401)
+            self.send_error_json('Nieprawidłowy e-mail lub hasło.', 401)
             return
         with database() as connection:
             row = connection.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
         if not row or not verify_password(password, row['password_hash']):
-            self.send_json({'error': 'Nieprawidłowy e-mail lub hasło.'}, 401)
+            self.send_error_json('Nieprawidłowy e-mail lub hasło.', 401)
             return
         token = self.new_session(row['id'])
         self.send_json({'user': public_user(row)}, extra_headers=self.session_headers(token))
@@ -831,7 +932,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def serve_static(self, filename):
         if filename not in STATIC_FILES:
-            self.send_json({'error': 'Nie znaleziono pliku.'}, 404)
+            self.send_error_json('Nie znaleziono pliku.', 404)
             return
         file_path = ROOT / filename
         data = file_path.read_bytes()

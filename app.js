@@ -1,10 +1,11 @@
 (() => {
   const STORAGE_KEY = 'notki.notes.v1';
   const MIGRATION_KEY = 'notki.server-migrated.v1';
-  const THEME_STORAGE_KEY = 'notki.theme.v1';
-  const systemColorScheme = window.matchMedia('(prefers-color-scheme: dark)');
   const COLORS = ['default', 'mint', 'lemon', 'peach', 'lilac', 'sky'];
-  const VIEW_LABELS = { all: 'Wszystkie notatki', pinned: 'Przypięte', archive: 'Archiwum', trash: 'Kosz' };
+  const t = (key, params) => window.i18n.t(key, params);
+  const pluralText = (key, count) => window.i18n.plural(key, count);
+  const VIEW_KEYS = { all: 'view.all', pinned: 'view.pinned', archive: 'view.archive', trash: 'view.trash' };
+  const NAV_KEYS = { all: 'nav.all', pinned: 'nav.pinned', archive: 'nav.archive', trash: 'nav.trash' };
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const elements = {
@@ -38,31 +39,18 @@
   let editorRange = null;
 
   function applyTheme(theme) {
-    document.documentElement.dataset.theme = theme;
-    const nextTheme = theme === 'dark' ? 'jasny' : 'ciemny';
+    document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
     elements.themeToggle.querySelector('span').textContent = theme === 'dark' ? '☀' : '☾';
-    elements.themeToggle.setAttribute('aria-label', `Włącz ${nextTheme} motyw`);
-    elements.themeToggle.setAttribute('title', `Włącz ${nextTheme} motyw`);
-    elements.themeToggle.setAttribute('aria-pressed', String(theme === 'dark'));
+    window.notkiTheme.sync();
   }
-
-  const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
-  applyTheme(savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : systemColorScheme.matches ? 'dark' : 'light');
-  systemColorScheme.addEventListener('change', event => {
-    if (!localStorage.getItem(THEME_STORAGE_KEY)) applyTheme(event.matches ? 'dark' : 'light');
-  });
-  elements.themeToggle.addEventListener('click', () => {
-    const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
-    applyTheme(theme);
-  });
 
   async function apiRequest(path, options = {}) {
     const headers = new Headers(options.headers || {});
     if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+    headers.set('Accept-Language', window.i18n.getLanguage());
     const response = await fetch(path, { ...options, headers, credentials: 'same-origin' });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || 'Wystąpił błąd serwera.');
+    if (!response.ok) throw new Error(payload.error || t('error.server'));
     return payload;
   }
 
@@ -73,14 +61,13 @@
     elements.backdrop.hidden = true;
     elements.loginForm.hidden = mode !== 'login';
     elements.registerForm.hidden = mode !== 'register';
-    elements.authHeading.firstChild.textContent = mode === 'register' ? 'Utwórz konto' : 'Zaloguj się';
-    elements.authDescription.textContent = mode === 'register'
-      ? 'Utwórz konto, korzystając z zaproszenia administratora.'
-      : 'Zaloguj się na swoje konto, aby otworzyć notatki.';
+    elements.authHeading.firstChild.dataset.i18n = mode === 'register' ? 'auth.heading.register' : 'auth.heading.login';
+    elements.authDescription.dataset.i18n = mode === 'register' ? 'auth.description.register' : 'auth.description.login';
+    window.i18n.applyTranslations(elements.authView);
     elements.authMessage.textContent = message;
     elements.authMessage.hidden = !message;
     elements.authSwitch.hidden = !inviteToken;
-    elements.authSwitch.textContent = mode === 'register' ? 'Masz już konto? Zaloguj się' : 'Masz zaproszenie? Utwórz konto';
+    elements.authSwitch.textContent = t(mode === 'register' ? 'auth.switch.register' : 'auth.switch.login');
     document.body.classList.add('is-auth');
   }
 
@@ -90,7 +77,7 @@
     notes = response.notes;
     const migratedKey = `${MIGRATION_KEY}.${user.id}`;
     if (!notes.length && legacyNotes.length && !localStorage.getItem(migratedKey)) {
-      if (window.confirm(`Przenieść ${legacyNotes.length} lokalnych notatek do konta ${user.email}?`)) {
+      if (window.confirm(t('auth.migrateConfirm', { count: legacyNotes.length, email: user.email }))) {
         notes = legacyNotes;
         await apiRequest('/api/notes', { method: 'PUT', body: JSON.stringify({ notes }) });
       }
@@ -100,9 +87,9 @@
     elements.appShell.hidden = false;
     elements.panel.hidden = false;
     elements.adminLink.hidden = !user.isAdmin;
-    $('.avatar').textContent = user.email.slice(0, 1).toLocaleUpperCase('pl');
+    $('.avatar').textContent = user.email.slice(0, 1).toLocaleUpperCase();
     $('.avatar').title = user.email;
-    $('.avatar').setAttribute('aria-label', `Konto ${user.email}`);
+    $('.avatar').setAttribute('aria-label', t('topbar.accountAria', { email: user.email }));
     document.body.classList.remove('is-auth');
     render();
     readSharedNote();
@@ -122,7 +109,7 @@
       }
       showAuth(inviteToken ? 'register' : 'login');
     } catch (error) {
-      showAuth(inviteToken ? 'register' : 'login', `Nie można połączyć się z serwerem. Uruchom go poleceniem „python server.py”. ${error.message}`);
+      showAuth(inviteToken ? 'register' : 'login', t('auth.connectionFailed', { message: error.message }));
     }
   }
 
@@ -146,7 +133,7 @@
     event.preventDefault();
     const password = $('#register-password').value;
     if (password !== $('#register-confirm').value) {
-      showAuth('register', 'Hasła nie są takie same.');
+      showAuth('register', t('auth.passwordMismatch'));
       return;
     }
     try {
@@ -200,7 +187,7 @@
         checkbox.className = 'task-checkbox';
         if (node.checked || node.hasAttribute('checked')) checkbox.setAttribute('checked', '');
         checkbox.contentEditable = 'false';
-        checkbox.setAttribute('aria-label', 'Oznacz zadanie jako wykonane');
+        checkbox.setAttribute('aria-label', t('editor.checkboxAria'));
         parent.append(checkbox);
         return;
       }
@@ -259,7 +246,7 @@
   }
 
   function normalizeTaskText(value) {
-    return String(value || '').replace(/[\u200b\u00a0]/g, ' ').replace(/\s+/g, ' ').trim().toLocaleLowerCase('pl');
+    return String(value || '').replace(/[\u200b\u00a0]/g, ' ').replace(/\s+/g, ' ').trim().toLocaleLowerCase(window.i18n.getLanguage());
   }
 
   function normalizeChecklistItemMarkup(root = elements.noteBody) {
@@ -348,7 +335,7 @@
       const label = oldLabel || document.createElement('p');
       label.className = 'task-group-label';
       label.contentEditable = 'false';
-      label.textContent = 'Zaznaczone';
+      label.textContent = t('editor.taskGroup');
       const completedList = oldCompletedList || document.createElement('ul');
       completedList.className = 'task-list task-list-completed';
       const currentCompletedItems = [...completedList.querySelectorAll(':scope > li')];
@@ -383,13 +370,13 @@
 
     const message = document.createElement('span');
     message.className = 'task-restore-message';
-    message.textContent = 'To zadanie jest już zaznaczone:';
+    message.textContent = t('editor.taskAlreadyDone');
     suggestions.append(message);
     matches.forEach(({ item, text }) => {
       const button = document.createElement('button');
       button.className = 'task-restore-option';
       button.type = 'button';
-      button.textContent = `Przywróć „${text.textContent.trim()}”`;
+      button.textContent = t('editor.taskRestore', { title: text.textContent.trim() });
       button.addEventListener('click', () => {
         const currentItem = taskText.closest('li');
         if (currentItem && currentItem !== item) currentItem.remove();
@@ -438,7 +425,7 @@
     checkbox.type = 'checkbox';
     checkbox.className = 'task-checkbox';
     checkbox.contentEditable = 'false';
-    checkbox.setAttribute('aria-label', 'Oznacz zadanie jako wykonane');
+    checkbox.setAttribute('aria-label', t('editor.checkboxAria'));
 
     const content = document.createElement('span');
     content.className = 'task-text';
@@ -553,9 +540,9 @@
       preview.className = 'note-drag-preview';
       preview.setAttribute('aria-hidden', 'true');
       const title = document.createElement('strong');
-      title.textContent = note?.title || 'Bez tytułu';
+      title.textContent = note?.title || t('editor.untitled');
       const body = document.createElement('span');
-      body.textContent = note?.body || 'Pusta notatka';
+      body.textContent = note?.body || t('editor.emptyNote');
       preview.append(title, body);
       document.body.append(preview);
       dragState.preview = preview;
@@ -606,7 +593,7 @@
     if (!currentUser) return;
     const snapshot = JSON.stringify({ notes });
     saveQueue = saveQueue.catch(() => {}).then(() => apiRequest('/api/notes', { method: 'PUT', body: snapshot }));
-    saveQueue.catch(error => showToast(`Nie udało się zapisać notatek: ${error.message}`));
+    saveQueue.catch(error => showToast(t('editor.saveFailed', { message: error.message })));
   }
 
   function moveNote(noteId, targetId, after = false) {
@@ -652,8 +639,8 @@
       if (view === 'archive' && (!note.archived || note.deleted)) return false;
       if (view === 'trash' && !note.deleted) return false;
       if (!query) return true;
-      const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')}`.toLocaleLowerCase('pl');
-      return searchable.includes(query.toLocaleLowerCase('pl'));
+      const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')}`.toLocaleLowerCase();
+      return searchable.includes(query.toLocaleLowerCase());
       }).sort((a, b) => {
         // In 'all' view without search, sort by pinned first, then by manual order
         if (view === 'all' && !query) {
@@ -673,9 +660,9 @@
     elements.archiveCount.textContent = String(notes.filter(note => note.archived && !note.deleted).length);
     elements.trashCount.textContent = String(notes.filter(note => note.deleted).length);
     elements.nav.forEach(button => button.classList.toggle('is-active', button.dataset.view === view));
-    elements.breadcrumb.textContent = VIEW_LABELS[view].replace(' notatki', '');
+    elements.breadcrumb.textContent = t(NAV_KEYS[view]);
     elements.title.replaceChildren(
-      document.createTextNode(VIEW_LABELS[view]),
+      document.createTextNode(t(VIEW_KEYS[view])),
       Object.assign(document.createElement('span'), { className: 'heading-period', textContent: '.' }),
     );
 
@@ -687,10 +674,12 @@
     elements.grid.replaceChildren(...regularItems.map(makeCard));
     elements.pinnedLabel.hidden = pinnedItems.length === 0;
     elements.otherLabel.hidden = pinnedItems.length === 0 || regularItems.length === 0;
-    elements.otherLabelText.textContent = 'POZOSTAŁE';
+    elements.otherLabelText.textContent = t('section.other');
     elements.empty.hidden = visible.length !== 0;
-    elements.countLabel.textContent = query ? `${visible.length} WYNIKÓW WYSZUKIWANIA` : `${visible.length} ${plural(visible.length, 'NOTATKA', 'NOTATKI', 'NOTATEK')}`;
-    elements.footerCount.textContent = `${visible.length} ${plural(visible.length, 'notatka', 'notatki', 'notatek')}`;
+    elements.countLabel.textContent = query
+      ? t('count.searchResults', { count: visible.length })
+      : `${visible.length} ${pluralText('count.notesLabel', visible.length)}`;
+    elements.footerCount.textContent = `${visible.length} ${pluralText('footer.count', visible.length)}`;
     updateEmptyState();
     if (activeId) {
       const current = notes.find(note => note.id === activeId);
@@ -702,17 +691,18 @@
     const card = $('#note-template').content.firstElementChild.cloneNode(true);
     card.dataset.id = note.id;
     card.classList.add(`color-${COLORS.includes(note.color) ? note.color : 'default'}`);
-    $('.card-date', card).textContent = formatDate(note.updatedAt);
-    $('.card-title', card).textContent = note.title || 'Bez tytułu';
+    $('.card-date', card).textContent = window.i18n.formatDate(note.updatedAt);
+    $('.card-title', card).textContent = note.title || t('editor.untitled');
     const cardBody = $('.card-body', card);
     if (note.bodyFormat === 1 && note.body) {
       cardBody.innerHTML = sanitizeRichHtml(note.body);
     } else {
-      cardBody.textContent = noteText(note) || 'Pusta notatka';
+      cardBody.textContent = noteText(note) || t('editor.emptyNote');
     }
     const pin = $('.card-pin', card);
     pin.classList.toggle('is-pinned', note.pinned);
-    pin.setAttribute('aria-label', note.pinned ? 'Odepnij notatkę' : 'Przypnij notatkę');
+    pin.setAttribute('aria-label', t(note.pinned ? 'editor.unpin' : 'editor.pin'));
+    pin.title = t(note.pinned ? 'editor.unpinTitle' : 'editor.pinTitle');
     pin.addEventListener('click', event => {
       event.stopPropagation();
       note.pinned = !note.pinned;
@@ -763,14 +753,9 @@
   }
 
   function updateEmptyState() {
-    const copy = {
-      all: ['Tu zaczyna się dobra myśl.', 'Zapisz pierwszą notatkę. Będzie czekać na Ciebie właśnie tutaj.'],
-      pinned: ['Nic tu jeszcze nie ma.', 'Przypnij ważną notatkę, aby mieć ją zawsze pod ręką.'],
-      archive: ['Archiwum jest puste.', 'Zarchiwizowane notatki pojawią się właśnie tutaj.'],
-      trash: ['Kosz jest pusty.', 'Usunięte notatki będą tu dostępne, dopóki nie usuniesz ich na stałe.'],
-    }[view];
-    elements.emptyTitle.textContent = query ? 'Nie znaleziono notatek.' : copy[0];
-    elements.emptyCopy.textContent = query ? 'Spróbuj innego tytułu, fragmentu treści albo etykiety.' : copy[1];
+    const prefix = query ? 'search' : view;
+    elements.emptyTitle.textContent = t(`empty.${prefix}.title`);
+    elements.emptyCopy.textContent = t(`empty.${prefix}.copy`);
     $('#empty-create').hidden = view !== 'all' || Boolean(query);
   }
 
@@ -793,7 +778,7 @@
     $('#task-restore-suggestions').replaceChildren();
     $('#task-restore-suggestions').hidden = true;
     elements.tags.value = (note.tags || []).join(', ');
-    elements.date.textContent = `Utworzono ${formatFullDate(note.createdAt)}`;
+    elements.date.textContent = t('editor.created', { date: window.i18n.formatFullDate(note.createdAt) });
     updateWordCount();
     updateEditorActions(note);
     setColor(note.color);
@@ -839,21 +824,21 @@
     note.title = elements.noteTitle.value.trim();
     note.body = serializedEditorBody();
     note.bodyFormat = 1;
-    note.tags = [...new Set(elements.tags.value.split(',').map(tag => tag.trim().toLocaleLowerCase('pl')).filter(Boolean))];
+    note.tags = [...new Set(elements.tags.value.split(',').map(tag => tag.trim().toLocaleLowerCase()).filter(Boolean))];
     note.color = activeColor;
     note.updatedAt = new Date().toISOString();
     moveToFront(note);
     persist();
     elements.saveState.classList.remove('is-saving');
-    elements.saveState.innerHTML = '<span class="save-dot"></span>Zapisano';
-    elements.date.textContent = `Utworzono ${formatFullDate(note.createdAt)}`;
+    elements.saveState.innerHTML = `<span class="save-dot"></span><span>${t('editor.saved')}</span>`;
+    elements.date.textContent = t('editor.created', { date: window.i18n.formatFullDate(note.createdAt) });
     updateWordCount();
     render();
   }
 
   function scheduleSave() {
     elements.saveState.classList.add('is-saving');
-    elements.saveState.innerHTML = '<span class="save-dot"></span>Zapisywanie';
+    elements.saveState.innerHTML = `<span class="save-dot"></span><span>${t('editor.saving')}</span>`;
     window.clearTimeout(saveTimeout);
     saveTimeout = window.setTimeout(saveEditor, 180);
   }
@@ -863,19 +848,19 @@
     body.querySelectorAll('.task-group-label').forEach(label => label.remove());
     const text = body.innerText || body.textContent || '';
     const count = text.trim().split(/\s+/).filter(Boolean).length;
-    elements.words.textContent = `${count} ${plural(count, 'słowo', 'słowa', 'słów')}`;
+    elements.words.textContent = `${count} ${pluralText('editor.words', count)}`;
   }
 
   function updateEditorActions(note) {
     elements.pin.classList.toggle('is-pinned', note.pinned);
     elements.pin.textContent = note.pinned ? '⌖' : '⌖';
-    elements.pin.setAttribute('aria-label', note.pinned ? 'Odepnij notatkę' : 'Przypnij notatkę');
-    elements.pin.title = note.pinned ? 'Odepnij' : 'Przypnij';
+    elements.pin.setAttribute('aria-label', t(note.pinned ? 'editor.unpin' : 'editor.pin'));
+    elements.pin.title = t(note.pinned ? 'editor.unpinTitle' : 'editor.pinTitle');
     elements.archive.textContent = note.deleted ? '↶' : '▣';
-    elements.archive.setAttribute('aria-label', note.deleted ? 'Przywróć z kosza' : note.archived ? 'Przywróć z archiwum' : 'Archiwizuj notatkę');
-    elements.archive.title = note.deleted || note.archived ? 'Przywróć' : 'Archiwizuj';
-    elements.delete.setAttribute('aria-label', note.deleted ? 'Usuń trwale' : 'Przenieś do kosza');
-    elements.delete.title = note.deleted ? 'Usuń trwale' : 'Przenieś do kosza';
+    elements.archive.setAttribute('aria-label', t(note.deleted ? 'editor.restoreTrash' : note.archived ? 'editor.unarchive' : 'editor.archive'));
+    elements.archive.title = t(note.deleted || note.archived ? 'editor.unarchiveTitle' : 'editor.archiveTitle');
+    elements.delete.setAttribute('aria-label', t(note.deleted ? 'editor.deleteForever' : 'editor.delete'));
+    elements.delete.title = t(note.deleted ? 'editor.deleteForever' : 'editor.delete');
     elements.pin.hidden = note.deleted;
     $('#share-note').hidden = note.deleted;
   }
@@ -892,9 +877,9 @@
     url.hash = `share=${encoded}`;
     try {
       await navigator.clipboard.writeText(url.toString());
-      showToast('Link skopiowany. Każda osoba z linkiem zobaczy tę kopię notatki.');
+      showToast(t('shared.copied'));
     } catch {
-      showToast('Nie udało się skopiować linku. Sprawdź uprawnienia schowka przeglądarki.');
+      showToast(t('shared.copyFailed'));
     }
   }
 
@@ -911,12 +896,12 @@
         color: COLORS.includes(data.color) ? data.color : 'default',
         tags: Array.isArray(data.tags) ? data.tags.map(String).slice(0, 20) : [],
       };
-      elements.sharedTitle.textContent = pendingSharedNote.title || 'Bez tytułu';
-      elements.sharedPreview.textContent = noteText(pendingSharedNote) || 'Pusta notatka';
+      elements.sharedTitle.textContent = pendingSharedNote.title || t('editor.untitled');
+      elements.sharedPreview.textContent = noteText(pendingSharedNote) || t('editor.emptyNote');
       elements.sharedBanner.hidden = false;
       elements.sharedBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } catch {
-      showToast('Ten link nie zawiera prawidłowej notatki.');
+      showToast(t('shared.invalid'));
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
     }
   }
@@ -933,24 +918,6 @@
     const binary = atob(base64 + '='.repeat((4 - base64.length % 4) % 4));
     const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
     return new TextDecoder().decode(bytes);
-  }
-
-  function formatDate(value) {
-    const date = new Date(value);
-    const today = new Date();
-    if (date.toDateString() === today.toDateString()) return `Dziś, ${new Intl.DateTimeFormat('pl-PL', { hour: '2-digit', minute: '2-digit' }).format(date)}`;
-    return new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'short' }).format(date);
-  }
-
-  function formatFullDate(value) {
-    return new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(value));
-  }
-
-  function plural(count, one, few, many) {
-    if (count === 1) return one;
-    const lastTwo = count % 100;
-    const last = count % 10;
-    return last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? few : many;
   }
 
   function showToast(message) {
@@ -970,7 +937,7 @@
       restoreEditorRange();
       const previousRange = editorRange?.cloneRange();
       if (button.hasAttribute('data-insert-checklist')) {
-        document.execCommand('insertHTML', false, '<ul class="task-list"><li><input type="checkbox" class="task-checkbox" contenteditable="false" aria-label="Oznacz zadanie jako wykonane"><span class="task-text" tabindex="0">&#8203;</span></li></ul>');
+        document.execCommand('insertHTML', false, `<ul class="task-list"><li><input type="checkbox" class="task-checkbox" contenteditable="false" aria-label="${t('editor.checkboxAria')}"><span class="task-text" tabindex="0">&#8203;</span></li></ul>`);
       } else if (button.dataset.command) {
         document.execCommand(button.dataset.command, false, null);
       }
@@ -1090,7 +1057,7 @@
     note.updatedAt = new Date().toISOString();
     saveEditor();
     updateEditorActions(note);
-    showToast(restoredFromTrash ? 'Notatka przywrócona z kosza.' : note.archived ? 'Notatka przeniesiona do archiwum.' : 'Notatka przywrócona z archiwum.');
+    showToast(t(restoredFromTrash ? 'editor.restoredToast' : note.archived ? 'editor.archivedToast' : 'editor.unarchivedToast'));
     closeEditor();
   });
   elements.delete.addEventListener('click', () => {
@@ -1098,13 +1065,13 @@
     if (!note) return;
     if (note.deleted) {
       notes = notes.filter(item => item.id !== note.id);
-      showToast('Notatka usunięta na stałe.');
+      showToast(t('editor.deletedToast'));
     } else {
       note.deleted = true;
       note.pinned = false;
       note.archived = false;
       note.updatedAt = new Date().toISOString();
-      showToast('Notatka przeniesiona do kosza.');
+      showToast(t('editor.trashedToast'));
     }
     persist();
     closeEditor();
@@ -1129,7 +1096,7 @@
     window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
     view = 'all';
     render();
-    showToast('Udostępniona notatka zapisana u Ciebie.');
+    showToast(t('shared.saved'));
     openEditor(note.id);
   });
   document.addEventListener('click', event => {
@@ -1153,4 +1120,25 @@
   });
 
   initializeApp();
+
+  window.i18n.onChange(() => {
+    applyTheme(document.documentElement.dataset.theme);
+    if (!elements.authView.hidden) showAuth(elements.registerForm.hidden ? 'login' : 'register', elements.authMessage.hidden ? '' : elements.authMessage.textContent);
+    if (currentUser) render();
+    if (activeId) {
+      const current = notes.find(note => note.id === activeId);
+      if (current) {
+        elements.date.textContent = t('editor.created', { date: window.i18n.formatFullDate(current.createdAt) });
+        updateWordCount();
+        updateEditorActions(current);
+      }
+      normalizeChecklistGroups();
+      $('#task-restore-suggestions').replaceChildren();
+      $('#task-restore-suggestions').hidden = true;
+    }
+    if (pendingSharedNote) {
+      elements.sharedTitle.textContent = pendingSharedNote.title || t('editor.untitled');
+      elements.sharedPreview.textContent = noteText(pendingSharedNote) || t('editor.emptyNote');
+    }
+  });
 })();
