@@ -1081,7 +1081,6 @@
     }
   });
 
-  $('#create-note').addEventListener('click', () => openEditor());
   $('#create-note-heading').addEventListener('click', () => openEditor());
   $('#capture-note').addEventListener('click', () => openEditor());
   $('#empty-create').addEventListener('click', () => openEditor());

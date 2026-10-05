@@ -1,77 +1,74 @@
 # Notki
 
-Notki is a private notes app with per-user SQLite storage, invitation-only registration, and an administrator dashboard.
+Private notes app with per-user SQLite storage, invitation-only registration, and an administrator dashboard. **ALPHA 0.1.0**
+
+![Notes app](docs/notes.png)
+
+## Features
+
+- Notes with rich text, tags, colors, pinning, archive, and trash
+- Per-user SQLite storage on your own server
+- Invitation-only registration — each link works once and expires after 7 days
+- Admin panel with server statistics, user list, and invitations
+- Server-wide `.tgz` backups: create, download, restore, delete
+- Polish and English interface, light and dark theme
+- Profile panel for changing the language and password
 
 ## Run locally
 
 Requires Python 3.9 or newer. The server uses only Python's standard library.
 
-Start the server:
-
 ```powershell
 python server.py
 ```
 
-On a fresh database, open the local address printed by the server. Notki automatically opens the first-run administrator form. Create an account with a password of at least 12 characters; the new administrator is signed in immediately. This setup page is only accessible from the local machine and can be used only once.
+On a fresh database, open the local address printed by the server. Notki opens the first-run administrator form, which is available only from the local machine and can be used once. The password must be at least 12 characters long.
 
-After setup, the same address opens the notes app. Sign in with the administrator account, then choose **Panel administracyjny** to create registration links. Each invitation works once and expires after seven days. New accounts can only be created through a valid invitation.
+After setup, sign in and choose **Panel administracyjny** to create registration links. The SQLite database lives at `data/notki.sqlite3`.
 
-From **Backupy całego serwera**, an administrator can create timestamped `.tgz` backups stored on the server in `data/backups`. Each archive contains all accounts, password hashes, notes, and invitations; active sessions are excluded. Keep backups private because they contain password hashes. The admin panel can list, download, restore, and delete individual archives. Restoring replaces the current server data and logs everyone out.
+The first administrator can also be created from a terminal:
 
-On a fresh server, select a `.tgz` backup on the first-run setup page and import it before creating an administrator. Then sign in with an account from the backup. The legacy JSON snapshot import remains supported.
+```powershell
+python server.py --create-admin
+```
 
-The first administrator can also be created from a terminal with `python server.py --create-admin` before starting the server.
+## Admin panel
 
-The SQLite database is stored at `data/notki.sqlite3`. Existing browser-only notes are offered for migration the first time an account with no server notes signs in.
+![Admin panel](docs/admin.png)
 
-## Languages
+From **Backupy całego serwera** you can create timestamped `.tgz` archives stored in `data/backups`. Each archive contains all accounts, password hashes, notes, and invitations; active sessions are excluded. Keep backups private because they contain password hashes. Restoring replaces the current server data and logs everyone out.
 
-The interface is available in Polish and English. The initial language follows the browser's `Accept-Language` header and falls back to Polish. In the notes app and the admin panel the language is changed from the profile panel, opened from the avatar in the top-right corner; the first-run setup page keeps its own picker because no account exists yet. The choice is stored in `localStorage` under `notki.lang.v1` and applied on later visits. Server-side messages are translated from the same `Accept-Language` header, so API errors arrive in the selected language. Translation strings live in `i18n.js` (interface) and in `ENGLISH_MESSAGES` in `server.py` (API and setup messages).
+On a fresh server you can import a `.tgz` backup on the first-run setup page instead of creating an administrator.
 
 ## Profile
 
+![Profile panel](docs/profile.png)
+
 Clicking the avatar in the top-right corner opens a menu with **Profile** and **Sign out**. The profile panel lets you change the interface language and the account password. Changing the password requires the current password, must be at least 12 characters long, and signs out every other session while keeping the current one active.
 
-## Themes
+## Languages and themes
 
-All three pages share `theme.js`. On the first visit the theme follows the operating system setting (`prefers-color-scheme`) and keeps following it while the system preference changes; once the toggle is used, the explicit choice is stored in `localStorage` under `notki.theme.v1` and wins over the system setting on every page.
+The interface is available in Polish and English. The initial language follows the browser's `Accept-Language` header and falls back to Polish; the choice is stored in `localStorage` under `notki.lang.v1`. Server-side messages are translated from the same header, so API errors arrive in the selected language.
 
-## Uruchomienie na Linuksie
+All pages share `theme.js`. The theme follows the operating system setting until the toggle is used; the explicit choice is stored in `localStorage` under `notki.theme.v1`.
 
-Wymagany jest Python 3.9 lub nowszy. SQLite i pozostałe zależności są w bibliotece standardowej, więc nie trzeba instalować pakietów przez `pip`.
-
-Na Ubuntu lub Debianie:
+## Run on Linux
 
 ```sh
 sudo apt update
 sudo apt install python3
-git clone <adres-repozytorium> Notki
+git clone <repository-url> Notki
 cd Notki
-python3 --version
 python3 server.py
 ```
 
-Serwer domyślnie nasłuchuje tylko na `127.0.0.1:8000`. Na tej samej maszynie otwórz `http://127.0.0.1:8000`. Przy pierwszym uruchomieniu pojawi się formularz utworzenia administratora.
-
-Jeśli serwer działa na innej maszynie, pozostaw go związanym z `127.0.0.1` i zestaw tunel SSH ze swojego komputera:
+The server listens on `127.0.0.1:8000` by default. For remote access, keep it bound to loopback and use an SSH tunnel:
 
 ```sh
-ssh -L 8000:127.0.0.1:8000 <użytkownik>@<adres-serwera>
+ssh -L 8000:127.0.0.1:8000 <user>@<server-address>
 ```
 
-Podczas działania tunelu otwórz lokalnie `http://127.0.0.1:8000`. Tunel pozwala przejść pierwszą konfigurację administratora bez wystawiania formularza na publiczny interfejs.
-
-### Stała usługa systemd
-
-Dla serwera dostępnego przez domenę uruchom Notki za reverse proxy z TLS, a nie bezpośrednio publicznym HTTP. Przykład zakłada kod w `/opt/notki`, konto systemowe `notki` i proxy przekazujące ruch do `127.0.0.1:8000`.
-
-```sh
-sudo useradd --system --home-dir /opt/notki --shell /usr/sbin/nologin notki
-sudo install -d -o notki -g notki /opt/notki/data
-sudo -u notki python3 /opt/notki/server.py --create-admin
-```
-
-Zapisz poniższą jednostkę jako `/etc/systemd/system/notki.service`:
+For a permanent service, run Notki behind a TLS-enabled reverse proxy. Example systemd unit for code in `/opt/notki` and a `notki` system account:
 
 ```ini
 [Unit]
@@ -101,36 +98,24 @@ ReadWritePaths=/opt/notki/data
 WantedBy=multi-user.target
 ```
 
-Włącz usługę i sprawdź logi:
-
 ```sh
 sudo systemctl daemon-reload
 sudo systemctl enable --now notki
-sudo systemctl status notki
-journalctl -u notki -f
 ```
-
-Plik SQLite oraz archiwa backupów będą w `/opt/notki/data`. Nie udostępniaj tego katalogu publicznie; snapshoty `.tgz` zawierają hashe haseł.
-
-## Języki interfejsu
-
-Interfejs jest dostępny w języku polskim i angielskim. Język początkowy wynika z nagłówka `Accept-Language` przeglądarki, a gdy go brak, używany jest polski. W aplikacji notatek i w panelu administracyjnym język zmienia się w panelu profilu, otwieranym z awatara w prawym górnym rogu; strona pierwszej konfiguracji zachowuje własny przełącznik, bo nie istnieje jeszcze żadne konto. Wybór jest zapisywany w `localStorage` pod kluczem `notki.lang.v1` i stosowany przy kolejnych odwiedzinach. Komunikaty serwera są tłumaczone na podstawie tego samego nagłówka, więc błędy API wracają w wybranym języku. Teksty interfejsu są w `i18n.js`, a komunikaty serwera w `ENGLISH_MESSAGES` w `server.py`.
-
-## Profil
-
-Kliknięcie awatara w prawym górnym rogu otwiera menu z pozycjami **Profil** i **Wyloguj**. W panelu profilu można zmienić język interfejsu oraz hasło do konta. Zmiana hasła wymaga podania aktualnego hasła, nowe musi mieć co najmniej 12 znaków, a po zmianie wszystkie pozostałe sesje zostają wylogowane, przy czym bieżąca pozostaje aktywna.
-
-## Motywy
-
-Wszystkie trzy strony korzystają ze wspólnego `theme.js`. Przy pierwszej wizycie motyw wynika z ustawień systemu (`prefers-color-scheme`) i nadal podąża za zmianami systemowymi; po użyciu przycisku wybór jest zapisywany w `localStorage` pod kluczem `notki.theme.v1` i ma pierwszeństwo nad ustawieniem systemowym na każdej stronie.
 
 ## Configuration
 
 - `NOTKI_HOST`: bind address; defaults to `127.0.0.1`.
 - `NOTKI_PORT`: HTTP port; defaults to `8000`.
 - `NOTKI_DB_PATH`: optional SQLite database path.
-- `NOTKI_BACKUP_DIR`: optional directory for server backup archives; defaults to `backups` beside the database.
+- `NOTKI_BACKUP_DIR`: optional directory for backup archives; defaults to `backups` beside the database.
 - `NOTKI_COOKIE_SECURE=1`: mark session cookies Secure when served through HTTPS.
 - `NOTKI_PUBLIC_HTTPS=1`: generate HTTPS invitation URLs when TLS terminates in a reverse proxy.
 
 The built-in HTTP server is intended for local use. For remote access, put it behind a TLS-enabled reverse proxy and set the secure-cookie options above.
+
+## Tests
+
+```powershell
+python -m unittest discover -s tests
+```
