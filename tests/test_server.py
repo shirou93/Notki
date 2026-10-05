@@ -125,6 +125,43 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertIn('zaproszenie', error['error'].lower())
 
+    def test_password_change_requires_current_password_and_keeps_session(self):
+        status, _ = self.request(self.admin, 'POST', '/api/account/password', {
+            'currentPassword': 'wrong-passphrase', 'newPassword': 'brand-new-passphrase-1',
+        })
+        self.assertEqual(status, 403)
+
+        status, _ = self.request(self.admin, 'POST', '/api/account/password', {
+            'currentPassword': 'secure-passphrase-1', 'newPassword': 'short',
+        })
+        self.assertEqual(status, 400)
+
+        status, result = self.request(self.admin, 'POST', '/api/account/password', {
+            'currentPassword': 'secure-passphrase-1', 'newPassword': 'brand-new-passphrase-1',
+        })
+        self.assertEqual(status, 200)
+        self.assertTrue(result['changed'])
+
+        status, session = self.request(self.admin, 'GET', '/api/session')
+        self.assertEqual(status, 200)
+        self.assertEqual(session['user']['email'], 'admin@example.com')
+
+        status, _ = self.request(self.new_client(), 'POST', '/api/login', {
+            'email': 'admin@example.com', 'password': 'secure-passphrase-1',
+        })
+        self.assertEqual(status, 401)
+
+        status, _ = self.request(self.new_client(), 'POST', '/api/login', {
+            'email': 'admin@example.com', 'password': 'brand-new-passphrase-1',
+        })
+        self.assertEqual(status, 200)
+
+    def test_password_change_requires_authentication(self):
+        status, _ = self.request(self.new_client(), 'POST', '/api/account/password', {
+            'currentPassword': 'secure-passphrase-1', 'newPassword': 'brand-new-passphrase-1',
+        })
+        self.assertEqual(status, 401)
+
     def test_admin_route_serves_dashboard(self):
         with self.admin.open(self.base_url + '/admin') as response:
             html = response.read().decode('utf-8')

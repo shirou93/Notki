@@ -14,19 +14,36 @@
   <script src="theme.js" defer></script>
   <script src="admin.js" defer></script></head>
 <body class="admin-page">
-  <header class="admin-topbar">
-    <a class="brand" href="/" aria-label="Notki, wróć do notatek" data-i18n-aria-label="brand.adminAria">
-      <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
-      <span>notki<span class="brand-period">.</span></span>
-    </a>
-    <div class="admin-topbar-actions">
-      <label class="language-picker"><span class="sr-only" data-i18n="language.label">Język</span><select id="language-select" data-language-select aria-label="Zmień język" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option></select></label>
-      <button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle data-theme-icon-light="☾︎" data-theme-icon-dark="☀︎" aria-label="Włącz ciemny motyw" title="Włącz ciemny motyw" aria-pressed="false"><span aria-hidden="true">☾︎</span></button>
-      <a class="button-secondary admin-back" href="/" data-i18n="admin.back">Do notatek</a>
-      <button class="button-secondary" id="admin-logout" type="button" data-i18n="admin.logout">Wyloguj</button>
-    </div>
-  </header>
-  <main class="admin-main">
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Nawigacja" data-i18n-aria-label="nav.aria">
+      <a class="brand" href="/" aria-label="Notki, wróć do notatek" data-i18n-aria-label="brand.adminAria">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>notki<span class="brand-period">.</span></span>
+      </a>
+      <button class="compose-button" id="create-note" type="button" aria-label="Nowa notatka" title="Nowa notatka" data-i18n-aria-label="nav.newNote" data-i18n-title="nav.newNote"><span aria-hidden="true">+</span></button>
+      <nav class="nav-list" aria-label="Widoki notatek" data-i18n-aria-label="nav.viewsAria">
+        <a class="nav-item" href="/#all"><span class="nav-icon" aria-hidden="true">▤</span><span data-i18n="nav.all">Wszystkie</span></a>
+        <a class="nav-item" href="/#pinned"><span class="nav-icon" aria-hidden="true">⌖</span><span data-i18n="nav.pinned">Przypięte</span></a>
+        <a class="nav-item" href="/#archive"><span class="nav-icon" aria-hidden="true">▣</span><span data-i18n="nav.archive">Archiwum</span></a>
+        <a class="nav-item" href="/#trash"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></span><span data-i18n="nav.trash">Kosz</span></a>
+      </nav>
+      <a class="admin-link is-active" href="/admin" aria-current="page"><span aria-hidden="true">⚙</span> <span data-i18n="nav.adminPanel">Panel administracyjny</span></a>
+      <div class="sidebar-bottom">
+        <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Zapisane na serwerze</span></div>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.0</span>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="breadcrumbs"><span data-i18n="topbar.breadcrumb">TWÓJ NOTATNIK</span><span class="breadcrumb-slash">/</span><span data-i18n="nav.adminPanel">Panel administracyjny</span></div>
+        <div class="topbar-actions">
+          <button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle data-theme-icon-light="☾︎" data-theme-icon-dark="☀︎" aria-label="Włącz ciemny motyw" title="Włącz ciemny motyw" aria-pressed="false"><span aria-hidden="true">☾︎</span></button>
+          <button class="button-secondary" id="admin-logout" type="button" data-i18n="admin.logout">Wyloguj</button>
+        </div>
+      </header>
+
+      <div class="admin-main">
     <header class="admin-heading">
       <div>
         <p class="eyebrow" data-i18n="admin.eyebrow">ZARZĄDZANIE SERWEREM</p>
@@ -80,7 +97,9 @@
         </table>
       </div>
     </section>
-    <p class="admin-message" id="admin-message" role="status"></p>
-  </main>
+        <p class="admin-message" id="admin-message" role="status"></p>
+      </div>
+    </main>
+  </div>
 </body>
 </html>

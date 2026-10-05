@@ -26,7 +26,11 @@ The SQLite database is stored at `data/notki.sqlite3`. Existing browser-only not
 
 ## Languages
 
-The interface is available in Polish and English. Every page — the notes app, the admin panel, and the first-run setup — shows a language picker next to the theme toggle. The initial language follows the browser's `Accept-Language` header and falls back to Polish; the choice made in the picker is stored in `localStorage` under `notki.lang.v1` and applied on later visits. Server-side messages are translated from the same `Accept-Language` header, so API errors arrive in the selected language. Translation strings live in `i18n.js` (interface) and in `ENGLISH_MESSAGES` in `server.py` (API and setup messages).
+The interface is available in Polish and English. The initial language follows the browser's `Accept-Language` header and falls back to Polish. In the notes app and the admin panel the language is changed from the profile panel, opened from the avatar in the top-right corner; the first-run setup page keeps its own picker because no account exists yet. The choice is stored in `localStorage` under `notki.lang.v1` and applied on later visits. Server-side messages are translated from the same `Accept-Language` header, so API errors arrive in the selected language. Translation strings live in `i18n.js` (interface) and in `ENGLISH_MESSAGES` in `server.py` (API and setup messages).
+
+## Profile
+
+Clicking the avatar in the top-right corner opens a menu with **Profile** and **Sign out**. The profile panel lets you change the interface language and the account password. Changing the password requires the current password, must be at least 12 characters long, and signs out every other session while keeping the current one active.
 
 ## Themes
 
@@ -110,7 +114,11 @@ Plik SQLite oraz archiwa backupów będą w `/opt/notki/data`. Nie udostępniaj 
 
 ## Języki interfejsu
 
-Interfejs jest dostępny w języku polskim i angielskim. Każda strona — aplikacja notatek, panel administracyjny oraz pierwsza konfiguracja — ma przełącznik języka obok przycisku motywu. Język początkowy wynika z nagłówka `Accept-Language` przeglądarki, a gdy go brak, używany jest polski. Wybór z listy jest zapisywany w `localStorage` pod kluczem `notki.lang.v1` i stosowany przy kolejnych odwiedzinach. Komunikaty serwera są tłumaczone na podstawie tego samego nagłówka, więc błędy API wracają w wybranym języku. Teksty interfejsu są w `i18n.js`, a komunikaty serwera w `ENGLISH_MESSAGES` w `server.py`.
+Interfejs jest dostępny w języku polskim i angielskim. Język początkowy wynika z nagłówka `Accept-Language` przeglądarki, a gdy go brak, używany jest polski. W aplikacji notatek i w panelu administracyjnym język zmienia się w panelu profilu, otwieranym z awatara w prawym górnym rogu; strona pierwszej konfiguracji zachowuje własny przełącznik, bo nie istnieje jeszcze żadne konto. Wybór jest zapisywany w `localStorage` pod kluczem `notki.lang.v1` i stosowany przy kolejnych odwiedzinach. Komunikaty serwera są tłumaczone na podstawie tego samego nagłówka, więc błędy API wracają w wybranym języku. Teksty interfejsu są w `i18n.js`, a komunikaty serwera w `ENGLISH_MESSAGES` w `server.py`.
+
+## Profil
+
+Kliknięcie awatara w prawym górnym rogu otwiera menu z pozycjami **Profil** i **Wyloguj**. W panelu profilu można zmienić język interfejsu oraz hasło do konta. Zmiana hasła wymaga podania aktualnego hasła, nowe musi mieć co najmniej 12 znaków, a po zmianie wszystkie pozostałe sesje zostają wylogowane, przy czym bieżąca pozostaje aktywna.
 
 ## Motywy
 

@@ -57,6 +57,7 @@ ENGLISH_MESSAGES = {
     'Konto administratora zostało już utworzone.': 'The administrator account has already been created.',
     'Konto z tym adresem e-mail już istnieje.': 'An account with this e-mail address already exists.',
     'Nieprawidłowy e-mail lub hasło.': 'Invalid e-mail or password.',
+    'Aktualne hasło jest nieprawidłowe.': 'The current password is incorrect.',
     'Rejestracja wymaga ważnego zaproszenia.': 'Registration requires a valid invitation.',
     'Zaproszenie jest nieprawidłowe lub wygasło.': 'The invitation is invalid or has expired.',
     'Snapshot przekracza limit 100 MB.': 'The snapshot exceeds the 100 MB limit.',
@@ -457,6 +458,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 self.register(payload)
             elif path == '/api/logout':
                 self.logout()
+            elif path == '/api/account/password':
+                self.change_password(payload)
             elif path == '/api/admin/invites':
                 self.create_invite()
             elif path == '/api/admin/backups':
@@ -856,6 +859,23 @@ class NotkiHandler(BaseHTTPRequestHandler):
         with database() as connection:
             user = connection.execute('SELECT id, email, role, created_at FROM users WHERE id = ?', (user_id,)).fetchone()
         self.send_json({'user': public_user(user)}, 201, self.session_headers(token))
+
+    def change_password(self, payload):
+        user = self.require_user()
+        current = str(payload.get('currentPassword') or '')
+        password = str(payload.get('newPassword') or '')
+        if len(current) > 1024 or len(password) > 1024:
+            raise APIError('Hasło jest zbyt długie.')
+        if len(password) < 12:
+            raise APIError('Hasło musi mieć co najmniej 12 znaków.')
+        with database() as connection:
+            row = connection.execute('SELECT password_hash FROM users WHERE id = ?', (user['id'],)).fetchone()
+            if not row or not verify_password(current, row['password_hash']):
+                raise APIError('Aktualne hasło jest nieprawidłowe.', 403)
+            connection.execute('UPDATE users SET password_hash = ? WHERE id = ?', (hash_password(password), user['id']))
+            connection.execute('DELETE FROM sessions WHERE user_id = ?', (user['id'],))
+        token = self.new_session(user['id'])
+        self.send_json({'changed': True}, extra_headers=self.session_headers(token))
 
     def logout(self):
         cookie = cookies.SimpleCookie()

@@ -181,6 +181,10 @@
     }
   }
 
+  document.querySelector('#create-note').addEventListener('click', () => {
+    window.location.href = '/#new';
+  });
+
   document.querySelector('#create-invite').addEventListener('click', async () => {
     const message = document.querySelector('#invite-message');
     message.hidden = true;

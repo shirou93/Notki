@@ -48,17 +48,17 @@
         <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
         <span>notki<span class="brand-period">.</span></span>
       </a>
-      <button class="compose-button" id="create-note" type="button"><span aria-hidden="true">+</span> <span data-i18n="nav.newNote">Nowa notatka</span></button>
+      <button class="compose-button" id="create-note" type="button" aria-label="Nowa notatka" title="Nowa notatka" data-i18n-aria-label="nav.newNote" data-i18n-title="nav.newNote"><span aria-hidden="true">+</span></button>
       <nav class="nav-list" aria-label="Widoki notatek" data-i18n-aria-label="nav.viewsAria">
         <button class="nav-item is-active" type="button" data-view="all"><span class="nav-icon" aria-hidden="true">▤</span><span data-i18n="nav.all">Wszystkie</span><span class="nav-count" id="count-all">0</span></button>
         <button class="nav-item" type="button" data-view="pinned"><span class="nav-icon" aria-hidden="true">⌖</span><span data-i18n="nav.pinned">Przypięte</span><span class="nav-count" id="count-pinned">0</span></button>
         <button class="nav-item" type="button" data-view="archive"><span class="nav-icon" aria-hidden="true">▣</span><span data-i18n="nav.archive">Archiwum</span><span class="nav-count" id="count-archive">0</span></button>
-        <button class="nav-item" type="button" data-view="trash"><span class="nav-icon" aria-hidden="true">⌫</span><span data-i18n="nav.trash">Kosz</span><span class="nav-count" id="count-trash">0</span></button>
+        <button class="nav-item" type="button" data-view="trash"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></span><span data-i18n="nav.trash">Kosz</span><span class="nav-count" id="count-trash">0</span></button>
       </nav>
       <a class="admin-link" id="admin-link" href="/admin" hidden><span aria-hidden="true">⚙</span> <span data-i18n="nav.adminPanel">Panel administracyjny</span></a>
       <div class="sidebar-bottom">
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Zapisane na serwerze</span></div>
-        <span class="sidebar-version">NOTKI · 01</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.0</span>
       </div>
     </aside>
 
@@ -67,18 +67,17 @@
         <div class="breadcrumbs"><span data-i18n="topbar.breadcrumb">TWÓJ NOTATNIK</span><span class="breadcrumb-slash">/</span><span id="breadcrumb-view">Wszystkie</span></div>
         <div class="topbar-actions">
           <label class="search-box" for="search-input"><span class="search-icon" aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="Szukaj w notatkach" autocomplete="off" data-i18n-placeholder="topbar.search"><kbd>⌘ K</kbd></label>
-              <label class="language-picker"><span class="sr-only" data-i18n="language.label">Język</span><select id="language-select" data-language-select aria-label="Zmień język" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option></select></label>
           <button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle data-theme-icon-light="☾" data-theme-icon-dark="☀" aria-label="Włącz ciemny motyw" title="Włącz ciemny motyw" aria-pressed="false"><span aria-hidden="true">☾</span></button>
           <details class="settings-menu" id="settings-menu">
-            <summary class="settings-trigger" aria-label="Ustawienia" title="Ustawienia" data-i18n-aria-label="topbar.settings" data-i18n-title="topbar.settings"><span aria-hidden="true">⚙</span></summary>
+            <summary class="avatar" id="avatar" aria-label="Profil lokalny" title="Profil lokalny" data-i18n-aria-label="topbar.profile" data-i18n-title="topbar.profile">N</summary>
             <div class="settings-popover" role="group" aria-label="Konto" data-i18n-aria-label="topbar.account">
               <span class="settings-heading" data-i18n="topbar.account">KONTO</span>
               <div class="data-actions">
+                <button class="data-action" id="profile-button" type="button"><span class="action-icon" aria-hidden="true">◍</span><span class="action-label" data-i18n="topbar.profileMenu">Profil</span></button>
                 <button class="data-action" id="logout-button" type="button"><span class="action-icon" aria-hidden="true">↪</span><span class="action-label" data-i18n="topbar.logout">Wyloguj</span></button>
               </div>
             </div>
           </details>
-          <span class="avatar" aria-label="Profil lokalny" title="Profil lokalny" data-i18n-aria-label="topbar.profile" data-i18n-title="topbar.profile">N</span>
         </div>
       </header>
 
@@ -112,6 +111,32 @@
     </main>
   </div>
 
+  <div class="modal-backdrop" id="profile-backdrop" hidden></div>
+  <section class="profile-panel" id="profile-panel" role="dialog" aria-modal="true" aria-labelledby="profile-title" aria-hidden="true" hidden>
+    <div class="profile-topbar">
+      <h2 class="profile-title" id="profile-title" data-i18n="topbar.profileTitle">Profil</h2>
+      <button class="icon-button editor-close" id="close-profile" type="button" aria-label="Zamknij" title="Zamknij" data-i18n-aria-label="topbar.close" data-i18n-title="topbar.close">×</button>
+    </div>
+    <div class="profile-content">
+      <p class="profile-account" id="profile-account"></p>
+      <p class="profile-description" data-i18n="topbar.profileDescription">Zmień język interfejsu lub hasło do swojego konta.</p>
+      <label class="field-label" for="profile-language" data-i18n="topbar.language">JĘZYK</label>
+      <select class="auth-input profile-select" id="profile-language" data-language-select aria-label="Zmień język" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option></select>
+      <form class="profile-form" id="password-form">
+        <p class="field-label" data-i18n="topbar.changePassword">ZMIANA HASŁA</p>
+        <label class="field-label" for="current-password" data-i18n="topbar.currentPassword">AKTUALNE HASŁO</label>
+        <input class="auth-input" id="current-password" type="password" autocomplete="current-password" required>
+        <label class="field-label" for="new-password" data-i18n="topbar.newPassword">NOWE HASŁO</label>
+        <input class="auth-input" id="new-password" type="password" autocomplete="new-password" required minlength="12" aria-describedby="profile-password-hint">
+        <small class="setup-hint" id="profile-password-hint" data-i18n="topbar.passwordHint">Minimum 12 znaków.</small>
+        <label class="field-label" for="confirm-password" data-i18n="topbar.confirmPassword">POWTÓRZ NOWE HASŁO</label>
+        <input class="auth-input" id="confirm-password" type="password" autocomplete="new-password" required minlength="12">
+        <p class="auth-message" id="profile-message" role="alert" hidden></p>
+        <button class="button-primary" type="submit" data-i18n="topbar.changePassword">ZMIANA HASŁA</button>
+      </form>
+    </div>
+  </section>
+
   <div class="modal-backdrop" id="editor-backdrop" hidden></div>
   <aside class="editor-panel" id="editor-panel" aria-label="Edytor notatki" aria-hidden="true" hidden>
     <div class="editor-topbar">
@@ -121,7 +146,7 @@
         <button class="icon-button" id="pin-note" type="button" aria-label="Przypnij notatkę" title="Przypnij" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle">⌖</button>
         <button class="icon-button" id="archive-note" type="button" aria-label="Archiwizuj notatkę" title="Archiwizuj" data-i18n-aria-label="editor.archive" data-i18n-title="editor.archiveTitle">▣</button>
         <button class="icon-button" id="share-note" type="button" aria-label="Udostępnij notatkę" title="Udostępnij link" data-i18n-aria-label="editor.share" data-i18n-title="editor.shareTitle">↗</button>
-        <button class="icon-button danger-icon" id="delete-note" type="button" aria-label="Przenieś do kosza" title="Przenieś do kosza" data-i18n-aria-label="editor.delete" data-i18n-title="editor.delete">⌫</button>
+        <button class="icon-button danger-icon" id="delete-note" type="button" aria-label="Przenieś do kosza" title="Przenieś do kosza" data-i18n-aria-label="editor.delete" data-i18n-title="editor.delete"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></button>
       </div>
     </div>
     <div class="editor-content">

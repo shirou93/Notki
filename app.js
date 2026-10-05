@@ -19,6 +19,8 @@
     appShell: $('#app-shell'), authView: $('#auth-view'), authHeading: $('#auth-heading'), authDescription: $('#auth-description'), authMessage: $('#auth-message'),
     loginForm: $('#login-form'), registerForm: $('#register-form'), authSwitch: $('#auth-switch'), adminLink: $('#admin-link'),
     sharedBanner: $('#shared-banner'), sharedTitle: $('#shared-title'), sharedPreview: $('#shared-preview'),
+    avatar: $('#avatar'), profilePanel: $('#profile-panel'), profileBackdrop: $('#profile-backdrop'), profileAccount: $('#profile-account'),
+    profileMessage: $('#profile-message'), passwordForm: $('#password-form'),
   };
 
   let notes = [];
@@ -87,12 +89,28 @@
     elements.appShell.hidden = false;
     elements.panel.hidden = false;
     elements.adminLink.hidden = !user.isAdmin;
-    $('.avatar').textContent = user.email.slice(0, 1).toLocaleUpperCase();
-    $('.avatar').title = user.email;
-    $('.avatar').setAttribute('aria-label', t('topbar.accountAria', { email: user.email }));
+    elements.avatar.textContent = user.email.slice(0, 1).toLocaleUpperCase();
+    elements.avatar.title = user.email;
+    elements.avatar.setAttribute('aria-label', t('topbar.accountAria', { email: user.email }));
+    elements.profileAccount.textContent = user.email;
     document.body.classList.remove('is-auth');
     render();
     readSharedNote();
+    applyHashIntent();
+  }
+
+  function applyHashIntent() {
+    const intent = window.location.hash.replace(/^#/, '');
+    if (!intent || intent.startsWith('share=')) return;
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    if (intent === 'new') {
+      openEditor();
+      return;
+    }
+    if (VIEW_KEYS[intent]) {
+      view = intent;
+      render();
+    }
   }
 
   async function initializeApp() {
@@ -152,6 +170,60 @@
       window.location.assign('/');
     } catch (error) {
       showToast(error.message);
+    }
+  });
+
+  function openProfile() {
+    elements.profileMessage.hidden = true;
+    elements.profileMessage.classList.remove('is-error');
+    elements.passwordForm.reset();
+    elements.profilePanel.hidden = false;
+    elements.profilePanel.classList.add('is-open');
+    elements.profilePanel.setAttribute('aria-hidden', 'false');
+    elements.profileBackdrop.hidden = false;
+    document.body.style.overflow = 'hidden';
+    window.setTimeout(() => $('#current-password').focus(), 180);
+  }
+
+  function closeProfile() {
+    elements.profilePanel.classList.remove('is-open');
+    elements.profilePanel.setAttribute('aria-hidden', 'true');
+    elements.profilePanel.hidden = true;
+    elements.profileBackdrop.hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  $('#profile-button').addEventListener('click', () => {
+    $('#settings-menu').open = false;
+    openProfile();
+  });
+  $('#close-profile').addEventListener('click', closeProfile);
+  elements.profileBackdrop.addEventListener('click', closeProfile);
+
+  elements.passwordForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const current = $('#current-password').value;
+    const next = $('#new-password').value;
+    const confirmation = $('#confirm-password').value;
+    const showProfileMessage = (message, isError) => {
+      elements.profileMessage.textContent = message;
+      elements.profileMessage.classList.toggle('is-error', isError);
+      elements.profileMessage.hidden = false;
+    };
+    if (next !== confirmation) {
+      showProfileMessage(t('topbar.passwordMismatch'), true);
+      return;
+    }
+    try {
+      await apiRequest('/api/account/password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword: current, newPassword: next }),
+      });
+      elements.passwordForm.reset();
+      showProfileMessage(t('topbar.passwordChanged'), false);
+      showToast(t('topbar.passwordChanged'));
+    } catch (error) {
+      showProfileMessage(t('topbar.passwordChangeFailed', { message: error.message }), true);
     }
   });
 
@@ -1104,6 +1176,10 @@
     if (menu.open && !menu.contains(event.target) && !elements.noteBody.contains(event.target) && !event.target.closest('.editor-panel')) menu.open = false;
   });
   document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !elements.profilePanel.hidden && elements.profilePanel.classList.contains('is-open')) {
+      closeProfile();
+      return;
+    }
     if (event.key === 'Escape' && $('#settings-menu').open) {
       $('#settings-menu').open = false;
       return;
