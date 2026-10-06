@@ -52,6 +52,7 @@
         <button class="nav-item is-active" type="button" data-view="all"><span class="nav-icon" aria-hidden="true">▤</span><span data-i18n="nav.all">All</span><span class="nav-count" id="count-all">0</span></button>
         <button class="nav-item" type="button" data-view="pinned"><span class="nav-icon" aria-hidden="true">⌖</span><span data-i18n="nav.pinned">Pinned</span><span class="nav-count" id="count-pinned">0</span></button>
         <button class="nav-item" type="button" data-view="archive"><span class="nav-icon" aria-hidden="true">▣</span><span data-i18n="nav.archive">Archive</span><span class="nav-count" id="count-archive">0</span></button>
+        <button class="nav-item" type="button" data-view="shared"><span class="nav-icon" aria-hidden="true">⇄</span><span data-i18n="nav.shared">Shared with me</span><span class="nav-count" id="count-shared">0</span></button>
         <button class="nav-item" type="button" data-view="trash"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></span><span data-i18n="nav.trash">Trash</span><span class="nav-count" id="count-trash">0</span></button>
       </nav>
       <div class="sidebar-bottom">
@@ -146,6 +147,33 @@
     </div>
   </section>
 
+  <div class="modal-backdrop" id="share-backdrop" hidden></div>
+  <section class="share-panel" id="share-panel" role="dialog" aria-modal="true" aria-labelledby="share-title" aria-hidden="true" hidden>
+    <div class="profile-topbar">
+      <h2 class="profile-title" id="share-title" data-i18n="share.title">Share note</h2>
+      <button class="icon-button editor-close" id="close-share" type="button" aria-label="Close" title="Close" data-i18n-aria-label="topbar.close" data-i18n-title="topbar.close">×</button>
+    </div>
+    <div class="profile-content">
+      <p class="profile-account" id="share-note-name"></p>
+      <p class="profile-description" data-i18n="share.description">Give another account access to this note. Read-only recipients can open it but not change it.</p>
+      <form class="profile-form" id="share-form">
+        <label class="field-label" for="share-email" data-i18n="share.emailLabel">E-MAIL OF THE RECIPIENT</label>
+        <input class="auth-input" id="share-email" type="email" list="share-directory" autocomplete="off" required maxlength="254" placeholder="name@example.com">
+        <datalist id="share-directory"></datalist>
+        <label class="field-label" for="share-permission" data-i18n="share.permissionLabel">PERMISSION</label>
+        <select class="auth-input profile-select" id="share-permission">
+          <option value="read" data-i18n="share.permission.read">Read only</option>
+          <option value="write" data-i18n="share.permission.write">Can edit</option>
+        </select>
+        <p class="auth-message" id="share-message" role="alert" hidden></p>
+        <button class="button-primary" type="submit" data-i18n="share.submit">Share</button>
+      </form>
+      <p class="field-label" data-i18n="share.currentLabel">PEOPLE WITH ACCESS</p>
+      <ul class="share-list" id="share-list"></ul>
+      <p class="share-empty" id="share-empty" data-i18n="share.empty">This note is not shared with anyone yet.</p>
+    </div>
+  </section>
+
   <div class="modal-backdrop" id="editor-backdrop" hidden></div>
   <aside class="editor-panel" id="editor-panel" aria-label="Note editor" aria-hidden="true" hidden>
     <div class="editor-topbar">
@@ -188,6 +216,7 @@
         <button class="color-swatch swatch-lilac" data-color="lilac" type="button" aria-label="Lilac" title="Lilac" data-i18n-aria-label="editor.color.lilac" data-i18n-title="editor.color.lilac"></button>
         <button class="color-swatch swatch-sky" data-color="sky" type="button" aria-label="Sky" title="Sky" data-i18n-aria-label="editor.color.sky" data-i18n-title="editor.color.sky"></button>
       </div>
+      <div class="editor-bottom-note" id="editor-share-notice" hidden></div>
       <div class="editor-bottom-note"><span class="lock-mark" aria-hidden="true">◈</span> <span data-i18n="editor.privacy">This note stays private until you share it.</span></div>
     </div>
   </aside>

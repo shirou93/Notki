@@ -212,6 +212,22 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .card-tags { display: flex; flex-wrap: wrap; gap: 5px; }
 .card-tag { padding: 3px 7px; border-radius: 3px; background: #ffffff9c; color: #63746a; font-size: 9px; }
 .card-share { opacity: .55; font-size: 14px; }
+.card-owner { padding: 3px 7px; border-radius: 3px; background: #e8f0e0; color: #4f6b45; font-size: 9px; font-weight: 700; }
+.card-owner.is-read-only { background: #eef0ee; color: #6d7a70; }
+.note-card.is-shared { border-style: dashed; }
+.share-panel { position: fixed; top: 0; right: 0; z-index: 6; width: min(430px, 100vw); height: 100%; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: #fff; box-shadow: -18px 0 40px #14261c1f; transform: translateX(100%); transition: transform .28s cubic-bezier(.2,.8,.3,1); }
+.share-panel.is-open { transform: none; }
+.share-list { display: flex; flex-direction: column; gap: 7px; margin: 0 0 14px; padding: 0; list-style: none; }
+.share-item { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; align-items: center; gap: 9px; padding: 8px 10px; border: 1px solid #e8ece7; border-radius: 6px; background: #fbfcfa; }
+.share-avatar { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--forest); color: #fff; font-size: 11px; font-weight: 700; background-size: cover; background-position: center; }
+.share-email { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.share-badge { padding: 3px 7px; border-radius: 3px; background: #eef0ee; color: #6d7a70; font-size: 9px; font-weight: 700; white-space: nowrap; }
+.share-badge.is-write { background: #e8f0e0; color: #4f6b45; }
+.share-revoke { padding: 4px 8px; border: 1px solid #e6d9d6; border-radius: 4px; background: #fff; color: #9a5b4d; font-size: 9px; font-weight: 700; cursor: pointer; }
+.share-revoke:hover { background: #fbf1ef; }
+.share-empty { margin: 0 0 14px; color: #9aa39c; font-size: 11px; }
+.editor-panel.is-read-only .editor-title, .editor-panel.is-read-only .tags-input { color: #6d7a70; }
+.editor-panel.is-read-only .editor-body { background: #fafbf9; }
 .empty-state { min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px 16px 44px; text-align: center; animation: rise-in .4s both; }
 .empty-art { position: relative; width: 54px; height: 52px; margin-bottom: 15px; }
 .empty-sheet { position: absolute; inset: 6px 9px 0 4px; border: 1px solid #ccd9c9; border-radius: 5px; background: #fff; transform: rotate(-7deg); box-shadow: 7px 4px 0 #e6eddf; }
@@ -376,7 +392,7 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
   .sidebar { background: #10281f; }
   .breadcrumbs, .eyebrow, .section-label, .field-label { color: #a5b2a9; }
   .breadcrumb-slash, .meta-separator { color: #718177; }
-  .settings-trigger, .theme-toggle, .settings-popover, .data-action, .search-box, .capture-box, .note-card, .editor-panel, .profile-panel, .tags-input, .toast { background: var(--paper); color: var(--ink); }
+  .settings-trigger, .theme-toggle, .settings-popover, .data-action, .search-box, .capture-box, .note-card, .editor-panel, .profile-panel, .share-panel, .tags-input, .toast { background: var(--paper); color: var(--ink); }
   .settings-trigger, .theme-toggle, .settings-popover, .search-box, .capture-box, .note-card, .tags-input, .toast { border-color: var(--line); }
   .language-picker select, .profile-select { border-color: var(--line); background-color: var(--paper); color: #c4d0c6; background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%226%22 viewBox=%220 0 10 6%22%3E%3Cpath d=%22M1 1l4 4 4-4%22 fill=%22none%22 stroke=%22%23c4d0c6%22 stroke-width=%221.4%22/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; }
   .language-picker select:hover, .profile-select:hover { border-color: #506653; background-color: #2a3b30; }
@@ -407,6 +423,15 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
   .card-body .task-group-label { color: #a5b2a9; }
   .card-body .task-list-completed .task-text { color: #a5b2a9; }
   .card-tag { background: #ffffff18; color: #c4d0c6; }
+  .card-owner { background: #2f4632; color: #b9d99e; }
+  .card-owner.is-read-only { background: #2c3a30; color: #a5b2a9; }
+  .share-item { border-color: var(--line); background: #22322a; }
+  .share-badge { background: #2c3a30; color: #a5b2a9; }
+  .share-badge.is-write { background: #2f4632; color: #b9d99e; }
+  .share-revoke { border-color: #5a4038; background: #2a2320; color: #dda898; }
+  .share-revoke:hover { background: #3a2c27; }
+  .share-empty { color: #8b978e; }
+  .editor-panel.is-read-only .editor-body { background: #22322a; }
   .card-pin:hover, .card-share:hover { background: #ffffff20; }
   .note-drag-preview { background: var(--paper); color: var(--ink); }
   .note-drag-preview span { color: #b3c0b6; }

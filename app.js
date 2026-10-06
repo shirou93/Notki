@@ -4,8 +4,8 @@
   const COLORS = ['default', 'mint', 'lemon', 'peach', 'lilac', 'sky'];
   const t = (key, params) => window.i18n.t(key, params);
   const pluralText = (key, count) => window.i18n.plural(key, count);
-  const VIEW_KEYS = { all: 'view.all', pinned: 'view.pinned', archive: 'view.archive', trash: 'view.trash' };
-  const NAV_KEYS = { all: 'nav.all', pinned: 'nav.pinned', archive: 'nav.archive', trash: 'nav.trash' };
+  const VIEW_KEYS = { all: 'view.all', pinned: 'view.pinned', archive: 'view.archive', trash: 'view.trash', shared: 'view.shared' };
+  const NAV_KEYS = { all: 'nav.all', pinned: 'nav.pinned', archive: 'nav.archive', trash: 'nav.trash', shared: 'nav.shared' };
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const elements = {
@@ -22,9 +22,14 @@
     avatar: $('#avatar'), profilePanel: $('#profile-panel'), profileBackdrop: $('#profile-backdrop'), profileAccount: $('#profile-account'),
     profileMessage: $('#profile-message'), passwordForm: $('#password-form'),
     avatarPreview: $('#profile-avatar-preview'), avatarInput: $('#avatar-input'), avatarMessage: $('#avatar-message'),
+    sharedCount: $('#count-shared'), sharePanel: $('#share-panel'), shareBackdrop: $('#share-backdrop'),
+    shareForm: $('#share-form'), shareEmail: $('#share-email'), sharePermission: $('#share-permission'),
+    shareMessage: $('#share-message'), shareList: $('#share-list'), shareEmpty: $('#share-empty'),
+    shareNoteName: $('#share-note-name'), shareDirectory: $('#share-directory'),
   };
 
   let notes = [];
+  let sharedNotes = [];
   const legacyNotes = loadNotes();
   const inviteToken = new URLSearchParams(window.location.search).get('invite');
   let currentUser = null;
@@ -43,6 +48,8 @@
   let dragPoint = null;
   let skipCardAnimation = false;
   let editorRange = null;
+  let shareNoteId = null;
+  let shareReturnFocus = null;
 
   // Aborting every card tween leaves the grid at its settled geometry, so measurements stay stable.
   function settleCards() {
@@ -160,8 +167,9 @@
 
   async function showApp(user) {
     currentUser = user;
-    const response = await apiRequest('/api/notes');
+    const [response, shared] = await Promise.all([apiRequest('/api/notes'), apiRequest('/api/shared')]);
     notes = response.notes;
+    sharedNotes = shared.notes;
     const migratedKey = `${MIGRATION_KEY}.${user.id}`;
     if (!notes.length && legacyNotes.length && !localStorage.getItem(migratedKey)) {
       if (window.confirm(t('auth.migrateConfirm', { count: legacyNotes.length, email: user.email }))) {
@@ -289,6 +297,121 @@
     elements.profilePanel.hidden = true;
     elements.profileBackdrop.hidden = true;
     document.body.style.overflow = '';
+  }
+
+  function showShareMessage(message, isError) {
+    elements.shareMessage.textContent = message;
+    elements.shareMessage.hidden = !message;
+    elements.shareMessage.classList.toggle('is-error', Boolean(isError));
+  }
+
+  function renderShareList(shares) {
+    elements.shareList.replaceChildren(...shares.map(share => {
+      const item = document.createElement('li');
+      item.className = 'share-item';
+      const avatar = document.createElement('span');
+      avatar.className = 'share-avatar';
+      avatar.textContent = (share.email || '?').slice(0, 1).toUpperCase();
+      if (share.avatar) {
+        avatar.style.backgroundImage = `url("${share.avatar}")`;
+        avatar.classList.add('has-image');
+      }
+      const label = document.createElement('span');
+      label.className = 'share-email';
+      label.textContent = share.email;
+      const badge = document.createElement('span');
+      badge.className = `share-badge${share.permission === 'write' ? ' is-write' : ''}`;
+      badge.textContent = t(share.permission === 'write' ? 'share.writeBadge' : 'share.readOnlyBadge');
+      const revoke = document.createElement('button');
+      revoke.className = 'share-revoke';
+      revoke.type = 'button';
+      revoke.textContent = t('share.revoke');
+      revoke.addEventListener('click', () => revokeShare(share.userId));
+      item.append(avatar, label, badge, revoke);
+      return item;
+    }));
+    elements.shareEmpty.hidden = shares.length !== 0;
+  }
+
+  async function loadShares() {
+    try {
+      const { shares } = await apiRequest(`/api/notes/${encodeURIComponent(shareNoteId)}/shares`);
+      renderShareList(shares);
+    } catch (error) {
+      showShareMessage(t('share.loadFailed'), true);
+    }
+  }
+
+  async function loadDirectory() {
+    try {
+      const { users } = await apiRequest('/api/users');
+      elements.shareDirectory.replaceChildren(...users.map(user => {
+        const option = document.createElement('option');
+        option.value = user.email;
+        return option;
+      }));
+    } catch {
+      // The directory is only a convenience; typing an address still works.
+    }
+  }
+
+  async function openShare(noteId) {
+    const note = notes.find(item => item.id === noteId);
+    if (!note) return;
+    shareNoteId = noteId;
+    shareReturnFocus = document.activeElement;
+    elements.shareNoteName.textContent = note.title || t('editor.untitled');
+    elements.shareEmail.value = '';
+    elements.sharePermission.value = 'read';
+    showShareMessage('');
+    renderShareList([]);
+    elements.sharePanel.hidden = false;
+    elements.sharePanel.classList.add('is-open');
+    elements.sharePanel.setAttribute('aria-hidden', 'false');
+    elements.shareBackdrop.hidden = false;
+    document.body.style.overflow = 'hidden';
+    window.setTimeout(() => elements.shareEmail.focus(), 180);
+    await Promise.all([loadShares(), loadDirectory()]);
+  }
+
+  function closeShare() {
+    shareNoteId = null;
+    elements.sharePanel.classList.remove('is-open');
+    elements.sharePanel.setAttribute('aria-hidden', 'true');
+    elements.sharePanel.hidden = true;
+    elements.shareBackdrop.hidden = true;
+    document.body.style.overflow = '';
+    if (shareReturnFocus && typeof shareReturnFocus.focus === 'function') shareReturnFocus.focus();
+    shareReturnFocus = null;
+  }
+
+  async function submitShare(event) {
+    event.preventDefault();
+    if (!shareNoteId) return;
+    const email = elements.shareEmail.value.trim();
+    if (!email) return;
+    try {
+      const { shares } = await apiRequest(`/api/notes/${encodeURIComponent(shareNoteId)}/shares`, {
+        method: 'POST',
+        body: JSON.stringify({ email, permission: elements.sharePermission.value }),
+      });
+      renderShareList(shares);
+      elements.shareEmail.value = '';
+      showShareMessage(t('share.granted'));
+    } catch (error) {
+      showShareMessage(t('share.failed', { message: error.message }), true);
+    }
+  }
+
+  async function revokeShare(userId) {
+    if (!shareNoteId) return;
+    try {
+      const { shares } = await apiRequest(`/api/notes/${encodeURIComponent(shareNoteId)}/shares/${userId}`, { method: 'DELETE' });
+      renderShareList(shares);
+      showShareMessage(t('share.revoked'));
+    } catch (error) {
+      showShareMessage(t('share.revokeFailed', { message: error.message }), true);
+    }
   }
 
   $('#profile-button').addEventListener('click', () => {
@@ -865,6 +988,14 @@
   }
 
   function filteredNotes() {
+    if (view === 'shared') {
+      const matches = sharedNotes.filter(note => {
+        if (!query) return true;
+        const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')} ${note.ownerEmail || ''}`.toLocaleLowerCase();
+        return searchable.includes(query.toLocaleLowerCase());
+      });
+      return matches.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+    }
     return notes.filter(note => {
       if (view === 'all' && !isActive(note)) return false;
       if (view === 'pinned' && (!isActive(note) || !note.pinned)) return false;
@@ -891,6 +1022,7 @@
     elements.pinnedCount.textContent = String(pinned);
     elements.archiveCount.textContent = String(notes.filter(note => note.archived && !note.deleted).length);
     elements.trashCount.textContent = String(notes.filter(note => note.deleted).length);
+    elements.sharedCount.textContent = String(sharedNotes.length);
     elements.nav.forEach(button => button.classList.toggle('is-active', button.dataset.view === view));
     elements.breadcrumb.textContent = t(NAV_KEYS[view]);
     elements.title.replaceChildren(
@@ -910,11 +1042,11 @@
     elements.empty.hidden = visible.length !== 0;
     elements.countLabel.textContent = query
       ? t('count.searchResults', { count: visible.length })
-      : `${visible.length} ${pluralText('count.notesLabel', visible.length)}`;
+      : `${visible.length} ${pluralText(view === 'shared' ? 'count.sharedLabel' : 'count.notesLabel', visible.length)}`;
     elements.footerCount.textContent = `${visible.length} ${pluralText('footer.count', visible.length)}`;
     updateEmptyState();
     if (activeId) {
-      const current = notes.find(note => note.id === activeId);
+      const current = notes.find(note => note.id === activeId) || sharedNotes.find(note => note.id === activeId);
       if (current) updateEditorActions(current);
     }
   }
@@ -924,6 +1056,10 @@
     card.dataset.id = note.id;
     card.classList.add(`color-${COLORS.includes(note.color) ? note.color : 'default'}`);
     if (skipCardAnimation) card.style.animation = 'none';
+    const shared = Boolean(note.ownerEmail);
+    const readOnly = shared && note.permission !== 'write';
+    if (shared) card.classList.add('is-shared');
+    if (readOnly) card.classList.add('is-read-only');
     $('.card-date', card).textContent = window.i18n.formatDate(note.updatedAt);
     $('.card-title', card).textContent = note.title || t('editor.untitled');
     const cardBody = $('.card-body', card);
@@ -964,10 +1100,23 @@
         nextHandle?.focus();
       }
     });
-    $('.card-share', card).addEventListener('click', event => {
-      event.stopPropagation();
-      shareNote(note);
-    });
+    const shareButton = $('.card-share', card);
+    if (shared) {
+      // A recipient cannot re-share or reorder someone else's note.
+      dragHandle.hidden = true;
+      pin.hidden = true;
+      shareButton.hidden = true;
+      const badge = document.createElement('span');
+      badge.className = `card-owner${readOnly ? ' is-read-only' : ''}`;
+      badge.textContent = readOnly ? t('share.readOnlyBadge') : t('share.writeBadge');
+      badge.title = t('share.ownerLabel', { email: note.ownerEmail });
+      $('.card-tags', card).append(badge);
+    } else {
+      shareButton.addEventListener('click', event => {
+        event.stopPropagation();
+        openShare(note.id);
+      });
+    }
     const tags = $('.card-tags', card);
     (note.tags || []).slice(0, 3).forEach(tag => {
       const label = document.createElement('span');
@@ -994,7 +1143,7 @@
 
   function openEditor(id = null) {
     if (!currentUser) return;
-    const existing = notes.find(note => note.id === id);
+    const existing = notes.find(note => note.id === id) || sharedNotes.find(note => note.id === id);
     if (!existing && view === 'trash') return;
     const note = existing || createNote();
     activeIsNew = !existing;
@@ -1051,8 +1200,15 @@
   }
 
   function saveEditor() {
-    const note = notes.find(item => item.id === activeId);
+    const note = notes.find(item => item.id === activeId) || sharedNotes.find(item => item.id === activeId);
     if (!note) return;
+    const shared = Boolean(note.ownerEmail);
+    if (shared && note.permission !== 'write') {
+      elements.saveState.classList.remove('is-saving');
+      elements.saveState.innerHTML = `<span class="save-dot"></span><span>${t('share.readOnlyBadge')}</span>`;
+      showToast(t('share.readOnlySaveFailed'));
+      return;
+    }
     normalizeChecklistGroups();
     note.title = elements.noteTitle.value.trim();
     note.body = serializedEditorBody();
@@ -1060,13 +1216,25 @@
     note.tags = [...new Set(elements.tags.value.split(',').map(tag => tag.trim().toLocaleLowerCase()).filter(Boolean))];
     note.color = activeColor;
     note.updatedAt = new Date().toISOString();
-    moveToFront(note);
-    persist();
+    if (shared) {
+      persistShared(note);
+    } else {
+      moveToFront(note);
+      persist();
+    }
     elements.saveState.classList.remove('is-saving');
     elements.saveState.innerHTML = `<span class="save-dot"></span><span>${t('editor.saved')}</span>`;
     elements.date.textContent = t('editor.created', { date: window.i18n.formatFullDate(note.createdAt) });
     updateWordCount();
     render();
+  }
+
+  function persistShared(note) {
+    const payload = JSON.stringify({
+      title: note.title, body: note.body, bodyFormat: note.bodyFormat, color: note.color, tags: note.tags,
+    });
+    saveQueue = saveQueue.catch(() => {}).then(() => apiRequest(`/api/shared/${encodeURIComponent(note.id)}`, { method: 'PUT', body: payload }));
+    saveQueue.catch(error => showToast(t('editor.saveFailed', { message: error.message })));
   }
 
   function scheduleSave() {
@@ -1085,6 +1253,8 @@
   }
 
   function updateEditorActions(note) {
+    const shared = Boolean(note.ownerEmail);
+    const readOnly = shared && note.permission !== 'write';
     elements.pin.classList.toggle('is-pinned', note.pinned);
     elements.pin.textContent = note.pinned ? '⌖' : '⌖';
     elements.pin.setAttribute('aria-label', t(note.pinned ? 'editor.unpin' : 'editor.pin'));
@@ -1094,8 +1264,20 @@
     elements.archive.title = t(note.deleted || note.archived ? 'editor.unarchiveTitle' : 'editor.archiveTitle');
     elements.delete.setAttribute('aria-label', t(note.deleted ? 'editor.deleteForever' : 'editor.delete'));
     elements.delete.title = t(note.deleted ? 'editor.deleteForever' : 'editor.delete');
-    elements.pin.hidden = note.deleted;
-    $('#share-note').hidden = note.deleted;
+    // A recipient never gets the owner's pin, archive, delete or re-share controls.
+    elements.pin.hidden = note.deleted || shared;
+    elements.archive.hidden = shared;
+    elements.delete.hidden = shared;
+    $('#share-note').hidden = note.deleted || shared;
+    elements.noteTitle.readOnly = readOnly;
+    elements.tags.readOnly = readOnly;
+    elements.noteBody.contentEditable = readOnly ? 'false' : 'true';
+    elements.panel.classList.toggle('is-read-only', readOnly);
+    $('#format-toolbar').hidden = readOnly;
+    $('#editor-share-notice').hidden = !shared;
+    $('#editor-share-notice').textContent = readOnly
+      ? t('share.readOnlyNotice')
+      : t('share.ownerLabel', { email: note.ownerEmail });
   }
 
   function setColor(color) {
@@ -1310,9 +1492,11 @@
   });
   $('#share-note').addEventListener('click', () => {
     saveEditor();
-    const note = notes.find(item => item.id === activeId);
-    if (note) shareNote(note);
+    if (activeId) openShare(activeId);
   });
+  $('#close-share').addEventListener('click', closeShare);
+  elements.shareBackdrop.addEventListener('click', closeShare);
+  elements.shareForm.addEventListener('submit', submitShare);
   $('#dismiss-shared').addEventListener('click', () => {
     pendingSharedNote = null;
     elements.sharedBanner.hidden = true;
@@ -1336,6 +1520,10 @@
     if (menu.open && !menu.contains(event.target) && !elements.noteBody.contains(event.target) && !event.target.closest('.editor-panel')) menu.open = false;
   });
   document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !elements.sharePanel.hidden && elements.sharePanel.classList.contains('is-open')) {
+      closeShare();
+      return;
+    }
     if (event.key === 'Escape' && !elements.profilePanel.hidden && elements.profilePanel.classList.contains('is-open')) {
       closeProfile();
       return;

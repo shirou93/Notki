@@ -95,6 +95,13 @@ ENGLISH_MESSAGES = {
     'Nieprawidłowa notatka.': 'Invalid note.',
     'Dane notatki są nieprawidłowe lub zbyt duże.': 'The note data is invalid or too large.',
     'Nieprawidłowa kolejność notatek.': 'Invalid note order.',
+    'Nie znaleziono notatki.': 'Note not found.',
+    'Nie możesz udostępnić notatki samemu sobie.': 'You cannot share a note with yourself.',
+    'Nie znaleziono użytkownika o tym adresie e-mail.': 'No user with that e-mail address was found.',
+    'Nieprawidłowy poziom uprawnień.': 'Invalid permission level.',
+    'Ta notatka nie jest już udostępniona temu użytkownikowi.': 'This note is no longer shared with that user.',
+    'Nie masz uprawnień do edycji tej notatki.': 'You do not have permission to edit this note.',
+    'Nie możesz zmieniać uprawnień notatki, której nie jesteś właścicielem.': 'You cannot change permissions of a note you do not own.',
 }
 
 
@@ -200,6 +207,14 @@ def initialize_database():
                 sort_order REAL NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS notes_user_idx ON notes(user_id);
+            CREATE TABLE IF NOT EXISTS note_shares (
+                note_id TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                permission TEXT NOT NULL DEFAULT 'read' CHECK (permission IN ('read', 'write')),
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (note_id, user_id)
+            );
+            CREATE INDEX IF NOT EXISTS note_shares_user_idx ON note_shares(user_id);
         ''')
         columns = {row['name'] for row in connection.execute('PRAGMA table_info(users)')}
         if 'avatar' not in columns:
@@ -399,6 +414,16 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 with database() as connection:
                     rows = connection.execute('SELECT * FROM notes WHERE user_id = ? ORDER BY sort_order DESC', (user['id'],)).fetchall()
                 self.send_json({'notes': [self.note_from_row(row) for row in rows]})
+            elif path == '/api/shared':
+                user = self.require_user()
+                self.send_json({'notes': self.shared_notes(user['id'])})
+            elif path == '/api/users':
+                user = self.require_user()
+                self.send_json({'users': self.directory(user['id'])})
+            elif path.startswith('/api/notes/') and path.endswith('/shares'):
+                user = self.require_user()
+                note_id = path[len('/api/notes/'):-len('/shares')]
+                self.send_json({'shares': self.list_shares(user, note_id)})
             elif path == '/api/admin/summary':
                 self.require_user(admin=True)
                 with database() as connection:
@@ -475,6 +500,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 self.change_password(payload)
             elif path == '/api/account/avatar':
                 self.change_avatar(payload)
+            elif path.startswith('/api/notes/') and path.endswith('/shares'):
+                user = self.require_user()
+                note_id = path[len('/api/notes/'):-len('/shares')]
+                self.create_share(user, note_id, payload)
             elif path == '/api/admin/invites':
                 self.create_invite()
             elif path == '/api/admin/backups':
@@ -496,6 +525,11 @@ class NotkiHandler(BaseHTTPRequestHandler):
         try:
             self.check_origin()
             path = unquote(urlsplit(self.path).path)
+            share_match = re.fullmatch(r'/api/notes/([^/]+)/shares/(\d+)', path)
+            if share_match:
+                user = self.require_user()
+                self.delete_share(user, share_match.group(1), int(share_match.group(2)))
+                return
             match = re.fullmatch(r'/api/admin/backups/([^/]+)', path)
             if not match:
                 self.send_error_json('Nie znaleziono endpointu.', 404)
@@ -537,6 +571,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             users = connection.execute('SELECT id, email, password_hash, role, created_at, avatar FROM users ORDER BY id').fetchall()
             notes = connection.execute('SELECT * FROM notes ORDER BY user_id, sort_order DESC').fetchall()
             invites = connection.execute('SELECT * FROM invites ORDER BY created_at').fetchall()
+            shares = connection.execute('SELECT * FROM note_shares ORDER BY note_id, user_id').fetchall()
         snapshot = {
             'format': 'notki-server-snapshot',
             'version': 1,
@@ -557,6 +592,11 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 {'tokenHash': row['token_hash'], 'createdBy': row['created_by'], 'createdAt': row['created_at'],
                  'expiresAt': row['expires_at'], 'usedAt': row['used_at']}
                 for row in invites
+            ],
+            'shares': [
+                {'noteId': row['note_id'], 'userId': row['user_id'], 'permission': row['permission'],
+                 'createdAt': row['created_at']}
+                for row in shares
             ],
         }
         return snapshot
@@ -764,6 +804,22 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 self.snapshot_date(invite.get('expiresAt')), self.snapshot_date(invite['usedAt']) if invite.get('usedAt') else None,
             ))
 
+        prepared_shares = []
+        share_keys = set()
+        for share in snapshot.get('shares') or []:
+            if not isinstance(share, dict):
+                raise APIError('Nieprawidłowe udostępnienie w snapshocie.')
+            note_id = str(share.get('noteId') or '')
+            user_id = share.get('userId')
+            permission = share.get('permission')
+            if (note_id not in note_ids or isinstance(user_id, bool) or not isinstance(user_id, int)
+                    or user_id not in user_ids or permission not in ('read', 'write')):
+                raise APIError('Nieprawidłowe udostępnienie w snapshocie.')
+            if (note_id, user_id) in share_keys:
+                raise APIError('Nieprawidłowe udostępnienie w snapshocie.')
+            share_keys.add((note_id, user_id))
+            prepared_shares.append((note_id, user_id, permission, self.snapshot_date(share.get('createdAt'))))
+
         with database() as connection:
             connection.execute('BEGIN IMMEDIATE')
             has_existing_data = any(
@@ -774,6 +830,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 raise APIError('Import jest możliwy tylko do całkowicie pustej bazy danych.', 409)
             if replace_existing:
                 connection.execute('DELETE FROM sessions')
+                connection.execute('DELETE FROM note_shares')
                 connection.execute('DELETE FROM notes')
                 connection.execute('DELETE FROM invites')
                 connection.execute('DELETE FROM users')
@@ -789,10 +846,15 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 'INSERT INTO invites (token_hash, created_by, created_at, expires_at, used_at) VALUES (?, ?, ?, ?, ?)',
                 prepared_invites,
             )
+            connection.executemany(
+                'INSERT INTO note_shares (note_id, user_id, permission, created_at) VALUES (?, ?, ?, ?)',
+                prepared_shares,
+            )
         result = {
             'users': len(prepared_users),
             'notes': len(prepared_notes),
             'invites': len(prepared_invites),
+            'shares': len(prepared_shares),
         }
         result['restored' if replace_existing else 'imported'] = True
         self.send_json(result, 200 if replace_existing else 201)
@@ -822,7 +884,13 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def do_PUT(self):
         try:
             self.check_origin()
-            if urlsplit(self.path).path != '/api/notes':
+            path = urlsplit(self.path).path
+            shared_match = re.fullmatch(r'/api/shared/([^/]+)', path)
+            if shared_match:
+                user = self.require_user()
+                self.update_shared_note(user, unquote(shared_match.group(1)), self.read_json())
+                return
+            if path != '/api/notes':
                 self.send_error_json('Nie znaleziono endpointu.', 404)
                 return
             user = self.require_user()
@@ -985,6 +1053,117 @@ class NotkiHandler(BaseHTTPRequestHandler):
             'archived': bool(row['archived']), 'deleted': bool(row['deleted']), 'createdAt': row['created_at'],
             'updatedAt': row['updated_at'], 'order': row['sort_order'],
         }
+
+    def owned_note(self, connection, user_id, note_id):
+        """Return the note only when the given user owns it."""
+        row = connection.execute('SELECT * FROM notes WHERE id = ? AND user_id = ?', (note_id, user_id)).fetchone()
+        if not row:
+            raise APIError('Nie znaleziono notatki.', 404)
+        return row
+
+    def directory(self, user_id):
+        """Other accounts a note can be shared with, without exposing anything beyond the address."""
+        with database() as connection:
+            rows = connection.execute(
+                'SELECT id, email, avatar FROM users WHERE id != ? ORDER BY email COLLATE NOCASE', (user_id,)
+            ).fetchall()
+        return [{'id': row['id'], 'email': row['email'], 'avatar': row['avatar']} for row in rows]
+
+    def list_shares(self, user, note_id):
+        with database() as connection:
+            self.owned_note(connection, user['id'], note_id)
+            rows = connection.execute('''
+                SELECT note_shares.user_id, note_shares.permission, note_shares.created_at, users.email, users.avatar
+                FROM note_shares JOIN users ON users.id = note_shares.user_id
+                WHERE note_shares.note_id = ? ORDER BY users.email COLLATE NOCASE
+            ''', (note_id,)).fetchall()
+        return [
+            {'userId': row['user_id'], 'email': row['email'], 'avatar': row['avatar'],
+             'permission': row['permission'], 'createdAt': row['created_at']}
+            for row in rows
+        ]
+
+    def create_share(self, user, note_id, payload):
+        permission = str(payload.get('permission') or 'read')
+        if permission not in ('read', 'write'):
+            raise APIError('Nieprawidłowy poziom uprawnień.')
+        email = normalize_email(payload.get('email'))
+        with database() as connection:
+            self.owned_note(connection, user['id'], note_id)
+            target = connection.execute('SELECT id FROM users WHERE email = ?', (email,)).fetchone()
+            if not target:
+                raise APIError('Nie znaleziono użytkownika o tym adresie e-mail.', 404)
+            if target['id'] == user['id']:
+                raise APIError('Nie możesz udostępnić notatki samemu sobie.')
+            connection.execute('''
+                INSERT INTO note_shares (note_id, user_id, permission, created_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT(note_id, user_id) DO UPDATE SET permission = excluded.permission
+            ''', (note_id, target['id'], permission, iso_time()))
+        self.send_json({'shares': self.list_shares(user, note_id)}, 201)
+
+    def delete_share(self, user, note_id, target_id):
+        with database() as connection:
+            self.owned_note(connection, user['id'], note_id)
+            cursor = connection.execute('DELETE FROM note_shares WHERE note_id = ? AND user_id = ?', (note_id, target_id))
+            if not cursor.rowcount:
+                raise APIError('Ta notatka nie jest już udostępniona temu użytkownikowi.', 404)
+        self.send_json({'shares': self.list_shares(user, note_id)})
+
+    def shared_notes(self, user_id):
+        """Notes other people shared with this user, tagged with the owner and the granted permission."""
+        with database() as connection:
+            rows = connection.execute('''
+                SELECT notes.*, note_shares.permission, users.email AS owner_email, users.avatar AS owner_avatar
+                FROM note_shares
+                JOIN notes ON notes.id = note_shares.note_id
+                JOIN users ON users.id = notes.user_id
+                WHERE note_shares.user_id = ? AND notes.deleted = 0
+                ORDER BY notes.updated_at DESC
+            ''', (user_id,)).fetchall()
+        shared = []
+        for row in rows:
+            note = self.note_from_row(row)
+            note['ownerEmail'] = row['owner_email']
+            note['ownerAvatar'] = row['owner_avatar']
+            note['permission'] = row['permission']
+            shared.append(note)
+        return shared
+
+    def writable_note_ids(self, connection, user_id):
+        rows = connection.execute(
+            "SELECT note_id FROM note_shares WHERE user_id = ? AND permission = 'write'", (user_id,)
+        ).fetchall()
+        return {row['note_id'] for row in rows}
+
+    def update_shared_note(self, user, note_id, payload):
+        """Let a recipient with write access update the content of a note shared with them.
+
+        Only the fields a recipient may change are copied; ownership, ordering and the owner's own
+        flags stay untouched.
+        """
+        title = str(payload.get('title') or '')
+        body = str(payload.get('body') or '')
+        if len(title) > 160 or len(body) > 1_000_000:
+            raise APIError('Dane notatki są nieprawidłowe lub zbyt duże.')
+        tags = payload.get('tags') if isinstance(payload.get('tags'), list) else []
+        with database() as connection:
+            row = connection.execute(
+                'SELECT permission FROM note_shares WHERE note_id = ? AND user_id = ?', (note_id, user['id'])
+            ).fetchone()
+            if not row:
+                raise APIError('Nie znaleziono notatki.', 404)
+            if row['permission'] != 'write':
+                raise APIError('Nie masz uprawnień do edycji tej notatki.', 403)
+            connection.execute('''
+                UPDATE notes SET title = ?, body = ?, body_format = ?, color = ?, tags_json = ?, updated_at = ?
+                WHERE id = ?
+            ''', (
+                title, body, 1 if payload.get('bodyFormat') == 1 else 0,
+                payload.get('color') if payload.get('color') in NOTE_COLORS else 'default',
+                json.dumps([str(tag)[:80] for tag in tags[:64]], ensure_ascii=False),
+                iso_time(), note_id,
+            ))
+        self.send_json({'saved': True})
 
     def serve_static(self, filename):
         if filename not in STATIC_FILES:

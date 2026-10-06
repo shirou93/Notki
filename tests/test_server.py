@@ -62,6 +62,122 @@ class ServerFlowTests(unittest.TestCase):
             error.close()
             return status, payload
 
+    def register_user(self, email, password='another-secure-password'):
+        """Create an invited account and return a signed-in client for it."""
+        _, invite = self.request(self.admin, 'POST', '/api/admin/invites', {})
+        token = parse_qs(urlsplit(invite['url']).query)['invite'][0]
+        client = self.new_client()
+        status, _ = self.request(client, 'POST', '/api/register', {'email': email, 'password': password, 'invite': token})
+        self.assertEqual(status, 201)
+        return client
+
+    @staticmethod
+    def note_payload(note_id, title, body='Treść'):
+        return {
+            'id': note_id, 'title': title, 'body': body, 'bodyFormat': 0, 'color': 'default', 'tags': [],
+            'pinned': False, 'archived': False, 'deleted': False,
+            'createdAt': server.iso_time(), 'updatedAt': server.iso_time(), 'order': 1,
+        }
+
+    def test_sharing_grants_read_and_write_access(self):
+        owner = self.register_user('owner@example.com')
+        reader = self.register_user('reader@example.com')
+        writer = self.register_user('writer@example.com')
+
+        self.request(owner, 'PUT', '/api/notes', {'notes': [self.note_payload('shared-1', 'Wspólna')]})
+
+        status, result = self.request(owner, 'POST', '/api/notes/shared-1/shares', {'email': 'reader@example.com', 'permission': 'read'})
+        self.assertEqual(status, 201)
+        self.assertEqual([share['permission'] for share in result['shares']], ['read'])
+
+        status, result = self.request(owner, 'POST', '/api/notes/shared-1/shares', {'email': 'writer@example.com', 'permission': 'write'})
+        self.assertEqual(status, 201)
+        self.assertEqual(len(result['shares']), 2)
+
+        # The recipient sees the note with the owner and the granted permission attached.
+        status, shared = self.request(reader, 'GET', '/api/shared')
+        self.assertEqual(status, 200)
+        self.assertEqual(len(shared['notes']), 1)
+        self.assertEqual(shared['notes'][0]['id'], 'shared-1')
+        self.assertEqual(shared['notes'][0]['ownerEmail'], 'owner@example.com')
+        self.assertEqual(shared['notes'][0]['permission'], 'read')
+
+        # A read-only recipient cannot change the note.
+        status, error = self.request(reader, 'PUT', '/api/shared/shared-1', {'title': 'Podmienione', 'body': 'x'})
+        self.assertEqual(status, 403)
+        self.assertIn('permission', error['error'])
+
+        # A recipient with write access can.
+        status, _ = self.request(writer, 'PUT', '/api/shared/shared-1', {'title': 'Zaktualizowana', 'body': 'Nowa treść', 'bodyFormat': 0, 'color': 'mint', 'tags': ['praca']})
+        self.assertEqual(status, 200)
+        status, notes = self.request(owner, 'GET', '/api/notes')
+        self.assertEqual(notes['notes'][0]['title'], 'Zaktualizowana')
+        self.assertEqual(notes['notes'][0]['body'], 'Nowa treść')
+        self.assertEqual(notes['notes'][0]['color'], 'mint')
+
+        # The recipient's own note list stays untouched by the shared write.
+        status, own = self.request(writer, 'GET', '/api/notes')
+        self.assertEqual(own['notes'], [])
+
+        # Revoking removes the note from the recipient's shared list.
+        status, shares = self.request(owner, 'GET', '/api/notes/shared-1/shares')
+        reader_id = next(share['userId'] for share in shares['shares'] if share['email'] == 'reader@example.com')
+        status, result = self.request(owner, 'DELETE', f'/api/notes/shared-1/shares/{reader_id}', {})
+        self.assertEqual(status, 200)
+        self.assertEqual(len(result['shares']), 1)
+        status, shared = self.request(reader, 'GET', '/api/shared')
+        self.assertEqual(shared['notes'], [])
+
+    def test_sharing_rejects_invalid_targets_and_foreign_notes(self):
+        owner = self.register_user('owner2@example.com')
+        other = self.register_user('other2@example.com')
+        self.request(owner, 'PUT', '/api/notes', {'notes': [self.note_payload('mine-1', 'Moja')]})
+
+        status, error = self.request(owner, 'POST', '/api/notes/mine-1/shares', {'email': 'owner2@example.com', 'permission': 'read'})
+        self.assertEqual(status, 400)
+        self.assertIn('yourself', error['error'])
+
+        status, error = self.request(owner, 'POST', '/api/notes/mine-1/shares', {'email': 'nobody@example.com', 'permission': 'read'})
+        self.assertEqual(status, 404)
+
+        status, error = self.request(owner, 'POST', '/api/notes/mine-1/shares', {'email': 'other2@example.com', 'permission': 'admin'})
+        self.assertEqual(status, 400)
+        self.assertIn('permission', error['error'])
+
+        # A non-owner cannot list, grant or revoke shares on someone else's note.
+        status, _ = self.request(other, 'GET', '/api/notes/mine-1/shares')
+        self.assertEqual(status, 404)
+        status, _ = self.request(other, 'POST', '/api/notes/mine-1/shares', {'email': 'owner2@example.com', 'permission': 'read'})
+        self.assertEqual(status, 404)
+        status, _ = self.request(other, 'DELETE', '/api/notes/mine-1/shares/1', {})
+        self.assertEqual(status, 404)
+
+        # A note that was never shared is invisible to the other account.
+        status, shared = self.request(other, 'GET', '/api/shared')
+        self.assertEqual(shared['notes'], [])
+        status, error = self.request(other, 'PUT', '/api/shared/mine-1', {'title': 'x', 'body': 'y'})
+        self.assertEqual(status, 404)
+
+    def test_shares_survive_server_backup_restore(self):
+        owner = self.register_user('owner3@example.com')
+        reader = self.register_user('reader3@example.com')
+        self.request(owner, 'PUT', '/api/notes', {'notes': [self.note_payload('backup-1', 'Kopia')]})
+        self.request(owner, 'POST', '/api/notes/backup-1/shares', {'email': 'reader3@example.com', 'permission': 'write'})
+
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
+        self.assertEqual(status, 201)
+
+        status, result = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(result['shares'], 1)
+
+        # Restoring replaces every account, so the recipient has to sign in again.
+        status, _ = self.request(reader, 'POST', '/api/login', {'email': 'reader3@example.com', 'password': 'another-secure-password'})
+        self.assertEqual(status, 200)
+        status, shared = self.request(reader, 'GET', '/api/shared')
+        self.assertEqual(len(shared['notes']), 1)
+        self.assertEqual(shared['notes'][0]['permission'], 'write')
+
     def test_invitation_registration_notes_and_admin_statistics(self):
         status, empty_summary = self.request(self.admin, 'GET', '/api/admin/summary')
         self.assertEqual(status, 200)
@@ -427,7 +543,7 @@ class FirstRunSetupTests(unittest.TestCase):
 
         status, result = self.request('POST', '/api/setup/import', {'snapshot': snapshot})
         self.assertEqual(status, 201)
-        self.assertEqual(result, {'imported': True, 'users': 1, 'notes': 1, 'invites': 1})
+        self.assertEqual(result, {'imported': True, 'users': 1, 'notes': 1, 'invites': 1, 'shares': 0})
 
         status, login = self.request('POST', '/api/login', {
             'email': 'restored-admin@example.com', 'password': 'restored-admin-password',

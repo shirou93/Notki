@@ -13,6 +13,7 @@ Private notes app with per-user SQLite storage, invitation-only registration, an
 - Server-wide `.tgz` backups: create, download, restore, delete
 - Polish and English interface, light and dark theme
 - Profile panel for changing the language, avatar, and password
+- Note sharing between accounts with read-only or edit permission
 
 ## Run locally
 
@@ -45,6 +46,15 @@ On a fresh server you can import a `.tgz` backup on the first-run setup page ins
 ![Profile panel](docs/profile.png)
 
 Clicking the avatar in the top-right corner opens a menu with **Profile**, **Admin panel** (administrators only), and **Sign out**. The profile panel lets you upload a custom avatar, change the interface language, and change the account password. Avatars accept PNG, JPEG, WebP, or GIF images up to 2 MB and are stored with your account, so they are included in server backups. Changing the password requires the current password, must be at least 12 characters long, and signs out every other session while keeping the current one active.
+
+## Sharing notes
+
+The share button on a note card (or in the editor) opens a panel where you enter the e-mail address of another account on the same server and pick a permission:
+
+- **Read only** — the recipient can open the note and read it, but the editor is locked: the title, body, tags, and color are not editable, and the formatting toolbar is hidden.
+- **Can edit** — the recipient can change the note's title, body, tags, and color. The change is written to the owner's note, so the owner sees it immediately.
+
+Recipients find shared notes under **Shared with me** in the sidebar, each card labelled with the owner and the granted permission. Only the owner can pin, archive, delete, reorder, or re-share a note; recipients never get those controls. Sharing is limited to accounts that already exist on the server, and the recipient picker only suggests addresses — you can always type one manually. Revoking access removes the note from the recipient's list immediately. Shares are included in server backups.
 
 ## Languages and themes
 
