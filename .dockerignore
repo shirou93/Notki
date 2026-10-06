@@ -1,0 +1,13 @@
+.git
+.gitattributes
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yml
+data
+__pycache__
+*.py[cod]
+tests
+docs
+README.md
+LICENSE

@@ -8,6 +8,7 @@ Private notes app with per-user SQLite storage, invitation-only registration, an
 
 - Notes with rich text, tags, colors, pinning, archive, and trash
 - Per-user SQLite storage on your own server
+- Docker image based on Alpine with a persistent data volume
 - Invitation-only registration — each link works once and expires after 7 days
 - Admin panel with server statistics, user list, and invitations
 - Server-wide `.tgz` backups: create, download, restore, delete
@@ -112,6 +113,44 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload
 sudo systemctl enable --now notki
 ```
+
+## Run with Docker
+
+The image is built from `alpine` and runs the server with the standard library only — no extra packages are installed beyond `python3`.
+
+```sh
+docker compose up -d --build
+```
+
+Notki is then available at <http://127.0.0.1:8000>. Because the database starts empty, the first visit redirects to `/setup` to create the administrator account.
+
+The database and the backup archives live in the `notki-data` named volume, mounted at `/app/data`:
+
+```
+/app/data/notki.sqlite3
+/app/data/backups/*.tgz
+```
+
+The volume survives `docker compose down` and image rebuilds. To wipe everything and start over, remove it explicitly:
+
+```sh
+docker compose down -v
+```
+
+To publish on a different host port, set `NOTKI_HTTP_PORT`:
+
+```sh
+NOTKI_HTTP_PORT=9000 docker compose up -d
+```
+
+To keep the data in a directory you manage yourself instead of a named volume, replace the volume entry in `docker-compose.yml`:
+
+```yaml
+    volumes:
+      - ./data:/app/data
+```
+
+The container runs as the unprivileged `notki` user and binds `0.0.0.0:8000` inside the container network. When you put it behind a TLS-terminating reverse proxy, set `NOTKI_COOKIE_SECURE=1` and `NOTKI_PUBLIC_HTTPS=1` in the `environment` block so session cookies are marked Secure and invitation links use `https`.
 
 ## Configuration
 

@@ -1,0 +1,22 @@
+services:
+  notki:
+    build: .
+    image: notki:latest
+    container_name: notki
+    restart: unless-stopped
+    ports:
+      - "${NOTKI_HTTP_PORT:-8000}:8000"
+    volumes:
+      # The database and the backup archives both live under /app/data.
+      - notki-data:/app/data
+    environment:
+      NOTKI_HOST: 0.0.0.0
+      NOTKI_PORT: "8000"
+      NOTKI_DB_PATH: /app/data/notki.sqlite3
+      NOTKI_BACKUP_DIR: /app/data/backups
+      # Set both to "1" when Notki is served through an HTTPS reverse proxy.
+      NOTKI_COOKIE_SECURE: "0"
+      NOTKI_PUBLIC_HTTPS: "0"
+
+volumes:
+  notki-data:
