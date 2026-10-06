@@ -370,7 +370,8 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 }
 @media (max-width: 390px) { .main-content { padding-right: 14px; padding-left: 14px; } .notes-grid { grid-template-columns: 1fr; } .page-heading { gap: 5px; } h1 { font-size: 26px; } .capture-shortcut { display: none; } .editor-tools { gap: 0; } .editor-topbar { gap: 7px; } .format-toolbar { gap: 1px; } .format-separator { margin: 0 1px; } }
 @media (hover: none), (pointer: coarse) {
-  .card-drag { width: 44px; height: 44px; opacity: 1; border: 1px solid #d9e2d5; background: #ffffffc9; font-size: 19px; }
+  /* Keep a comfortable touch target but drop the visible box around the handle. */
+  .card-drag { width: 44px; height: 44px; opacity: 1; border: 0; background: transparent; color: #5c6b61; font-size: 19px; }
   .card-pin, .card-share { opacity: .8; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } }
@@ -437,6 +438,7 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
   .share-empty { color: #8b978e; }
   .editor-panel.is-read-only .editor-body { background: #22322a; }
   .card-pin:hover, .card-share:hover { background: #ffffff20; }
+  .card-drag { color: #9fb0a4; }
   .icon-button.is-pinned { color: #a8cc86; }
   .icon-button.is-pinned:hover { color: #c2e09c; }
   .note-drag-preview { background: var(--paper); color: var(--ink); }
