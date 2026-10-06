@@ -54,7 +54,6 @@
         <button class="nav-item" type="button" data-view="archive"><span class="nav-icon" aria-hidden="true">▣</span><span data-i18n="nav.archive">Archive</span><span class="nav-count" id="count-archive">0</span></button>
         <button class="nav-item" type="button" data-view="trash"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></span><span data-i18n="nav.trash">Trash</span><span class="nav-count" id="count-trash">0</span></button>
       </nav>
-      <a class="admin-link" id="admin-link" href="/admin" hidden><span aria-hidden="true">⚙</span> <span data-i18n="nav.adminPanel">Admin panel</span></a>
       <div class="sidebar-bottom">
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
         <span class="sidebar-version">NOTKI · ALPHA 0.1.0</span>
@@ -73,6 +72,7 @@
               <span class="settings-heading" data-i18n="topbar.account">ACCOUNT</span>
               <div class="data-actions">
                 <button class="data-action" id="profile-button" type="button"><span class="action-icon" aria-hidden="true">◍</span><span class="action-label" data-i18n="topbar.profileMenu">Profile</span></button>
+                <a class="data-action" id="admin-link" href="/admin" hidden><span class="action-icon" aria-hidden="true">⚙</span><span class="action-label" data-i18n="nav.adminPanel">Admin panel</span></a>
                 <button class="data-action" id="logout-button" type="button"><span class="action-icon" aria-hidden="true">↪</span><span class="action-label" data-i18n="topbar.logout">Sign out</span></button>
               </div>
             </div>
@@ -119,6 +119,16 @@
     <div class="profile-content">
       <p class="profile-account" id="profile-account"></p>
       <p class="profile-description" data-i18n="topbar.profileDescription">Change the interface language or your account password.</p>
+      <div class="profile-avatar">
+        <span class="profile-avatar-preview" id="profile-avatar-preview" aria-hidden="true">N</span>
+        <div class="profile-avatar-actions">
+          <button class="button-secondary" id="avatar-upload" type="button" data-i18n="topbar.uploadAvatar">Upload avatar</button>
+          <button class="button-secondary" id="avatar-remove" type="button" data-i18n="topbar.removeAvatar">Remove avatar</button>
+        </div>
+      </div>
+      <input id="avatar-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+      <small class="setup-hint" data-i18n="topbar.avatarHint">PNG, JPEG, WebP or GIF, up to 2 MB.</small>
+      <p class="auth-message" id="avatar-message" role="alert" hidden></p>
       <label class="field-label" for="profile-language" data-i18n="topbar.language">LANGUAGE</label>
       <select class="auth-input profile-select" id="profile-language" data-language-select aria-label="Change language" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option></select>
       <form class="profile-form" id="password-form">

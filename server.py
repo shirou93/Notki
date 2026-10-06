@@ -30,6 +30,8 @@ MAX_REQUEST_BYTES = 3 * 1024 * 1024
 MAX_SNAPSHOT_BYTES = 100 * 1024 * 1024
 BACKUP_FILENAME_PATTERN = re.compile(r'^notki-server-\d{8}-\d{6}Z-[a-f0-9]{8}\.tgz$')
 NOTE_COLORS = {'default', 'mint', 'lemon', 'peach', 'lilac', 'sky'}
+AVATAR_PATTERN = re.compile(r'^data:image/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$')
+MAX_AVATAR_CHARS = 2_900_000
 STATIC_FILES = {'index.html', 'admin.html', 'admin.js', 'app.js', 'i18n.js', 'theme.js', 'setup.html', 'setup.js', 'styles.css'}
 DEFAULT_LANGUAGE = 'en'
 SUPPORTED_LANGUAGES = ('pl', 'en')
@@ -75,6 +77,9 @@ ENGLISH_MESSAGES = {
     'Nieprawidłowy identyfikator konta w snapshocie.': 'Invalid account identifier in the snapshot.',
     'Nieprawidłowy adres lub rola konta w snapshocie.': 'Invalid account address or role in the snapshot.',
     'Snapshot zawiera nieprawidłowy hash hasła.': 'The snapshot contains an invalid password hash.',
+    'Snapshot zawiera nieprawidłowy avatar.': 'The snapshot contains an invalid avatar.',
+    'Avatar jest zbyt duży.': 'The avatar is too large.',
+    'Avatar musi być obrazem PNG, JPEG, WebP lub GIF.': 'The avatar must be a PNG, JPEG, WebP, or GIF image.',
     'Snapshot musi zawierać konto administratora.': 'The snapshot must contain an administrator account.',
     'Nieprawidłowa notatka w snapshocie.': 'Invalid note in the snapshot.',
     'Nieprawidłowa notatka lub właściciel w snapshocie.': 'Invalid note or owner in the snapshot.',
@@ -163,7 +168,8 @@ def initialize_database():
                 email TEXT NOT NULL UNIQUE COLLATE NOCASE,
                 password_hash TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                avatar TEXT
             );
             CREATE TABLE IF NOT EXISTS sessions (
                 token_hash TEXT PRIMARY KEY,
@@ -195,6 +201,9 @@ def initialize_database():
             );
             CREATE INDEX IF NOT EXISTS notes_user_idx ON notes(user_id);
         ''')
+        columns = {row['name'] for row in connection.execute('PRAGMA table_info(users)')}
+        if 'avatar' not in columns:
+            connection.execute('ALTER TABLE users ADD COLUMN avatar TEXT')
 
 
 def hash_password(password):
@@ -225,7 +234,11 @@ def normalize_email(value):
 
 
 def public_user(row):
-    return {'id': row['id'], 'email': row['email'], 'isAdmin': row['role'] == 'admin', 'createdAt': row['created_at']}
+    keys = row.keys()
+    return {
+        'id': row['id'], 'email': row['email'], 'isAdmin': row['role'] == 'admin',
+        'createdAt': row['created_at'], 'avatar': row['avatar'] if 'avatar' in keys else None,
+    }
 
 
 def create_admin_account():
@@ -339,7 +352,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             return None
         with database() as connection:
             row = connection.execute('''
-                SELECT users.id, users.email, users.role, users.created_at
+                SELECT users.id, users.email, users.role, users.created_at, users.avatar
                 FROM sessions JOIN users ON users.id = sessions.user_id
                 WHERE sessions.token_hash = ? AND sessions.expires_at > ?
             ''', (token_hash(token), iso_time())).fetchone()
@@ -460,6 +473,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 self.logout()
             elif path == '/api/account/password':
                 self.change_password(payload)
+            elif path == '/api/account/avatar':
+                self.change_avatar(payload)
             elif path == '/api/admin/invites':
                 self.create_invite()
             elif path == '/api/admin/backups':
@@ -513,13 +528,13 @@ class NotkiHandler(BaseHTTPRequestHandler):
             user_id = cursor.lastrowid
         token = self.new_session(user_id)
         with database() as connection:
-            user = connection.execute('SELECT id, email, role, created_at FROM users WHERE id = ?', (user_id,)).fetchone()
+            user = connection.execute('SELECT id, email, role, created_at, avatar FROM users WHERE id = ?', (user_id,)).fetchone()
         self.send_json({'user': public_user(user)}, 201, self.session_headers(token))
 
     def build_snapshot(self):
         with database() as connection:
             connection.execute('BEGIN')
-            users = connection.execute('SELECT id, email, password_hash, role, created_at FROM users ORDER BY id').fetchall()
+            users = connection.execute('SELECT id, email, password_hash, role, created_at, avatar FROM users ORDER BY id').fetchall()
             notes = connection.execute('SELECT * FROM notes ORDER BY user_id, sort_order DESC').fetchall()
             invites = connection.execute('SELECT * FROM invites ORDER BY created_at').fetchall()
         snapshot = {
@@ -527,7 +542,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             'version': 1,
             'createdAt': iso_time(),
             'users': [
-                {'id': row['id'], 'email': row['email'], 'passwordHash': row['password_hash'], 'role': row['role'], 'createdAt': row['created_at']}
+                {'id': row['id'], 'email': row['email'], 'passwordHash': row['password_hash'], 'role': row['role'],
+                 'createdAt': row['created_at'], 'avatar': row['avatar']}
                 for row in users
             ],
             'notes': [
@@ -688,9 +704,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 raise APIError('Nieprawidłowy adres lub rola konta w snapshocie.')
             if not self.valid_password_hash(password_hash):
                 raise APIError('Snapshot zawiera nieprawidłowy hash hasła.')
+            avatar = user.get('avatar')
+            if avatar is not None:
+                avatar = str(avatar)
+                if len(avatar) > MAX_AVATAR_CHARS or not AVATAR_PATTERN.fullmatch(avatar):
+                    raise APIError('Snapshot zawiera nieprawidłowy avatar.')
             user_ids.add(user_id)
             emails.add(email)
-            prepared_users.append((user_id, email, password_hash, role, self.snapshot_date(user.get('createdAt'))))
+            prepared_users.append((user_id, email, password_hash, role, self.snapshot_date(user.get('createdAt')), avatar))
         if not any(user[3] == 'admin' for user in prepared_users):
             raise APIError('Snapshot musi zawierać konto administratora.')
 
@@ -757,7 +778,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 connection.execute('DELETE FROM invites')
                 connection.execute('DELETE FROM users')
             connection.executemany(
-                'INSERT INTO users (id, email, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)', prepared_users,
+                'INSERT INTO users (id, email, password_hash, role, created_at, avatar) VALUES (?, ?, ?, ?, ?, ?)', prepared_users,
             )
             connection.executemany('''
                 INSERT INTO notes (id, user_id, title, body, body_format, color, tags_json, pinned, archived,
@@ -857,7 +878,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             user_id = cursor.lastrowid
         token = self.new_session(user_id)
         with database() as connection:
-            user = connection.execute('SELECT id, email, role, created_at FROM users WHERE id = ?', (user_id,)).fetchone()
+            user = connection.execute('SELECT id, email, role, created_at, avatar FROM users WHERE id = ?', (user_id,)).fetchone()
         self.send_json({'user': public_user(user)}, 201, self.session_headers(token))
 
     def change_password(self, payload):
@@ -876,6 +897,21 @@ class NotkiHandler(BaseHTTPRequestHandler):
             connection.execute('DELETE FROM sessions WHERE user_id = ?', (user['id'],))
         token = self.new_session(user['id'])
         self.send_json({'changed': True}, extra_headers=self.session_headers(token))
+
+    def change_avatar(self, payload):
+        user = self.require_user()
+        avatar = payload.get('avatar')
+        if avatar is None or avatar == '':
+            avatar = None
+        else:
+            avatar = str(avatar)
+            if len(avatar) > MAX_AVATAR_CHARS:
+                raise APIError('Avatar jest zbyt duży.')
+            if not AVATAR_PATTERN.fullmatch(avatar):
+                raise APIError('Avatar musi być obrazem PNG, JPEG, WebP lub GIF.')
+        with database() as connection:
+            connection.execute('UPDATE users SET avatar = ? WHERE id = ?', (avatar, user['id']))
+        self.send_json({'avatar': avatar})
 
     def logout(self):
         cookie = cookies.SimpleCookie()

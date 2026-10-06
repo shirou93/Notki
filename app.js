@@ -21,6 +21,7 @@
     sharedBanner: $('#shared-banner'), sharedTitle: $('#shared-title'), sharedPreview: $('#shared-preview'),
     avatar: $('#avatar'), profilePanel: $('#profile-panel'), profileBackdrop: $('#profile-backdrop'), profileAccount: $('#profile-account'),
     profileMessage: $('#profile-message'), passwordForm: $('#password-form'),
+    avatarPreview: $('#profile-avatar-preview'), avatarInput: $('#avatar-input'), avatarMessage: $('#avatar-message'),
   };
 
   let notes = [];
@@ -89,10 +90,10 @@
     elements.appShell.hidden = false;
     elements.panel.hidden = false;
     elements.adminLink.hidden = !user.isAdmin;
-    elements.avatar.textContent = user.email.slice(0, 1).toLocaleUpperCase();
     elements.avatar.title = user.email;
     elements.avatar.setAttribute('aria-label', t('topbar.accountAria', { email: user.email }));
     elements.profileAccount.textContent = user.email;
+    renderAvatar(user);
     document.body.classList.remove('is-auth');
     render();
     readSharedNote();
@@ -173,9 +174,22 @@
     }
   });
 
+  function renderAvatar(user) {
+    const initial = user.email.slice(0, 1).toLocaleUpperCase();
+    const avatar = user.avatar || '';
+    for (const node of [elements.avatar, elements.avatarPreview]) {
+      node.textContent = avatar ? '' : initial;
+      node.style.backgroundImage = avatar ? `url("${avatar}")` : '';
+      node.classList.toggle('has-image', Boolean(avatar));
+    }
+    elements.avatarPreview.title = user.email;
+  }
+
   function openProfile() {
     elements.profileMessage.hidden = true;
     elements.profileMessage.classList.remove('is-error');
+    elements.avatarMessage.hidden = true;
+    elements.avatarMessage.classList.remove('is-error');
     elements.passwordForm.reset();
     elements.profilePanel.hidden = false;
     elements.profilePanel.classList.add('is-open');
@@ -226,6 +240,50 @@
       showProfileMessage(t('topbar.passwordChangeFailed', { message: error.message }), true);
     }
   });
+
+  const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+
+  function showAvatarMessage(message, isError) {
+    elements.avatarMessage.textContent = message;
+    elements.avatarMessage.classList.toggle('is-error', isError);
+    elements.avatarMessage.hidden = false;
+  }
+
+  async function saveAvatar(avatar) {
+    try {
+      const result = await apiRequest('/api/account/avatar', {
+        method: 'POST',
+        body: JSON.stringify({ avatar }),
+      });
+      currentUser.avatar = result.avatar;
+      renderAvatar(currentUser);
+      showAvatarMessage(t(result.avatar ? 'topbar.avatarSaved' : 'topbar.avatarRemoved'), false);
+    } catch (error) {
+      showAvatarMessage(t('topbar.avatarFailed', { message: error.message }), true);
+    }
+  }
+
+  $('#avatar-upload').addEventListener('click', () => elements.avatarInput.click());
+
+  elements.avatarInput.addEventListener('change', () => {
+    const file = elements.avatarInput.files[0];
+    elements.avatarInput.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showAvatarMessage(t('topbar.avatarInvalidType'), true);
+      return;
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      showAvatarMessage(t('topbar.avatarTooLarge'), true);
+      return;
+    }
+    const reader = new FileReader();
+    reader.addEventListener('load', () => saveAvatar(reader.result));
+    reader.addEventListener('error', () => showAvatarMessage(t('topbar.avatarReadFailed'), true));
+    reader.readAsDataURL(file);
+  });
+
+  $('#avatar-remove').addEventListener('click', () => saveAvatar(null));
 
   function moveToFront(note) {
     const index = notes.indexOf(note);

@@ -12,7 +12,7 @@ Private notes app with per-user SQLite storage, invitation-only registration, an
 - Admin panel with server statistics, user list, and invitations
 - Server-wide `.tgz` backups: create, download, restore, delete
 - Polish and English interface, light and dark theme
-- Profile panel for changing the language and password
+- Profile panel for changing the language, avatar, and password
 
 ## Run locally
 
@@ -44,7 +44,7 @@ On a fresh server you can import a `.tgz` backup on the first-run setup page ins
 
 ![Profile panel](docs/profile.png)
 
-Clicking the avatar in the top-right corner opens a menu with **Profile** and **Sign out**. The profile panel lets you change the interface language and the account password. Changing the password requires the current password, must be at least 12 characters long, and signs out every other session while keeping the current one active.
+Clicking the avatar in the top-right corner opens a menu with **Profile**, **Admin panel** (administrators only), and **Sign out**. The profile panel lets you upload a custom avatar, change the interface language, and change the account password. Avatars accept PNG, JPEG, WebP, or GIF images up to 2 MB and are stored with your account, so they are included in server backups. Changing the password requires the current password, must be at least 12 characters long, and signs out every other session while keeping the current one active.
 
 ## Languages and themes
 

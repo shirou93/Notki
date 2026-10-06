@@ -15,6 +15,8 @@ import server
 
 
 class ServerFlowTests(unittest.TestCase):
+    avatar_data = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.original_db_path = server.DB_PATH
@@ -161,6 +163,57 @@ class ServerFlowTests(unittest.TestCase):
             'currentPassword': 'secure-passphrase-1', 'newPassword': 'brand-new-passphrase-1',
         })
         self.assertEqual(status, 401)
+
+    def test_avatar_upload_validation_and_removal(self):
+        status, _ = self.request(self.new_client(), 'POST', '/api/account/avatar', {'avatar': self.avatar_data})
+        self.assertEqual(status, 401)
+
+        status, _ = self.request(self.admin, 'POST', '/api/account/avatar', {'avatar': 'https://example.com/avatar.png'})
+        self.assertEqual(status, 400)
+
+        status, _ = self.request(self.admin, 'POST', '/api/account/avatar', {'avatar': 'data:text/html;base64,PHNjcmlwdD4='})
+        self.assertEqual(status, 400)
+
+        status, _ = self.request(self.admin, 'POST', '/api/account/avatar', {'avatar': 'data:image/png;base64,' + 'A' * server.MAX_AVATAR_CHARS})
+        self.assertEqual(status, 400)
+
+        status, result = self.request(self.admin, 'POST', '/api/account/avatar', {'avatar': self.avatar_data})
+        self.assertEqual(status, 200)
+        self.assertEqual(result['avatar'], self.avatar_data)
+
+        status, session = self.request(self.admin, 'GET', '/api/session')
+        self.assertEqual(status, 200)
+        self.assertEqual(session['user']['avatar'], self.avatar_data)
+
+        status, result = self.request(self.admin, 'POST', '/api/account/avatar', {'avatar': None})
+        self.assertEqual(status, 200)
+        self.assertIsNone(result['avatar'])
+
+        status, session = self.request(self.admin, 'GET', '/api/session')
+        self.assertIsNone(session['user']['avatar'])
+
+    def test_avatar_survives_server_backup_restore(self):
+        status, _ = self.request(self.admin, 'POST', '/api/account/avatar', {'avatar': self.avatar_data})
+        self.assertEqual(status, 200)
+
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
+        self.assertEqual(status, 201)
+        filename = backup['filename']
+
+        status, _ = self.request(self.admin, 'POST', '/api/account/avatar', {'avatar': None})
+        self.assertEqual(status, 200)
+
+        status, _ = self.request(self.admin, 'POST', f'/api/admin/backups/{filename}/restore', {})
+        self.assertEqual(status, 200)
+
+        restored = self.new_client()
+        status, _ = self.request(restored, 'POST', '/api/login', {
+            'email': 'admin@example.com', 'password': 'secure-passphrase-1',
+        })
+        self.assertEqual(status, 200)
+        status, session = self.request(restored, 'GET', '/api/session')
+        self.assertEqual(status, 200)
+        self.assertEqual(session['user']['avatar'], self.avatar_data)
 
     def test_admin_route_serves_dashboard(self):
         with self.admin.open(self.base_url + '/admin') as response:
