@@ -33,6 +33,7 @@ NOTE_COLORS = {'default', 'mint', 'lemon', 'peach', 'lilac', 'sky'}
 AVATAR_PATTERN = re.compile(r'^data:image/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$')
 MAX_AVATAR_CHARS = 2_900_000
 STATIC_FILES = {'index.html', 'admin.html', 'admin.js', 'app.js', 'i18n.js', 'theme.js', 'setup.html', 'setup.js', 'styles.css'}
+TRANSLATION_FILES = {'translations/pl.js', 'translations/en.js'}
 DEFAULT_LANGUAGE = 'en'
 SUPPORTED_LANGUAGES = ('pl', 'en')
 
@@ -458,7 +459,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             elif path.startswith('/api/admin/backups/'):
                 filename = path.removeprefix('/api/admin/backups/')
                 self.download_server_backup(filename)
-            elif path in ('/', '/index.html', '/admin', '/admin.html') or path.lstrip('/') in STATIC_FILES:
+            elif path in ('/', '/index.html', '/admin', '/admin.html') or path.lstrip('/') in STATIC_FILES or path.lstrip('/') in TRANSLATION_FILES:
                 if path in ('/', '/index.html') and not self.has_admin():
                     if not self.is_local_setup_request():
                         self.send_error_json('Pierwsza konfiguracja administratora wymaga dostępu lokalnego.', 403)
@@ -1166,7 +1167,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         self.send_json({'saved': True})
 
     def serve_static(self, filename):
-        if filename not in STATIC_FILES:
+        if filename not in STATIC_FILES and filename not in TRANSLATION_FILES:
             self.send_error_json('Nie znaleziono pliku.', 404)
             return
         file_path = ROOT / filename

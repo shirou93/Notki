@@ -1081,6 +1081,8 @@
       render();
     });
     const dragHandle = $('.card-drag', card);
+    dragHandle.setAttribute('aria-label', t('card.drag'));
+    dragHandle.title = t('card.dragTitle');
     dragHandle.addEventListener('click', event => event.stopPropagation());
     dragHandle.addEventListener('pointerdown', event => {
       if (event.button !== 0) return;
@@ -1101,6 +1103,8 @@
       }
     });
     const shareButton = $('.card-share', card);
+    shareButton.setAttribute('aria-label', t('editor.share'));
+    shareButton.title = t('editor.shareTitle');
     if (shared) {
       // A recipient cannot re-share or reorder someone else's note.
       dragHandle.hidden = true;
@@ -1423,7 +1427,6 @@
     }
   });
 
-  $('#create-note-heading').addEventListener('click', () => openEditor());
   $('#capture-note').addEventListener('click', () => openEditor());
   $('#empty-create').addEventListener('click', () => openEditor());
   $('#close-editor').addEventListener('click', closeEditor);

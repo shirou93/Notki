@@ -59,7 +59,9 @@ Recipients find shared notes under **Shared with me** in the sidebar, each card 
 
 ## Languages and themes
 
-The interface is available in Polish and English. The initial language follows the browser's `Accept-Language` header and falls back to English; the choice is stored in `localStorage` under `notki.lang.v1`. Server-side messages are translated from the same header, so API errors arrive in the selected language.
+The interface is available in Polish and English. Each dictionary lives in its own file in the `translations/` folder (`translations/en.js`, `translations/pl.js`), which registers itself on `window.notkiTranslations`; `i18n.js` holds only the lookup, pluralisation, date/number formatting, and DOM-translation logic. New strings belong in those dictionaries, not in `i18n.js`.
+
+The initial language follows the browser's `Accept-Language` header and falls back to English; the choice is stored in `localStorage` under `notki.lang.v1`. Server-side messages are translated from the same header, so API errors arrive in the selected language.
 
 All pages share `theme.js`. The theme follows the operating system setting until the toggle is used; the explicit choice is stored in `localStorage` under `notki.theme.v1`.
 

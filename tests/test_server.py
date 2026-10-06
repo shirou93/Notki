@@ -341,6 +341,25 @@ class ServerFlowTests(unittest.TestCase):
             script = response.read().decode('utf-8')
             self.assertEqual(response.headers.get_content_type(), 'text/javascript')
         self.assertIn('window.i18n', script)
+        self.assertIn('window.notkiTranslations', script)
+
+    def test_translation_dictionaries_are_served_from_the_translations_folder(self):
+        for language in ('pl', 'en'):
+            with self.admin.open(self.base_url + f'/translations/{language}.js') as response:
+                script = response.read().decode('utf-8')
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.headers.get_content_type(), 'text/javascript')
+            self.assertIn(f'window.notkiTranslations.{language} = {{', script)
+            self.assertTrue(script.rstrip().endswith('};'), language)
+            self.assertEqual(script.count('{'), script.count('}'), language)
+
+    def test_pages_load_the_translation_dictionaries_before_the_i18n_module(self):
+        for path in ('/setup.html', '/', '/admin'):
+            with self.admin.open(self.base_url + path) as response:
+                html = response.read().decode('utf-8')
+            for script in ('translations/pl.js', 'translations/en.js', 'i18n.js'):
+                self.assertIn(script, html, path)
+            self.assertLess(html.index('translations/en.js'), html.index('i18n.js'), path)
 
     def test_shared_theme_module_is_served_on_every_page(self):
         with self.admin.open(self.base_url + '/theme.js') as response:

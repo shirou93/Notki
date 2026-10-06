@@ -158,9 +158,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .eyebrow { margin: 0 0 9px; color: #7d8a80; font-size: 9px; font-weight: 700; letter-spacing: 1.55px; }
 h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; letter-spacing: 0; line-height: 1.2; }
 .heading-period { color: #89aa58; }
-.new-note-link { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 3px; padding: 10px 16px; border: 1px solid #dbe6d2; border-radius: 7px; background: #f0f5e9; color: #42634d; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: border-color .16s, background .16s, color .16s; }
-.new-note-link span { font-size: 17px; font-weight: 400; line-height: 1; }
-.new-note-link:hover { border-color: #c4d1bd; background: #e6efdb; color: #77954e; }
 .capture-wrap { margin-bottom: 33px; animation: rise-in .48s .06s both; }
 .capture-box { width: min(100%, 650px); height: 52px; display: flex; align-items: center; gap: 13px; padding: 0 14px; border: 1px solid #e7ebe5; border-radius: 7px; background: #fff; color: #929b94; text-align: left; box-shadow: 0 2px 7px #23382705; cursor: pointer; transition: border-color .18s, box-shadow .18s; }
 .capture-box:hover { border-color: #c4d1bd; box-shadow: 0 5px 18px #2338270b; }
@@ -350,8 +347,6 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
   .page-heading { padding: 31px 0 21px; }
   h1 { font-size: 29px; }
   .eyebrow { font-size: 8px; letter-spacing: 1px; }
-  .new-note-link { padding: 9px 13px; font-size: 11px; }
-  .new-note-link span { font-size: 15px; }
   .capture-wrap { margin-bottom: 25px; }
   .capture-box { height: 47px; font-size: 12px; }
   .notes-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 165px), 1fr)); gap: 10px; }
@@ -410,8 +405,6 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
   .profile-topbar { border-bottom-color: var(--line); }
   .profile-account { color: #d6e4d6; }
   .profile-form { border-top-color: var(--line); }
-  .new-note-link { border-color: #3d5947; background: #24382c; color: #b9d99e; }
-  .new-note-link:hover { border-color: #506653; background: #2a3b30; color: var(--lime); }
   .capture-box:hover { border-color: #607b62; }
   .capture-plus, .format-tool:hover, .format-tool.is-active { background: #304632; color: #d4e8bd; }
   .section-rule, .editor-topbar, .format-toolbar { border-color: var(--line); }
