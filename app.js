@@ -44,9 +44,17 @@
   let skipCardAnimation = false;
   let editorRange = null;
 
+  // Aborting every card tween leaves the grid at its settled geometry, so measurements stay stable.
+  function settleCards() {
+    for (const animation of document.getAnimations()) {
+      if (animation.effect?.target?.classList?.contains('note-card')) animation.cancel();
+    }
+  }
+
   // Slides the cards between their old and new slots so the reorder reads as motion, not a jump.
   function tweenCards(previousRects, nodes) {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    settleCards();
     for (const node of nodes) {
       const before = previousRects.get(node);
       const after = node.getBoundingClientRect();
@@ -61,41 +69,59 @@
     }
   }
 
-  // Chooses the slot the pointer is over: the card beneath it, or the nearest card centre.
-  function dropSlot(cardNodes, clientX, clientY) {
-    const singleColumn = getComputedStyle(dragState.grid).gridTemplateColumns.trim().split(/\s+/).length === 1;
-    const insertAt = (index, after) => Math.min(Math.max(index + Number(after), 0), cardNodes.length);
-    const hovered = document.elementFromPoint(clientX, clientY)?.closest('.note-card');
-    if (hovered && hovered !== dragState.card && cardNodes.includes(hovered)) {
-      const bounds = hovered.getBoundingClientRect();
-      const after = singleColumn ? clientY >= bounds.top + bounds.height / 2 : clientX >= bounds.left + bounds.width / 2;
-      return insertAt(cardNodes.indexOf(hovered), after);
-    }
-    let nearest = null;
-    cardNodes.forEach((card, index) => {
+  // The set of other cards and the dragged card's starting index are captured once, when the drag
+  // starts. Re-deriving them from the grid mid-drag would feed the running reorder back into the
+  // hit test, so the placeholder would chase its own layout and flip between two slots.
+  function captureSlots() {
+    const cards = [...dragState.grid.querySelectorAll('.note-card')];
+    dragState.others = cards.filter(card => card !== dragState.card);
+    dragState.startIndex = cards.indexOf(dragState.card);
+    dragState.gapIndex = dragState.startIndex;
+  }
+
+  // Maps the pointer to the slot the dragged card should occupy. Slot centres are read from the
+  // settled layout, so the placeholder always lands under the pointer; the margin stops it from
+  // flipping back and forth while the pointer rests on the seam between two cards.
+  function dropSlot(clientX, clientY) {
+    const grid = dragState.grid;
+    const cards = [...grid.querySelectorAll('.note-card')];
+    const singleColumn = getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).length === 1;
+    const along = singleColumn ? clientY : clientX;
+    const cross = singleColumn ? clientX : clientY;
+    const centres = cards.map(card => {
       const bounds = card.getBoundingClientRect();
-      const distance = Math.hypot(clientX - (bounds.left + bounds.width / 2), clientY - (bounds.top + bounds.height / 2));
-      if (!nearest || distance < nearest.distance) {
-        nearest = { distance, index };
-      }
+      return {
+        along: singleColumn ? bounds.top + bounds.height / 2 : bounds.left + bounds.width / 2,
+        cross: singleColumn ? bounds.left + bounds.width / 2 : bounds.top + bounds.height / 2,
+      };
     });
-    if (!nearest) return cardNodes.length;
-    const bounds = cardNodes[nearest.index].getBoundingClientRect();
-    return insertAt(nearest.index, singleColumn ? clientY >= bounds.top + bounds.height / 2 : clientX >= bounds.left + bounds.width / 2);
+    let best = 0;
+    let bestDistance = Infinity;
+    for (let index = 0; index < centres.length; index += 1) {
+      const distance = Math.hypot(along - centres[index].along, cross - centres[index].cross);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
+      }
+    }
+    const current = dragState.gapIndex;
+    if (current === null || best === current) return best;
+    const currentDistance = Math.hypot(along - centres[current].along, cross - centres[current].cross);
+    const margin = 12; // The pointer must clearly favour the new slot before the layout moves.
+    return bestDistance + margin < currentDistance ? best : current;
   }
 
   // Moves the dragged card (now a dashed placeholder) to the slot under the pointer and tweens the rest.
   function updateDropGap(clientX, clientY) {
-    const grid = dragState.grid;
-    const cardNodes = [...grid.querySelectorAll('.note-card')];
-    const others = cardNodes.filter(card => card !== dragState.card);
-    const previousRects = new Map(cardNodes.map(node => [node, node.getBoundingClientRect()]));
-    const index = dropSlot(others, clientX, clientY);
+    settleCards(); // Measure the settled layout, never a tween mid-flight.
+    const index = dropSlot(clientX, clientY);
     if (index === dragState.gapIndex) return;
+    const nodes = [...dragState.others, dragState.card];
+    const previousRects = new Map(nodes.map(node => [node, node.getBoundingClientRect()]));
     dragState.gapIndex = index;
-    const order = [...others];
+    const order = [...dragState.others];
     order.splice(index, 0, dragState.card); // Keeping the card in the flow keeps the slot at full size.
-    grid.replaceChildren(...order);
+    dragState.grid.replaceChildren(...order);
     tweenCards(previousRects, order);
   }
 
@@ -713,10 +739,11 @@
 
   function finishNoteDrag(event, commit) {
     if (!dragState || event.pointerId !== dragState.pointerId) return;
-    const { active, noteId, gapIndex } = dragState;
-    const neighbour = active && gapIndex !== null ? dropNeighbour(gapIndex) : null;
+    const { active, noteId, gapIndex, startIndex } = dragState;
+    const moved = active && gapIndex !== startIndex;
+    const neighbour = moved ? dropNeighbour(gapIndex) : null;
     // The grid is still showing the placeholder layout, so any drop needs a repaint.
-    const reorderPending = gapIndex !== null;
+    const reorderPending = active && gapIndex !== null;
     clearDragMarkers();
     dragState = null;
     if (commit && neighbour) {
@@ -730,8 +757,7 @@
 
   // Translates the placeholder index into the neighbour the note should be placed against.
   function dropNeighbour(gapIndex) {
-    const grid = dragState.grid;
-    const others = [...grid.querySelectorAll('.note-card')].filter(card => card !== dragState.card);
+    const others = dragState.others;
     const before = others[gapIndex - 1];
     const after = others[gapIndex];
     if (after) return { targetId: after.dataset.id, after: false };
@@ -758,6 +784,7 @@
       preview.append(title, body);
       document.body.append(preview);
       dragState.preview = preview;
+      captureSlots();
     }
     event.preventDefault();
     dragPoint = { x: event.clientX, y: event.clientY };
@@ -922,7 +949,7 @@
     dragHandle.addEventListener('pointerdown', event => {
       if (event.button !== 0) return;
       event.preventDefault();
-      dragState = { noteId: note.id, card, grid: card.parentElement, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false, gapIndex: null };
+      dragState = { noteId: note.id, card, grid: card.parentElement, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false, gapIndex: null, others: [], startIndex: 0 };
     });
     dragHandle.addEventListener('keydown', event => {
       const step = ['ArrowUp', 'ArrowLeft'].includes(event.key) ? -1 : ['ArrowDown', 'ArrowRight'].includes(event.key) ? 1 : 0;
