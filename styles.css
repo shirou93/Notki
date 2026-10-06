@@ -185,7 +185,7 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .note-card.color-lilac { background: var(--lilac); border-color: #e4dced; }
 .note-card.color-sky { background: var(--sky); border-color: #d7e6eb; }
 .card-topline { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; color: #819087; font-size: 10px; }
-.card-tools { display: flex; gap: 2px; }
+.card-tools { display: flex; align-items: center; gap: 2px; }
 .card-drag, .card-pin, .card-share { width: 25px; height: 25px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; color: #74847a; background: transparent; font-size: 16px; opacity: 0; cursor: pointer; transition: opacity .15s, background .15s; }
 .card-drag { touch-action: none; cursor: var(--drag-cursor); }
 .note-card:hover .card-drag, .note-card:hover .card-pin, .note-card:hover .card-share, .card-pin.is-pinned { opacity: 1; }
