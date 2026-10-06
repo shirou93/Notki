@@ -1256,7 +1256,6 @@
     const shared = Boolean(note.ownerEmail);
     const readOnly = shared && note.permission !== 'write';
     elements.pin.classList.toggle('is-pinned', note.pinned);
-    elements.pin.textContent = note.pinned ? '⌖' : '⌖';
     elements.pin.setAttribute('aria-label', t(note.pinned ? 'editor.unpin' : 'editor.pin'));
     elements.pin.title = t(note.pinned ? 'editor.unpinTitle' : 'editor.pinTitle');
     elements.archive.textContent = note.deleted ? '↶' : '▣';

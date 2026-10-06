@@ -197,6 +197,7 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .note-drag-preview strong { margin-bottom: 4px; font-size: 12px; }
 .note-drag-preview span { color: #69786e; font-size: 10px; }
 .card-pin.is-pinned { color: #54784b; }
+.card-pin.is-pinned svg, .icon-button.is-pinned svg { fill: currentColor; }
 .card-title { margin: 0 0 7px; overflow-wrap: anywhere; font-size: 14px; font-weight: 700; line-height: 1.45; }
 .card-body { display: -webkit-box; margin: 0 0 15px; overflow: hidden; color: #59645d; font-size: 12px; line-height: 1.65; white-space: normal; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 5; }
 .card-body p { margin: 0 0 8px; }
@@ -254,7 +255,10 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .editor-panel.is-open { transform: translateX(0); }
 .editor-topbar { min-height: 64px; display: flex; align-items: center; gap: 14px; padding: 0 24px; border-bottom: 1px solid #edf0ec; }
 .icon-button { width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; background: transparent; color: #67746a; font-size: 19px; cursor: pointer; transition: color .15s, background .15s; }
+.icon-button svg { display: block; }
+.icon-button.is-pinned { color: #54784b; }
 .icon-button:hover { background: #f0f4ef; color: #294d37; }
+.icon-button.is-pinned:hover { color: #3f5c38; }
 .editor-close { font-size: 25px; }
 .save-state { display: flex; align-items: center; gap: 7px; color: #8a958c; font-size: 10px; }
 .save-state .save-dot { width: 6px; height: 6px; flex-basis: 6px; }
@@ -433,6 +437,8 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
   .share-empty { color: #8b978e; }
   .editor-panel.is-read-only .editor-body { background: #22322a; }
   .card-pin:hover, .card-share:hover { background: #ffffff20; }
+  .icon-button.is-pinned { color: #a8cc86; }
+  .icon-button.is-pinned:hover { color: #c2e09c; }
   .note-drag-preview { background: var(--paper); color: var(--ink); }
   .note-drag-preview span { color: #b3c0b6; }
   .empty-sheet { border-color: #536b59; background: #24352a; box-shadow: 7px 4px 0 #1d2a21; }

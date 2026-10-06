@@ -50,7 +50,7 @@
       </a>
       <nav class="nav-list" aria-label="Note views" data-i18n-aria-label="nav.viewsAria">
         <button class="nav-item is-active" type="button" data-view="all"><span class="nav-icon" aria-hidden="true">▤</span><span data-i18n="nav.all">All</span><span class="nav-count" id="count-all">0</span></button>
-        <button class="nav-item" type="button" data-view="pinned"><span class="nav-icon" aria-hidden="true">⌖</span><span data-i18n="nav.pinned">Pinned</span><span class="nav-count" id="count-pinned">0</span></button>
+        <button class="nav-item" type="button" data-view="pinned"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6l-3 3v2h10v-2l-3-3V3"/><path d="M12 14v7"/></svg></span><span data-i18n="nav.pinned">Pinned</span><span class="nav-count" id="count-pinned">0</span></button>
         <button class="nav-item" type="button" data-view="archive"><span class="nav-icon" aria-hidden="true">▣</span><span data-i18n="nav.archive">Archive</span><span class="nav-count" id="count-archive">0</span></button>
         <button class="nav-item" type="button" data-view="shared"><span class="nav-icon" aria-hidden="true">⇄</span><span data-i18n="nav.shared">Shared with me</span><span class="nav-count" id="count-shared">0</span></button>
         <button class="nav-item" type="button" data-view="trash"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></span><span data-i18n="nav.trash">Trash</span><span class="nav-count" id="count-trash">0</span></button>
@@ -180,7 +180,7 @@
       <button class="icon-button editor-close" id="close-editor" type="button" aria-label="Close editor" title="Close" data-i18n-aria-label="editor.close" data-i18n-title="editor.closeTitle">×</button>
       <span class="save-state" id="save-state"><span class="save-dot"></span><span data-i18n="editor.saved">Saved</span></span>
       <div class="editor-tools">
-        <button class="icon-button" id="pin-note" type="button" aria-label="Pin note" title="Pin" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle">⌖</button>
+        <button class="icon-button" id="pin-note" type="button" aria-label="Pin note" title="Pin" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><path d="M10 3v6l-3 3v2h10v-2l-3-3V3"/><path d="M12 14v7"/></svg></button>
         <button class="icon-button" id="archive-note" type="button" aria-label="Archive note" title="Archive" data-i18n-aria-label="editor.archive" data-i18n-title="editor.archiveTitle">▣</button>
         <button class="icon-button" id="share-note" type="button" aria-label="Share note" title="Share link" data-i18n-aria-label="editor.share" data-i18n-title="editor.shareTitle">↗</button>
         <button class="icon-button danger-icon" id="delete-note" type="button" aria-label="Move to trash" title="Move to trash" data-i18n-aria-label="editor.delete" data-i18n-title="editor.delete"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></button>
@@ -224,7 +224,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <template id="note-template">
     <article class="note-card">
-      <div class="card-topline"><span class="card-date"></span><div class="card-tools"><button class="card-drag" type="button" aria-label="Reorder note" title="Drag to reorder" data-i18n-aria-label="card.drag" data-i18n-title="card.dragTitle">⠿</button><button class="card-pin" type="button" aria-label="Pin note" title="Pin" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle">⌖</button></div></div>
+      <div class="card-topline"><span class="card-date"></span><div class="card-tools"><button class="card-drag" type="button" aria-label="Reorder note" title="Drag to reorder" data-i18n-aria-label="card.drag" data-i18n-title="card.dragTitle">⠿</button><button class="card-pin" type="button" aria-label="Pin note" title="Pin" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><path d="M10 3v6l-3 3v2h10v-2l-3-3V3"/><path d="M12 14v7"/></svg></button></div></div>
       <h2 class="card-title"></h2>
       <p class="card-body"></p>
       <div class="card-bottom"><div class="card-tags"></div><button class="card-share" type="button" aria-label="Share note" title="Share link" data-i18n-aria-label="editor.share" data-i18n-title="editor.shareTitle">↗</button></div>
