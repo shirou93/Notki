@@ -39,7 +39,65 @@
   let pendingSharedNote = null;
   let returnFocus = null;
   let dragState = null;
+  let dragFrame = null;
+  let dragPoint = null;
+  let skipCardAnimation = false;
   let editorRange = null;
+
+  // Slides the cards between their old and new slots so the reorder reads as motion, not a jump.
+  function tweenCards(previousRects, nodes) {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    for (const node of nodes) {
+      const before = previousRects.get(node);
+      const after = node.getBoundingClientRect();
+      if (!before) continue;
+      const deltaX = before.left - after.left;
+      const deltaY = before.top - after.top;
+      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) continue;
+      node.animate(
+        [{ transform: `translate(${deltaX}px, ${deltaY}px)` }, { transform: 'none' }],
+        { duration: 220, easing: 'cubic-bezier(.2,.8,.3,1)' },
+      );
+    }
+  }
+
+  // Chooses the slot the pointer is over: the card beneath it, or the nearest card centre.
+  function dropSlot(cardNodes, clientX, clientY) {
+    const singleColumn = getComputedStyle(dragState.grid).gridTemplateColumns.trim().split(/\s+/).length === 1;
+    const insertAt = (index, after) => Math.min(Math.max(index + Number(after), 0), cardNodes.length);
+    const hovered = document.elementFromPoint(clientX, clientY)?.closest('.note-card');
+    if (hovered && hovered !== dragState.card && cardNodes.includes(hovered)) {
+      const bounds = hovered.getBoundingClientRect();
+      const after = singleColumn ? clientY >= bounds.top + bounds.height / 2 : clientX >= bounds.left + bounds.width / 2;
+      return insertAt(cardNodes.indexOf(hovered), after);
+    }
+    let nearest = null;
+    cardNodes.forEach((card, index) => {
+      const bounds = card.getBoundingClientRect();
+      const distance = Math.hypot(clientX - (bounds.left + bounds.width / 2), clientY - (bounds.top + bounds.height / 2));
+      if (!nearest || distance < nearest.distance) {
+        nearest = { distance, index };
+      }
+    });
+    if (!nearest) return cardNodes.length;
+    const bounds = cardNodes[nearest.index].getBoundingClientRect();
+    return insertAt(nearest.index, singleColumn ? clientY >= bounds.top + bounds.height / 2 : clientX >= bounds.left + bounds.width / 2);
+  }
+
+  // Moves the dragged card (now a dashed placeholder) to the slot under the pointer and tweens the rest.
+  function updateDropGap(clientX, clientY) {
+    const grid = dragState.grid;
+    const cardNodes = [...grid.querySelectorAll('.note-card')];
+    const others = cardNodes.filter(card => card !== dragState.card);
+    const previousRects = new Map(cardNodes.map(node => [node, node.getBoundingClientRect()]));
+    const index = dropSlot(others, clientX, clientY);
+    if (index === dragState.gapIndex) return;
+    dragState.gapIndex = index;
+    const order = [...others];
+    order.splice(index, 0, dragState.card); // Keeping the card in the flow keeps the slot at full size.
+    grid.replaceChildren(...order);
+    tweenCards(previousRects, order);
+  }
 
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
@@ -644,24 +702,48 @@
   function clearDragMarkers() {
     if (!dragState) return;
     dragState.card.classList.remove('is-dragging');
-    dragState.targetCard?.classList.remove('drop-before', 'drop-after', 'drop-before-vertical', 'drop-after-vertical');
     dragState.preview?.remove();
     document.body.classList.remove('is-dragging-note');
+    if (dragFrame) {
+      cancelAnimationFrame(dragFrame);
+      dragFrame = null;
+    }
+    dragPoint = null;
   }
 
   function finishNoteDrag(event, commit) {
     if (!dragState || event.pointerId !== dragState.pointerId) return;
-    const { active, noteId, targetId, after } = dragState;
+    const { active, noteId, gapIndex } = dragState;
+    const neighbour = active && gapIndex !== null ? dropNeighbour(gapIndex) : null;
+    // The grid is still showing the placeholder layout, so any drop needs a repaint.
+    const reorderPending = gapIndex !== null;
     clearDragMarkers();
     dragState = null;
-    if (commit && active && targetId) moveNote(noteId, targetId, after);
+    if (commit && neighbour) {
+      skipCardAnimation = true; // The cards are already on screen; only the drop should animate.
+      moveNote(noteId, neighbour.targetId, neighbour.after);
+      skipCardAnimation = false;
+    } else if (reorderPending) {
+      render();
+    }
+  }
+
+  // Translates the placeholder index into the neighbour the note should be placed against.
+  function dropNeighbour(gapIndex) {
+    const grid = dragState.grid;
+    const others = [...grid.querySelectorAll('.note-card')].filter(card => card !== dragState.card);
+    const before = others[gapIndex - 1];
+    const after = others[gapIndex];
+    if (after) return { targetId: after.dataset.id, after: false };
+    if (before) return { targetId: before.dataset.id, after: true };
+    return null;
   }
 
   function trackNoteDrag(event) {
     if (!dragState || event.pointerId !== dragState.pointerId) return;
-    if (!dragState.active && Math.hypot(event.clientX - dragState.startX, event.clientY - dragState.startY) < 6) return;
-    event.preventDefault();
     if (!dragState.active) {
+      if (Math.hypot(event.clientX - dragState.startX, event.clientY - dragState.startY) < 6) return;
+      event.preventDefault();
       dragState.active = true;
       dragState.card.classList.add('is-dragging');
       document.body.classList.add('is-dragging-note');
@@ -677,24 +759,17 @@
       document.body.append(preview);
       dragState.preview = preview;
     }
-    const previewOffset = event.pointerType === 'touch' && event.clientY > 115 ? -100 : 16;
-    dragState.preview.style.transform = `translate3d(${event.clientX + 16}px, ${event.clientY + previewOffset}px, 0)`;
-    const hovered = document.elementFromPoint(event.clientX, event.clientY);
-    const targetCard = hovered?.closest('.note-card');
-    if (!targetCard || targetCard === dragState.card || targetCard.parentElement !== dragState.grid) {
-      dragState.targetCard?.classList.remove('drop-before', 'drop-after', 'drop-before-vertical', 'drop-after-vertical');
-      dragState.targetCard = null;
-      dragState.targetId = null;
-      return;
-    }
-    const bounds = targetCard.getBoundingClientRect();
-    const singleColumn = getComputedStyle(dragState.grid).gridTemplateColumns.trim().split(/\s+/).length === 1;
-    const after = singleColumn ? event.clientY >= bounds.top + bounds.height / 2 : event.clientX >= bounds.left + bounds.width / 2;
-    dragState.targetCard?.classList.remove('drop-before', 'drop-after', 'drop-before-vertical', 'drop-after-vertical');
-    targetCard.classList.add(singleColumn ? after ? 'drop-after-vertical' : 'drop-before-vertical' : after ? 'drop-after' : 'drop-before');
-    dragState.targetCard = targetCard;
-    dragState.targetId = targetCard.dataset.id;
-    dragState.after = after;
+    event.preventDefault();
+    dragPoint = { x: event.clientX, y: event.clientY };
+    if (dragFrame) return;
+    dragFrame = requestAnimationFrame(() => {
+      dragFrame = null;
+      if (!dragState || !dragPoint) return;
+      const { x, y } = dragPoint;
+      const previewOffset = y > 115 ? -100 : 16;
+      dragState.preview.style.transform = `translate3d(${x + 16}px, ${y + previewOffset}px, 0)`;
+      updateDropGap(x, y);
+    });
   }
 
   document.addEventListener('pointermove', trackNoteDrag);
@@ -821,6 +896,7 @@
     const card = $('#note-template').content.firstElementChild.cloneNode(true);
     card.dataset.id = note.id;
     card.classList.add(`color-${COLORS.includes(note.color) ? note.color : 'default'}`);
+    if (skipCardAnimation) card.style.animation = 'none';
     $('.card-date', card).textContent = window.i18n.formatDate(note.updatedAt);
     $('.card-title', card).textContent = note.title || t('editor.untitled');
     const cardBody = $('.card-body', card);
@@ -846,7 +922,7 @@
     dragHandle.addEventListener('pointerdown', event => {
       if (event.button !== 0) return;
       event.preventDefault();
-      dragState = { noteId: note.id, card, grid: card.parentElement, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false, targetId: null, after: false, targetCard: null };
+      dragState = { noteId: note.id, card, grid: card.parentElement, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false, gapIndex: null };
     });
     dragHandle.addEventListener('keydown', event => {
       const step = ['ArrowUp', 'ArrowLeft'].includes(event.key) ? -1 : ['ArrowDown', 'ArrowRight'].includes(event.key) ? 1 : 0;
