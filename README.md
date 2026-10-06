@@ -8,7 +8,7 @@ Private notes app with per-user SQLite storage, invitation-only registration, an
 
 - Notes with rich text, tags, colors, pinning, archive, and trash
 - Per-user SQLite storage on your own server
-- Docker image based on Alpine with a persistent data volume
+- Docker Compose setup that runs the stock Alpine image with a persistent data volume
 - Invitation-only registration — each link works once and expires after 7 days
 - Admin panel with server statistics, user list, and invitations
 - Server-wide `.tgz` backups: create, download, restore, delete
@@ -116,22 +116,22 @@ sudo systemctl enable --now notki
 
 ## Run with Docker
 
-The image is built from `alpine` and runs the server with the standard library only — no extra packages are installed beyond `python3`.
+The compose file uses the stock `alpine` image directly — nothing is built. On start the container installs `python3` with `apk` and runs the server, so the image itself is never modified.
 
 ```sh
-docker compose up -d --build
+docker compose up -d
 ```
 
 Notki is then available at <http://127.0.0.1:8000>. Because the database starts empty, the first visit redirects to `/setup` to create the administrator account.
 
-The database and the backup archives live in the `notki-data` named volume, mounted at `/app/data`:
+The application code is bind-mounted from this directory, and the database and backup archives live in the `notki-data` named volume:
 
 ```
 /app/data/notki.sqlite3
 /app/data/backups/*.tgz
 ```
 
-The volume survives `docker compose down` and image rebuilds. To wipe everything and start over, remove it explicitly:
+The volume survives `docker compose down` and restarts. To wipe everything and start over, remove it explicitly:
 
 ```sh
 docker compose down -v
@@ -147,10 +147,11 @@ To keep the data in a directory you manage yourself instead of a named volume, r
 
 ```yaml
     volumes:
+      - ./:/app
       - ./data:/app/data
 ```
 
-The container runs as the unprivileged `notki` user and binds `0.0.0.0:8000` inside the container network. When you put it behind a TLS-terminating reverse proxy, set `NOTKI_COOKIE_SECURE=1` and `NOTKI_PUBLIC_HTTPS=1` in the `environment` block so session cookies are marked Secure and invitation links use `https`.
+The container binds `0.0.0.0:8000` inside the container network. When you put it behind a TLS-terminating reverse proxy, set `NOTKI_COOKIE_SECURE=1` and `NOTKI_PUBLIC_HTTPS=1` in the `environment` block so session cookies are marked Secure and invitation links use `https`.
 
 ## Configuration
 

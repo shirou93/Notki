@@ -1,22 +1,41 @@
 services:
   notki:
-    build: .
-    image: notki:latest
+    # Uses the stock Alpine image as-is; nothing is built.
+    image: alpine:3.20
     container_name: notki
     restart: unless-stopped
+    working_dir: /app
+    # python3 is installed into the container on start, so the image stays untouched.
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        apk add --no-cache python3
+        exec python3 server.py
     ports:
       - "${NOTKI_HTTP_PORT:-8000}:8000"
     volumes:
-      # The database and the backup archives both live under /app/data.
+      # The application code comes from this directory.
+      - ./:/app
+      # The database and the backup archives live in a named volume.
       - notki-data:/app/data
     environment:
       NOTKI_HOST: 0.0.0.0
       NOTKI_PORT: "8000"
       NOTKI_DB_PATH: /app/data/notki.sqlite3
       NOTKI_BACKUP_DIR: /app/data/backups
+      # Keeps the bind-mounted source tree free of root-owned __pycache__ files.
+      PYTHONDONTWRITEBYTECODE: "1"
       # Set both to "1" when Notki is served through an HTTPS reverse proxy.
       NOTKI_COOKIE_SECURE: "0"
       NOTKI_PUBLIC_HTTPS: "0"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8000/api/setup/status"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
 
 volumes:
   notki-data:
