@@ -163,6 +163,7 @@ The container binds `0.0.0.0:8000` inside the container network. When you put it
 - `NOTKI_BACKUP_DIR`: optional directory for backup archives; defaults to `backups` beside the database.
 - `NOTKI_COOKIE_SECURE=1`: mark session cookies Secure when served through HTTPS.
 - `NOTKI_PUBLIC_HTTPS=1`: generate HTTPS invitation URLs when TLS terminates in a reverse proxy.
+- `NOTKI_ALLOW_REMOTE_SETUP=1`: permit the initial admin setup from a remote host.
 
 The built-in HTTP server is intended for local use. For remote access, put it behind a TLS-enabled reverse proxy and set the secure-cookie options above.
 
