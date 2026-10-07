@@ -18,9 +18,11 @@ from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
+import urllib.request
 
 
 ROOT = Path(__file__).resolve().parent
+VERSION = '0.1.1.2'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -103,6 +105,12 @@ ENGLISH_MESSAGES = {
     'Ta notatka nie jest już udostępniona temu użytkownikowi.': 'This note is no longer shared with that user.',
     'Nie masz uprawnień do edycji tej notatki.': 'You do not have permission to edit this note.',
     'Nie możesz zmieniać uprawnień notatki, której nie jesteś właścicielem.': 'You cannot change permissions of a note you do not own.',
+    'Brak nowszej wersji.': 'No newer version available.',
+    'Nie udało się pobrać informacji o aktualizacji.': 'Could not fetch update information.',
+    'Brak adresu tarball w odpowiedzi.': 'No tarball address in response.',
+    'Wystąpił błąd podczas pobierania archiwum.': 'An error occurred while downloading the archive.',
+    'Nie udało się wyodrębnić plików.': 'Could not extract files.',
+    'Nieprawidłowy adres pobierania.': 'Invalid download URL.',
 }
 
 
@@ -290,7 +298,7 @@ class APIError(Exception):
 
 
 class NotkiHandler(BaseHTTPRequestHandler):
-    server_version = 'NotkiServer/1.0'
+    server_version = f'NotkiServer/{VERSION}'
 
     @property
     def language(self):
@@ -461,6 +469,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             elif path.startswith('/api/admin/backups/'):
                 filename = path.removeprefix('/api/admin/backups/')
                 self.download_server_backup(filename)
+            elif path == '/api/admin/update/check':
+                self.check_update()
             elif path in ('/', '/index.html', '/admin', '/admin.html') or path.lstrip('/') in STATIC_FILES or path.lstrip('/') in TRANSLATION_FILES:
                 if path in ('/', '/index.html') and not self.has_admin():
                     if not self.is_local_setup_request():
@@ -517,6 +527,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     self.send_error_json('Nie znaleziono endpointu.', 404)
                 else:
                     self.restore_server_backup(match.group(1))
+            elif path == '/api/admin/update/perform':
+                self.perform_update(payload)
             else:
                 self.send_error_json('Nie znaleziono endpointu.', 404)
         except APIError as error:
@@ -691,6 +703,55 @@ class NotkiHandler(BaseHTTPRequestHandler):
         except OSError as error:
             raise APIError('Nie można odczytać archiwum backupu.') from error
         self.restore_snapshot(snapshot, replace_existing=True)
+
+    def check_update(self):
+        self.require_user(admin=True)
+        req = urllib.request.Request('https://api.github.com/repos/shirou93/Notki/releases/latest')
+        try:
+            with urllib.request.urlopen(req, timeout=10) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                latest_version = data.get('tag_name', '').lstrip('v')
+                if latest_version and latest_version != VERSION:
+                    self.send_json({'updateAvailable': True, 'latestVersion': latest_version, 'tarballUrl': data.get('tarball_url')})
+                else:
+                    self.send_json({'updateAvailable': False})
+        except Exception:
+            raise APIError('Nie udało się pobrać informacji o aktualizacji.', 500)
+
+    def perform_update(self, payload):
+        self.require_user(admin=True)
+        tarball_url = payload.get('tarballUrl')
+        if not tarball_url:
+            raise APIError('Brak adresu tarball w odpowiedzi.', 400)
+
+        # Verify it's a valid Github API tarball URL for the project
+        if not tarball_url.startswith('https://api.github.com/repos/shirou93/Notki/tarball/'):
+            raise APIError('Nieprawidłowy adres pobierania.', 400)
+
+        req = urllib.request.Request(tarball_url)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                archive_bytes = response.read()
+        except Exception:
+            raise APIError('Wystąpił błąd podczas pobierania archiwum.', 500)
+
+        try:
+            with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode='r:gz') as archive:
+                members = archive.getmembers()
+                if not members:
+                    raise ValueError("Empty archive")
+
+                for member in members:
+                    parts = member.name.split('/', 1)
+                    if len(parts) > 1:
+                        member.name = parts[1]
+                        target_path = (ROOT / member.name).resolve()
+                        if target_path.is_relative_to(ROOT):
+                            archive.extract(member, path=ROOT)
+        except Exception:
+            raise APIError('Nie udało się wyodrębnić plików.', 500)
+
+        self.send_json({'success': True})
 
     def import_snapshot_archive(self, archive_bytes):
         if not self.is_local_setup_request():

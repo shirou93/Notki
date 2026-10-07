@@ -1,0 +1,28 @@
+--- server.py
++++ server.py
+@@ -719,6 +719,10 @@
+         self.require_user(admin=True)
+         tarball_url = payload.get('tarballUrl')
+         if not tarball_url:
+             raise APIError('Brak adresu tarball w odpowiedzi.', 400)
++        # Ensure tarball URL is from GitHub API for Notki repo
++        if not tarball_url.startswith('https://api.github.com/repos/shirou93/Notki/tarball/'):
++             raise APIError('Nieprawidłowy URL aktualizacji.', 400)
+         req = urllib.request.Request(tarball_url)
+         try:
+             with urllib.request.urlopen(req, timeout=30) as response:
+                 archive_bytes = response.read()
+@@ -737,6 +741,12 @@
+                     parts = member.name.split('/', 1)
+                     if len(parts) > 1:
+                         member.name = parts[1]
++                        # Prevent Path Traversal (Tar Slip)
++                        try:
++                            target_path = (ROOT / member.name).resolve()
++                            if not target_path.is_relative_to(ROOT):
++                                continue # Skip malicious paths
++                        except ValueError:
++                            continue
+                         archive.extract(member, path=ROOT)
+         except Exception:
+             raise APIError('Nie udało się wyodrębnić plików.', 500)
