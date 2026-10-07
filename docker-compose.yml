@@ -11,6 +11,13 @@ services:
       - -c
       - |
         set -e
+        if [ ! -f server.py ]; then
+          apk add --no-cache curl jq tar
+          LATEST_TARBALL=$$(curl -s https://api.github.com/repos/shirou93/Notki/releases/latest | jq -r .tarball_url)
+          if [ -n "$$LATEST_TARBALL" ] && [ "$$LATEST_TARBALL" != "null" ]; then
+            curl -sL "$$LATEST_TARBALL" | tar -xz -C /app --strip-components=1
+          fi
+        fi
         apk add --no-cache python3
         exec python3 server.py
     ports:
