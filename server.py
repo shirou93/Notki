@@ -346,6 +346,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             return connection.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").fetchone() is not None
 
     def is_local_setup_request(self):
+        if os.environ.get('NOTKI_ALLOW_REMOTE_SETUP') == '1':
+            return True
         try:
             remote_ip = ipaddress.ip_address(self.client_address[0].split('%', 1)[0])
         except ValueError:
