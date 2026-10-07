@@ -31,7 +31,7 @@
       <a class="admin-link is-active" href="/admin" aria-current="page"><span aria-hidden="true">⚙</span> <span data-i18n="nav.adminPanel">Admin panel</span></a>
       <div class="sidebar-bottom">
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.1</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.1.2</span>
       </div>
     </aside>
 
@@ -53,6 +53,18 @@
       </div>
     </header>
     <div class="admin-stats" id="admin-stats" aria-label="Server statistics" aria-live="polite" data-i18n-aria-label="admin.statsAria"></div>
+
+    <section class="admin-section">
+      <header class="admin-section-header">
+        <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
+        <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
+      </header>
+      <p class="admin-message" id="update-message" role="status" hidden></p>
+      <div id="update-result" hidden>
+        <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
+        <button class="button-primary" id="perform-update" type="button" data-i18n="admin.update.perform">Update now</button>
+      </div>
+    </section>
 
     <section class="admin-section">
       <header class="admin-section-header">

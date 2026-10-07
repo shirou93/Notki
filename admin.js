@@ -181,6 +181,64 @@
     }
   }
 
+  let currentTarballUrl = null;
+
+  document.querySelector('#check-update').addEventListener('click', async event => {
+    const button = event.currentTarget;
+    const message = document.querySelector('#update-message');
+    const resultDiv = document.querySelector('#update-result');
+
+    button.disabled = true;
+    message.hidden = true;
+    resultDiv.hidden = true;
+
+    try {
+      const result = await api('/api/admin/update/check');
+      if (result.updateAvailable) {
+        document.querySelector('#update-latest-version').textContent = result.latestVersion;
+        currentTarballUrl = result.tarballUrl;
+        resultDiv.hidden = false;
+      } else {
+        message.textContent = t('admin.update.upToDate');
+        message.classList.remove('is-error');
+        message.hidden = false;
+      }
+    } catch (error) {
+      message.textContent = error.message;
+      message.classList.add('is-error');
+      message.hidden = false;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector('#perform-update').addEventListener('click', async event => {
+    const button = event.currentTarget;
+    const message = document.querySelector('#update-message');
+
+    if (!currentTarballUrl) return;
+
+    button.disabled = true;
+    message.hidden = true;
+    message.classList.remove('is-error');
+    message.textContent = t('admin.update.updating');
+    message.hidden = false;
+
+    try {
+      await api('/api/admin/update/perform', {
+        method: 'POST',
+        body: JSON.stringify({ tarballUrl: currentTarballUrl })
+      });
+      message.textContent = t('admin.update.success');
+      // Reload after short delay to show success message
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (error) {
+      message.textContent = error.message;
+      message.classList.add('is-error');
+      button.disabled = false;
+    }
+  });
+
   document.querySelector('#create-invite').addEventListener('click', async () => {
     const message = document.querySelector('#invite-message');
     message.hidden = true;
