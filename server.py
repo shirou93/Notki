@@ -22,7 +22,7 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.1.7'
+VERSION = '0.1.1.8'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -34,7 +34,8 @@ BACKUP_FILENAME_PATTERN = re.compile(r'^notki-server-\d{8}-\d{6}Z-[a-f0-9]{8}\.t
 NOTE_COLORS = {'default', 'mint', 'lemon', 'peach', 'lilac', 'sky'}
 AVATAR_PATTERN = re.compile(r'^data:image/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$')
 MAX_AVATAR_CHARS = 2_900_000
-STATIC_FILES = {'index.html', 'admin.html', 'admin.js', 'app.js', 'i18n.js', 'theme.js', 'setup.html', 'setup.js', 'styles.css'}
+STATIC_FILES = {
+    'manifest.json', 'index.html', 'admin.html', 'admin.js', 'app.js', 'i18n.js', 'theme.js', 'setup.html', 'setup.js', 'styles.css'}
 TRANSLATION_FILES = {'translations/pl.js', 'translations/en.js'}
 DEFAULT_LANGUAGE = 'en'
 SUPPORTED_LANGUAGES = ('pl', 'en')
@@ -301,6 +302,27 @@ class APIError(Exception):
         self.status = status
 
 
+import subprocess
+
+def aes_encrypt(data, password_str):
+    proc = subprocess.run(
+        ['openssl', 'enc', '-aes-256-cbc', '-pbkdf2', '-pass', f'pass:{password_str}'],
+        input=data,
+        capture_output=True,
+        check=True
+    )
+    return proc.stdout
+
+def aes_decrypt(data, password_str):
+    proc = subprocess.run(
+        ['openssl', 'enc', '-d', '-aes-256-cbc', '-pbkdf2', '-pass', f'pass:{password_str}'],
+        input=data,
+        capture_output=True,
+        check=True
+    )
+    return proc.stdout
+
+
 class NotkiHandler(BaseHTTPRequestHandler):
     server_version = f'NotkiServer/{VERSION}'
 
@@ -498,9 +520,24 @@ class NotkiHandler(BaseHTTPRequestHandler):
             self.check_origin()
             path = urlsplit(self.path).path
             if path == '/api/setup/import-backup':
-                if self.headers.get('Content-Type', '').split(';', 1)[0].strip() not in ('application/gzip', 'application/x-gzip'):
-                    raise APIError('Oczekiwano archiwum .tgz.', 415)
-                self.import_snapshot_archive(self.read_body(MAX_SNAPSHOT_BYTES))
+                # Since setup.js sends FormData, we must read the multipart request
+                import cgi
+                ctype, pdict = cgi.parse_header(self.headers.get('Content-Type'))
+                if ctype == 'multipart/form-data':
+                    pdict['boundary'] = bytes(pdict['boundary'], 'utf-8')
+                    pdict['CONTENT-LENGTH'] = int(self.headers.get('Content-Length', 0))
+                    fields = cgi.parse_multipart(self.rfile, pdict)
+                    archive_bytes = fields.get('archive', [b''])[0]
+                    password = fields.get('password', [b''])[0].decode('utf-8')
+                    if not archive_bytes:
+                        raise APIError('Brak archiwum w żądaniu.', 400)
+                    if len(archive_bytes) > MAX_SNAPSHOT_BYTES:
+                        raise APIError('Plik backupu przekracza limit rozmiaru.', 413)
+                    self.import_snapshot_archive(archive_bytes, password if password else None)
+                else:
+                    if ctype not in ('application/gzip', 'application/x-gzip'):
+                        raise APIError('Oczekiwano archiwum .tgz lub multipart/form-data.', 415)
+                    self.import_snapshot_archive(self.read_body(MAX_SNAPSHOT_BYTES))
                 return
             payload = self.read_json(MAX_SNAPSHOT_BYTES if path == '/api/setup/import' else MAX_REQUEST_BYTES)
             if path == '/api/login':
@@ -524,13 +561,13 @@ class NotkiHandler(BaseHTTPRequestHandler):
             elif path == '/api/admin/invites':
                 self.create_invite()
             elif path == '/api/admin/backups':
-                self.create_server_backup()
+                self.create_server_backup(payload)
             elif path.startswith('/api/admin/backups/'):
                 match = re.fullmatch(r'/api/admin/backups/([^/]+)/restore', path)
                 if not match:
                     self.send_error_json('Nie znaleziono endpointu.', 404)
                 else:
-                    self.restore_server_backup(match.group(1))
+                    self.restore_server_backup(match.group(1), payload)
             elif path == '/api/admin/update/perform':
                 self.perform_update(payload)
             else:
@@ -624,7 +661,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
         }
         return snapshot
 
-    def create_server_backup(self):
+    def create_server_backup(self, payload=None):
+        payload = payload or {}
+        password = payload.get('password')
         self.require_user(admin=True)
         created_at = utc_now()
         snapshot_bytes = json.dumps(self.build_snapshot(), ensure_ascii=False, separators=(',', ':')).encode('utf-8')
@@ -638,6 +677,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
             member.mode = 0o600
             archive.addfile(member, io.BytesIO(snapshot_bytes))
 
+        backup_bytes = archive_buffer.getvalue()
+        if password:
+            backup_bytes = aes_encrypt(backup_bytes, password)
+
         backup_dir = backup_directory()
         backup_dir.mkdir(parents=True, exist_ok=True)
         filename = f"notki-server-{created_at.strftime('%Y%m%d-%H%M%SZ')}-{secrets.token_hex(4)}.tgz"
@@ -645,7 +688,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         temporary_path = backup_dir / f'.{secrets.token_hex(16)}.tmp'
         try:
             with temporary_path.open('xb') as stream:
-                stream.write(archive_buffer.getvalue())
+                stream.write(backup_bytes)
             os.replace(temporary_path, backup_path)
         except OSError as error:
             temporary_path.unlink(missing_ok=True)
@@ -712,13 +755,18 @@ class NotkiHandler(BaseHTTPRequestHandler):
             connection.execute('DELETE FROM users WHERE id = ?', (user_id,))
         self.send_json({'deleted': user_id})
 
-    def restore_server_backup(self, filename):
+    def restore_server_backup(self, filename, payload=None):
+        payload = payload or {}
         self.require_user(admin=True)
         path = self.find_server_backup(filename)
         if path.stat().st_size > MAX_SNAPSHOT_BYTES:
             raise APIError('Plik backupu przekracza limit rozmiaru.', 413)
         try:
-            snapshot = self.snapshot_from_archive(path.read_bytes())
+            archive_bytes = path.read_bytes()
+            password = payload.get('password')
+            if password:
+                archive_bytes = aes_decrypt(archive_bytes, password)
+            snapshot = self.snapshot_from_archive(archive_bytes)
         except OSError as error:
             raise APIError('Nie można odczytać archiwum backupu.') from error
         self.restore_snapshot(snapshot, replace_existing=True)
@@ -749,6 +797,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
         tarball_url = payload.get('tarballUrl')
         if not tarball_url:
             raise APIError('Brak adresu tarball w odpowiedzi.', 400)
+        if not tarball_url.startswith('https://api.github.com/repos/shirou93/Notki/tarball/'):
+            raise APIError('Nieprawidłowy URL aktualizacji.', 400)
+
 
         # Verify it's a valid Github API tarball URL for the project
         if not tarball_url.startswith('https://api.github.com/repos/shirou93/Notki/tarball/'):
@@ -800,9 +851,11 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
         self.send_json({'success': True})
 
-    def import_snapshot_archive(self, archive_bytes):
+    def import_snapshot_archive(self, archive_bytes, password=None):
         if not self.is_local_setup_request():
             raise APIError('Import snapshotu jest dostępny tylko lokalnie.', 403)
+        if password:
+            archive_bytes = aes_decrypt(archive_bytes, password)
         self.restore_snapshot(self.snapshot_from_archive(archive_bytes), replace_existing=False)
 
     @staticmethod
@@ -1277,7 +1330,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         self.send_json({'saved': True})
 
     def serve_static(self, filename):
-        if filename not in STATIC_FILES and filename not in TRANSLATION_FILES:
+        if filename not in STATIC_FILES and filename not in TRANSLATION_FILES and filename != 'manifest.json':
             self.send_error_json('Nie znaleziono pliku.', 404)
             return
         file_path = ROOT / filename

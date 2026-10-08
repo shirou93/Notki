@@ -106,6 +106,7 @@
       const empty = tableCell(t('admin.backups.empty'));
       empty.colSpan = 4;
       empty.className = 'admin-empty-cell';
+      empty.style.textAlign = 'center';
       row.append(empty);
       body.replaceChildren(row);
       return;
@@ -393,12 +394,27 @@
     }
   });
 
+
+  document.querySelector('#backup-unencrypted-toggle')?.addEventListener('change', event => {
+    const pwdInput = document.querySelector('#backup-password');
+    if (pwdInput) pwdInput.disabled = event.target.checked;
+  });
+
   document.querySelector('#create-backup').addEventListener('click', async event => {
     const button = event.currentTarget;
+    const isUnencrypted = document.querySelector('#backup-unencrypted-toggle')?.checked;
+    const password = document.querySelector('#backup-password')?.value || '';
+    if (!isUnencrypted && !password) {
+      setBackupMessage(t('admin.backups.passwordRequired'), true);
+      return;
+    }
     button.disabled = true;
     setBackupMessage(t('admin.backups.creating'));
     try {
-      const backup = await api('/api/admin/backups', { method: 'POST', body: '{}' });
+      const backup = await api('/api/admin/backups', {
+        method: 'POST',
+        body: JSON.stringify({ password: isUnencrypted ? null : password })
+      });
       setBackupMessage(t('admin.backups.created', { filename: backup.filename }));
       await refresh();
     } catch (error) {

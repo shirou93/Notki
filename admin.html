@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="manifest.json">
   <script src="translations/pl.js" defer></script>
   <script src="translations/en.js" defer></script>
   <script src="i18n.js" defer></script>
@@ -31,7 +32,7 @@
       </nav>
       <div class="sidebar-bottom">
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.1.7</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.1.8</span>
       </div>
     </aside>
 
@@ -39,7 +40,7 @@
       <header class="topbar">
         <div class="breadcrumbs"><span data-i18n="topbar.breadcrumb">YOUR NOTEBOOK</span><span class="breadcrumb-slash">/</span><span data-i18n="nav.adminPanel">Admin panel</span></div>
         <div class="topbar-actions">
-          <button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle data-theme-icon-light="☾" data-theme-icon-dark="☀" aria-label="Enable dark theme" title="Enable dark theme" aria-pressed="false"><span aria-hidden="true">☾</span></button>
+
           <details class="settings-menu" id="settings-menu">
             <summary class="avatar" id="avatar" aria-label="Local profile" title="Local profile" data-i18n-aria-label="topbar.profile" data-i18n-title="topbar.profile">N</summary>
             <div class="settings-popover" role="group" aria-label="Account" data-i18n-aria-label="topbar.account">
@@ -79,10 +80,15 @@
     <section class="admin-section">
       <header class="admin-section-header">
         <div><h2 data-i18n="admin.backups.title">Server-wide backups</h2><p data-i18n="admin.backups.description">Archives contain accounts, notes, and invitations. Sessions are not saved.</p></div>
+        <label class="field-label" style="display: flex; align-items: center; gap: 8px;"><input type="checkbox" id="backup-unencrypted-toggle"> <span data-i18n="admin.backups.allowUnencrypted">Allow unencrypted backup</span></label>
+        <input class="auth-input" id="backup-password" type="password" data-i18n-placeholder="admin.backups.passwordPlaceholder" style="margin-top: 5px; margin-bottom: 10px;">
         <button class="button-primary" id="create-backup" type="button" data-i18n="admin.backups.create">+ Create .tgz backup</button>
       </header>
       <p class="admin-message" id="backup-message" role="status" hidden></p>
       <div class="admin-table-wrap">
+        <div style="padding: 10px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px;">
+          <input class="auth-input" id="restore-password" type="password" data-i18n-placeholder="admin.backups.passwordPlaceholder" style="max-width: 250px;" placeholder="Backup password (if any)">
+        </div>
         <table class="admin-table">
           <thead><tr><th data-i18n="admin.table.file">FILE</th><th data-i18n="admin.table.created">CREATED</th><th data-i18n="admin.table.size">SIZE</th><th data-i18n="admin.table.actions">ACTIONS</th></tr></thead>
           <tbody id="server-backups"></tbody>
@@ -146,6 +152,8 @@
       <p class="auth-message" id="avatar-message" role="alert" hidden></p>
       <label class="field-label" for="profile-language" data-i18n="topbar.language">LANGUAGE</label>
       <select class="auth-input profile-select" id="profile-language" data-language-select aria-label="Change language" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option></select>
+      <label class="field-label" for="profile-theme" data-i18n="topbar.themeLabel">THEME</label>
+      <select class="auth-input profile-select" id="profile-theme" data-theme-select aria-label="Change theme" data-i18n-aria-label="theme.switch"><option value="system" data-i18n="theme.system">System</option><option value="light" data-i18n="theme.light">Light</option><option value="dark" data-i18n="theme.dark">Dark</option></select>
       <form class="profile-form" id="password-form">
         <p class="field-label" data-i18n="topbar.changePassword">CHANGE PASSWORD</p>
         <label class="field-label" for="current-password" data-i18n="topbar.currentPassword">CURRENT PASSWORD</label>

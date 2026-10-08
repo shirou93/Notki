@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="manifest.json">
   <script src="translations/pl.js" defer></script>
   <script src="translations/en.js" defer></script>
   <script src="i18n.js" defer></script>
@@ -59,7 +60,7 @@
       </nav>
       <div class="sidebar-bottom">
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.1.7</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.1.8</span>
       </div>
     </aside>
 
@@ -68,7 +69,7 @@
         <div class="breadcrumbs"><span data-i18n="topbar.breadcrumb">YOUR NOTEBOOK</span><span class="breadcrumb-slash">/</span><span id="breadcrumb-view">All</span></div>
         <div class="topbar-actions">
           <label class="search-box" for="search-input"><span class="search-icon" aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="Search notes" autocomplete="off" data-i18n-placeholder="topbar.search"><kbd>⌘ K</kbd></label>
-          <button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle data-theme-icon-light="☾" data-theme-icon-dark="☀" aria-label="Enable dark theme" title="Enable dark theme" aria-pressed="false"><span aria-hidden="true">☾</span></button>
+
           <details class="settings-menu" id="settings-menu">
             <summary class="avatar" id="avatar" aria-label="Local profile" title="Local profile" data-i18n-aria-label="topbar.profile" data-i18n-title="topbar.profile">N</summary>
             <div class="settings-popover" role="group" aria-label="Account" data-i18n-aria-label="topbar.account">
@@ -133,6 +134,8 @@
       <p class="auth-message" id="avatar-message" role="alert" hidden></p>
       <label class="field-label" for="profile-language" data-i18n="topbar.language">LANGUAGE</label>
       <select class="auth-input profile-select" id="profile-language" data-language-select aria-label="Change language" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option></select>
+      <label class="field-label" for="profile-theme" data-i18n="topbar.themeLabel">THEME</label>
+      <select class="auth-input profile-select" id="profile-theme" data-theme-select aria-label="Change theme" data-i18n-aria-label="theme.switch"><option value="system" data-i18n="theme.system">System</option><option value="light" data-i18n="theme.light">Light</option><option value="dark" data-i18n="theme.dark">Dark</option></select>
       <form class="profile-form" id="password-form">
         <p class="field-label" data-i18n="topbar.changePassword">CHANGE PASSWORD</p>
         <label class="field-label" for="current-password" data-i18n="topbar.currentPassword">CURRENT PASSWORD</label>
