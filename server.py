@@ -550,10 +550,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 self.delete_share(user, share_match.group(1), int(share_match.group(2)))
                 return
             match = re.fullmatch(r'/api/admin/backups/([^/]+)', path)
-            if not match:
-                self.send_error_json('Nie znaleziono endpointu.', 404)
+            if match:
+                self.delete_server_backup(match.group(1))
                 return
-            self.delete_server_backup(match.group(1))
+            user_match = re.fullmatch(r'/api/admin/users/(\d+)', path)
+            if user_match:
+                self.delete_user(int(user_match.group(1)))
+                return
+            self.send_error_json('Nie znaleziono endpointu.', 404)
         except APIError as error:
             self.send_error_json(str(error), error.status)
 
@@ -696,6 +700,17 @@ class NotkiHandler(BaseHTTPRequestHandler):
         path = self.find_server_backup(filename)
         path.unlink()
         self.send_json({'deleted': filename})
+
+    def delete_user(self, user_id):
+        admin = self.require_user(admin=True)
+        if admin['id'] == user_id:
+            raise APIError('Nie możesz usunąć własnego konta z panelu administratora.', 400)
+        with database() as connection:
+            row = connection.execute('SELECT id FROM users WHERE id = ?', (user_id,)).fetchone()
+            if not row:
+                raise APIError('Nie znaleziono użytkownika.', 404)
+            connection.execute('DELETE FROM users WHERE id = ?', (user_id,))
+        self.send_json({'deleted': user_id})
 
     def restore_server_backup(self, filename):
         self.require_user(admin=True)

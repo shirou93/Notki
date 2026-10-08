@@ -237,6 +237,8 @@ window.notkiTranslations.en = {
   'admin.table.actions': 'ACTIONS',
   'admin.users.title': 'Users',
   'admin.users.description': 'Account list with the number of assigned notes.',
+  'admin.users.delete': 'Delete user',
+  'admin.users.confirmDelete': 'Are you sure you want to delete this user? All their data will be permanently removed.',
   'admin.table.email': 'E-MAIL',
   'admin.table.role': 'ROLE',
   'admin.table.notes': 'NOTES',

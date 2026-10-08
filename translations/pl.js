@@ -243,6 +243,8 @@ window.notkiTranslations.pl = {
   'admin.table.actions': 'AKCJE',
   'admin.users.title': 'Użytkownicy',
   'admin.users.description': 'Lista kont i liczba przypisanych notatek.',
+  'admin.users.delete': 'Usuń użytkownika',
+  'admin.users.confirmDelete': 'Czy na pewno chcesz usunąć tego użytkownika? Wszystkie jego dane zostaną trwale usunięte.',
   'admin.table.email': 'E-MAIL',
   'admin.table.role': 'ROLA',
   'admin.table.notes': 'NOTATKI',
