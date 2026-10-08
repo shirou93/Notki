@@ -27,11 +27,11 @@
         <a class="nav-item" href="/#pinned"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6l-3 3v2h10v-2l-3-3V3"/><path d="M12 14v7"/></svg></span><span data-i18n="nav.pinned">Pinned</span></a>
         <a class="nav-item" href="/#archive"><span class="nav-icon" aria-hidden="true">▣</span><span data-i18n="nav.archive">Archive</span></a>
         <a class="nav-item" href="/#trash"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></span><span data-i18n="nav.trash">Trash</span></a>
+        <a class="nav-item is-active" href="/admin" aria-current="page"><span class="nav-icon" aria-hidden="true">⚙</span><span data-i18n="nav.adminPanel">Admin panel</span></a>
       </nav>
-      <a class="admin-link is-active" href="/admin" aria-current="page"><span aria-hidden="true">⚙</span> <span data-i18n="nav.adminPanel">Admin panel</span></a>
       <div class="sidebar-bottom">
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.1.4</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.1.5</span>
       </div>
     </aside>
 
@@ -39,13 +39,14 @@
       <header class="topbar">
         <div class="breadcrumbs"><span data-i18n="topbar.breadcrumb">YOUR NOTEBOOK</span><span class="breadcrumb-slash">/</span><span data-i18n="nav.adminPanel">Admin panel</span></div>
         <div class="topbar-actions">
-          <button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle data-theme-icon-light="☾︎" data-theme-icon-dark="☀︎" aria-label="Enable dark theme" title="Enable dark theme" aria-pressed="false"><span aria-hidden="true">☾︎</span></button>
+          <button class="theme-toggle" id="theme-toggle" type="button" data-theme-toggle data-theme-icon-light="☾" data-theme-icon-dark="☀" aria-label="Enable dark theme" title="Enable dark theme" aria-pressed="false"><span aria-hidden="true">☾</span></button>
           <details class="settings-menu" id="settings-menu">
             <summary class="avatar" id="avatar" aria-label="Local profile" title="Local profile" data-i18n-aria-label="topbar.profile" data-i18n-title="topbar.profile">N</summary>
             <div class="settings-popover" role="group" aria-label="Account" data-i18n-aria-label="topbar.account">
               <span class="settings-heading" data-i18n="topbar.account">ACCOUNT</span>
               <div class="data-actions">
-                <a class="data-action" id="admin-link" href="/" ><span class="action-icon" aria-hidden="true">▤</span><span class="action-label" data-i18n="nav.all">All notes</span></a>
+                <button class="data-action" id="profile-button" type="button"><span class="action-icon" aria-hidden="true">◍</span><span class="action-label" data-i18n="topbar.profileMenu">Profile</span></button>
+                <a class="data-action" id="notes-link" href="/"><span class="action-icon" aria-hidden="true">▤</span><span class="action-label" data-i18n="nav.all">All notes</span></a>
                 <button class="data-action" id="logout-button" type="button"><span class="action-icon" aria-hidden="true">↪</span><span class="action-label" data-i18n="topbar.logout">Sign out</span></button>
               </div>
             </div>
@@ -123,5 +124,43 @@
       </div>
     </main>
   </div>
+
+  <div class="modal-backdrop" id="profile-backdrop" hidden></div>
+  <section class="profile-panel" id="profile-panel" role="dialog" aria-modal="true" aria-labelledby="profile-title" aria-hidden="true" hidden>
+    <div class="profile-topbar">
+      <h2 class="profile-title" id="profile-title" data-i18n="topbar.profileTitle">Profile</h2>
+      <button class="icon-button editor-close" id="close-profile" type="button" aria-label="Close" title="Close" data-i18n-aria-label="topbar.close" data-i18n-title="topbar.close">×</button>
+    </div>
+    <div class="profile-content">
+      <p class="profile-account" id="profile-account"></p>
+      <p class="profile-description" data-i18n="topbar.profileDescription">Change the interface language or your account password.</p>
+      <div class="profile-avatar">
+        <span class="profile-avatar-preview" id="profile-avatar-preview" aria-hidden="true">N</span>
+        <div class="profile-avatar-actions">
+          <button class="button-secondary" id="avatar-upload" type="button" data-i18n="topbar.uploadAvatar">Upload avatar</button>
+          <button class="button-secondary" id="avatar-remove" type="button" data-i18n="topbar.removeAvatar">Remove avatar</button>
+        </div>
+      </div>
+      <input id="avatar-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+      <small class="setup-hint" data-i18n="topbar.avatarHint">PNG, JPEG, WebP or GIF, up to 2 MB.</small>
+      <p class="auth-message" id="avatar-message" role="alert" hidden></p>
+      <label class="field-label" for="profile-language" data-i18n="topbar.language">LANGUAGE</label>
+      <select class="auth-input profile-select" id="profile-language" data-language-select aria-label="Change language" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option></select>
+      <form class="profile-form" id="password-form">
+        <p class="field-label" data-i18n="topbar.changePassword">CHANGE PASSWORD</p>
+        <label class="field-label" for="current-password" data-i18n="topbar.currentPassword">CURRENT PASSWORD</label>
+        <input class="auth-input" id="current-password" type="password" autocomplete="current-password" required>
+        <label class="field-label" for="new-password" data-i18n="topbar.newPassword">NEW PASSWORD</label>
+        <input class="auth-input" id="new-password" type="password" autocomplete="new-password" required minlength="12" aria-describedby="profile-password-hint">
+        <small class="setup-hint" id="profile-password-hint" data-i18n="topbar.passwordHint">At least 12 characters.</small>
+        <label class="field-label" for="confirm-password" data-i18n="topbar.confirmPassword">CONFIRM NEW PASSWORD</label>
+        <input class="auth-input" id="confirm-password" type="password" autocomplete="new-password" required minlength="12">
+        <p class="auth-message" id="profile-message" role="alert" hidden></p>
+        <button class="button-primary" type="submit" data-i18n="topbar.changePassword">CHANGE PASSWORD</button>
+      </form>
+    </div>
+  </section>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

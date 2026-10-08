@@ -166,6 +166,104 @@
     }
   }
 
+  let currentUser = null;
+  let toastTimeout;
+
+  function showToast(message) {
+    const toast = document.querySelector('#toast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.add('is-visible');
+    window.clearTimeout(toastTimeout);
+    toastTimeout = window.setTimeout(() => toast.classList.remove('is-visible'), 3200);
+  }
+
+  function renderAvatar(user) {
+    if (!user) return;
+    const initial = (user.email || '?').slice(0, 1).toUpperCase();
+    const avatarUrl = user.avatar || '';
+    const avatarNode = document.querySelector('#avatar');
+    const avatarPreviewNode = document.querySelector('#profile-avatar-preview');
+
+    for (const node of [avatarNode, avatarPreviewNode]) {
+      if (!node) continue;
+      node.textContent = avatarUrl ? '' : initial;
+      node.style.backgroundImage = avatarUrl ? `url("${avatarUrl}")` : '';
+      node.classList.toggle('has-image', Boolean(avatarUrl));
+    }
+    if (avatarNode) {
+      avatarNode.title = user.email;
+      avatarNode.setAttribute('aria-label', t('topbar.accountAria', { email: user.email }));
+    }
+    if (avatarPreviewNode) {
+      avatarPreviewNode.title = user.email;
+    }
+  }
+
+  function openProfile() {
+    const profileMessage = document.querySelector('#profile-message');
+    const avatarMessage = document.querySelector('#avatar-message');
+    const passwordForm = document.querySelector('#password-form');
+    const profilePanel = document.querySelector('#profile-panel');
+    const profileBackdrop = document.querySelector('#profile-backdrop');
+
+    if (profileMessage) {
+      profileMessage.hidden = true;
+      profileMessage.classList.remove('is-error');
+    }
+    if (avatarMessage) {
+      avatarMessage.hidden = true;
+      avatarMessage.classList.remove('is-error');
+    }
+    if (passwordForm) passwordForm.reset();
+    if (profilePanel && profileBackdrop) {
+      profilePanel.hidden = false;
+      profilePanel.classList.add('is-open');
+      profilePanel.setAttribute('aria-hidden', 'false');
+      profileBackdrop.hidden = false;
+      document.body.style.overflow = 'hidden';
+      window.setTimeout(() => document.querySelector('#current-password')?.focus(), 180);
+    }
+  }
+
+  function closeProfile() {
+    const profilePanel = document.querySelector('#profile-panel');
+    const profileBackdrop = document.querySelector('#profile-backdrop');
+    if (profilePanel && profileBackdrop) {
+      profilePanel.classList.remove('is-open');
+      profilePanel.setAttribute('aria-hidden', 'true');
+      profilePanel.hidden = true;
+      profileBackdrop.hidden = true;
+      document.body.style.overflow = '';
+    }
+  }
+
+  const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+
+  function showAvatarMessage(message, isError) {
+    const element = document.querySelector('#avatar-message');
+    if (!element) return;
+    element.textContent = message;
+    element.classList.toggle('is-error', Boolean(isError));
+    element.hidden = !message;
+  }
+
+  async function saveAvatar(avatar) {
+    try {
+      const result = await api('/api/account/avatar', {
+        method: 'POST',
+        body: JSON.stringify({ avatar }),
+      });
+      if (currentUser) {
+        currentUser.avatar = result.avatar;
+        renderAvatar(currentUser);
+      }
+      showAvatarMessage(t(result.avatar ? 'topbar.avatarSaved' : 'topbar.avatarRemoved'), false);
+    } catch (error) {
+      showAvatarMessage(t('topbar.avatarFailed', { message: error.message }), true);
+    }
+  }
+
   async function start() {
     try {
       const { user } = await api('/api/session');
@@ -173,17 +271,12 @@
         window.location.replace('/');
         return;
       }
+      currentUser = user;
       document.querySelector('#admin-account').textContent = user.email;
+      const profileAccount = document.querySelector('#profile-account');
+      if (profileAccount) profileAccount.textContent = user.email;
 
-      const avatar = document.querySelector('#avatar');
-      if (avatar) {
-        avatar.textContent = user.avatar ? '' : (user.email || '?').slice(0, 1).toUpperCase();
-        avatar.style.backgroundImage = user.avatar ? `url("${user.avatar}")` : '';
-        avatar.classList.toggle('has-image', Boolean(user.avatar));
-        avatar.title = user.email;
-        avatar.setAttribute('aria-label', t('topbar.accountAria', { email: user.email }));
-      }
-
+      renderAvatar(user);
       await refresh();
     } catch (error) {
       document.querySelector('#admin-message').textContent = error.message;
@@ -293,6 +386,68 @@
     }
   });
 
+  document.querySelector('#profile-button')?.addEventListener('click', () => {
+    const menu = document.querySelector('#settings-menu');
+    if (menu) menu.open = false;
+    openProfile();
+  });
+  document.querySelector('#close-profile')?.addEventListener('click', closeProfile);
+  document.querySelector('#profile-backdrop')?.addEventListener('click', closeProfile);
+
+  document.querySelector('#password-form')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const current = document.querySelector('#current-password').value;
+    const next = document.querySelector('#new-password').value;
+    const confirmation = document.querySelector('#confirm-password').value;
+    const showProfileMessage = (message, isError) => {
+      const element = document.querySelector('#profile-message');
+      if (!element) return;
+      element.textContent = message;
+      element.classList.toggle('is-error', Boolean(isError));
+      element.hidden = false;
+    };
+    if (next !== confirmation) {
+      showProfileMessage(t('topbar.passwordMismatch'), true);
+      return;
+    }
+    try {
+      await api('/api/account/password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword: current, newPassword: next }),
+      });
+      document.querySelector('#password-form').reset();
+      showProfileMessage(t('topbar.passwordChanged'), false);
+      showToast(t('topbar.passwordChanged'));
+    } catch (error) {
+      showProfileMessage(t('topbar.passwordChangeFailed', { message: error.message }), true);
+    }
+  });
+
+  document.querySelector('#avatar-upload')?.addEventListener('click', () => {
+    document.querySelector('#avatar-input')?.click();
+  });
+
+  document.querySelector('#avatar-input')?.addEventListener('change', () => {
+    const input = document.querySelector('#avatar-input');
+    const file = input?.files?.[0];
+    if (input) input.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showAvatarMessage(t('topbar.avatarInvalidType'), true);
+      return;
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      showAvatarMessage(t('topbar.avatarTooLarge'), true);
+      return;
+    }
+    const reader = new FileReader();
+    reader.addEventListener('load', () => saveAvatar(reader.result));
+    reader.addEventListener('error', () => showAvatarMessage(t('topbar.avatarReadFailed'), true));
+    reader.readAsDataURL(file);
+  });
+
+  document.querySelector('#avatar-remove')?.addEventListener('click', () => saveAvatar(null));
+
   document.querySelector('#logout-button').addEventListener('click', async () => {
     try {
       await api('/api/logout', { method: 'POST', body: '{}' });
@@ -309,7 +464,23 @@
     }
   });
 
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      const profilePanel = document.querySelector('#profile-panel');
+      if (profilePanel && !profilePanel.hidden && profilePanel.classList.contains('is-open')) {
+        closeProfile();
+        return;
+      }
+      const menu = document.querySelector('#settings-menu');
+      if (menu && menu.open) {
+        menu.open = false;
+        return;
+      }
+    }
+  });
+
   window.i18n.onChange(() => {
+    renderAvatar(currentUser);
     if (document.querySelector('#admin-account').textContent) refresh().catch(() => {});
   });
 
