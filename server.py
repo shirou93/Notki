@@ -706,13 +706,23 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def check_update(self):
         self.require_user(admin=True)
-        req = urllib.request.Request('https://api.github.com/repos/shirou93/Notki/releases/latest')
+        req = urllib.request.Request('https://api.github.com/repos/shirou93/Notki/tags')
+        req.add_header('User-Agent', 'Notki-App')
         try:
             with urllib.request.urlopen(req, timeout=10) as response:
-                data = json.loads(response.read().decode('utf-8'))
-                latest_version = data.get('tag_name', '').lstrip('v')
-                if latest_version and latest_version != VERSION:
-                    self.send_json({'updateAvailable': True, 'latestVersion': latest_version, 'tarballUrl': data.get('tarball_url')})
+                tags = json.loads(response.read().decode('utf-8'))
+                if not tags:
+                    self.send_json({'updateAvailable': False})
+                    return
+
+                def parse_version(v):
+                    return tuple(int(x) for x in re.findall(r'\d+', str(v)))
+
+                latest_tag = max(tags, key=lambda t: parse_version(t.get('name', '')))
+                latest_version = latest_tag.get('name', '').lstrip('v')
+
+                if latest_version and parse_version(latest_version) > parse_version(VERSION):
+                    self.send_json({'updateAvailable': True, 'latestVersion': latest_version, 'tarballUrl': latest_tag.get('tarball_url')})
                 else:
                     self.send_json({'updateAvailable': False})
         except Exception:
@@ -729,6 +739,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('Nieprawidłowy adres pobierania.', 400)
 
         req = urllib.request.Request(tarball_url)
+        req.add_header('User-Agent', 'Notki-App')
         try:
             with urllib.request.urlopen(req, timeout=30) as response:
                 archive_bytes = response.read()
