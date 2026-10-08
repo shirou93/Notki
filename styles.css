@@ -338,9 +338,9 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
   .topbar { height: 56px; }
   .breadcrumbs > span:first-child, .breadcrumb-slash { display: none; }
   .breadcrumbs { font-size: 8px; letter-spacing: .75px; }
-  .topbar-actions { gap: 10px; }
+  .topbar-actions { position: fixed; top: 10px; right: 14px; z-index: 10; gap: 10px; }
   .search-box { width: min(30vw, 150px); height: 34px; gap: 5px; padding: 0 7px; }
-  .search-box input { font-size: 11px; }
+  .search-box input { font-size: 16px; }
   .search-box kbd { display: none; }
   .settings-trigger, .theme-toggle { width: 34px; height: 34px; }
   .avatar { width: 29px; height: 29px; flex-basis: 29px; }
