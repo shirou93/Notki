@@ -40,6 +40,8 @@ services:
       # Set both to "1" when Notki is served through an HTTPS reverse proxy.
       NOTKI_COOKIE_SECURE: "0"
       NOTKI_PUBLIC_HTTPS: "0"
+      # Allow remote setup by default in Docker Compose since it's likely not accessed via localhost
+      NOTKI_ALLOW_REMOTE_SETUP: "1"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8000/api/setup/status"]
       interval: 30s
