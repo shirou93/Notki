@@ -38,14 +38,36 @@
     }));
   }
 
+  async function deleteUser(userId) {
+    if (!confirm(t('admin.users.confirmDelete'))) return;
+    try {
+      await api(`/api/admin/users/${userId}`, { method: 'DELETE' });
+      await refresh();
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
   function renderUsers(users) {
     const rows = users.map(user => {
       const row = document.createElement('tr');
+      const actions = document.createElement('td');
+      actions.className = 'admin-table-actions';
+      if (user.role !== 'admin') {
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'action-icon';
+        delBtn.textContent = '×';
+        delBtn.title = t('admin.users.delete');
+        delBtn.addEventListener('click', () => deleteUser(user.id));
+        actions.append(delBtn);
+      }
       row.append(
         tableCell(user.email),
         tableCell(t(user.role === 'admin' ? 'admin.role.admin' : 'admin.role.user')),
         tableCell(formatDate(user.createdAt)),
         tableCell(String(user.notes)),
+        actions
       );
       return row;
     });
