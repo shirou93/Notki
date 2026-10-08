@@ -174,6 +174,16 @@
         return;
       }
       document.querySelector('#admin-account').textContent = user.email;
+
+      const avatar = document.querySelector('#avatar');
+      if (avatar) {
+        avatar.textContent = user.avatar ? '' : (user.email || '?').slice(0, 1).toUpperCase();
+        avatar.style.backgroundImage = user.avatar ? `url("${user.avatar}")` : '';
+        avatar.classList.toggle('has-image', Boolean(user.avatar));
+        avatar.title = user.email;
+        avatar.setAttribute('aria-label', t('topbar.accountAria', { email: user.email }));
+      }
+
       await refresh();
     } catch (error) {
       document.querySelector('#admin-message').textContent = error.message;
@@ -283,12 +293,19 @@
     }
   });
 
-  document.querySelector('#admin-logout').addEventListener('click', async () => {
+  document.querySelector('#logout-button').addEventListener('click', async () => {
     try {
       await api('/api/logout', { method: 'POST', body: '{}' });
       window.location.replace('/');
     } catch (error) {
       document.querySelector('#admin-message').textContent = error.message;
+    }
+  });
+
+  document.addEventListener('click', event => {
+    const menu = document.querySelector('#settings-menu');
+    if (menu && menu.open && !menu.contains(event.target)) {
+      menu.open = false;
     }
   });
 
