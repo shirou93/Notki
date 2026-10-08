@@ -1135,6 +1135,33 @@
       if (event.target.closest('.card-drag, .card-pin, .card-share')) return;
       openEditor(note.id);
     });
+
+    card.addEventListener('change', event => {
+      if (event.target.matches('input[type="checkbox"]')) {
+        event.stopPropagation();
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = sanitizeRichHtml(note.body);
+        const checkboxes = [...wrapper.querySelectorAll('input[type="checkbox"]')];
+        const cardCheckboxes = [...card.querySelectorAll('input[type="checkbox"]')];
+        const index = cardCheckboxes.indexOf(event.target);
+        if (index > -1 && checkboxes[index]) {
+          if (event.target.checked) checkboxes[index].setAttribute('checked', '');
+          else checkboxes[index].removeAttribute('checked');
+          normalizeChecklistGroups(wrapper);
+          note.body = sanitizeRichHtml(wrapper.innerHTML);
+          note.updatedAt = new Date().toISOString();
+          if (shared && !readOnly) {
+            persistShared(note);
+          } else {
+            persist();
+          }
+          // Do not re-render immediately to avoid losing focus/layout jumps while clicking,
+          // except if we want the group to re-order instantly on the card.
+          // For now, re-render to reflect the completed state visually exactly.
+          render();
+        }
+      }
+    });
     return card;
   }
 
