@@ -72,7 +72,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .backup-filename { font-family: Consolas, 'Courier New', monospace; font-size: 11px !important; }
 .backup-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .backup-action { min-width: 32px; min-height: 30px; display: inline-grid; place-items: center; padding: 0 7px; font-size: 15px; }
-.admin-empty-cell { color: var(--muted); }
+.admin-empty-cell { color: var(--muted); text-align: center; }
 .invite-result { margin-top: 18px; padding: 15px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); }
 .invite-result label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 10px; font-weight: 700; }
 .invite-url-row { display: flex; gap: 8px; }
