@@ -22,7 +22,7 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.1.5'
+VERSION = '0.1.1.6'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -112,6 +112,10 @@ ENGLISH_MESSAGES = {
     'Nie udało się wyodrębnić plików.': 'Could not extract files.',
     'Nieprawidłowy adres pobierania.': 'Invalid download URL.',
 }
+
+
+def parse_version(version_str):
+    return tuple(int(x) for x in re.findall(r'\d+', str(version_str)))
 
 
 def parse_language(header_value):
@@ -715,9 +719,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     self.send_json({'updateAvailable': False})
                     return
 
-                def parse_version(v):
-                    return tuple(int(x) for x in re.findall(r'\d+', str(v)))
-
                 latest_tag = max(tags, key=lambda t: parse_version(t.get('name', '')))
                 latest_version = latest_tag.get('name', '').lstrip('v')
 
@@ -752,6 +753,24 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 if not members:
                     raise ValueError("Empty archive")
 
+                server_member = None
+                for member in members:
+                    parts = member.name.split('/', 1)
+                    rel_name = parts[1] if len(parts) > 1 else member.name
+                    if rel_name == 'server.py':
+                        server_member = member
+                        break
+
+                if server_member:
+                    extracted_file = archive.extractfile(server_member)
+                    if extracted_file:
+                        content = extracted_file.read().decode('utf-8', errors='ignore')
+                        match = re.search(r"^VERSION\s*=\s*['\"]([^'\"]+)['\"]", content, re.MULTILINE)
+                        if match:
+                            new_version = match.group(1)
+                            if parse_version(new_version) <= parse_version(VERSION):
+                                raise APIError('Brak nowszej wersji.', 400)
+
                 for member in members:
                     parts = member.name.split('/', 1)
                     if len(parts) > 1:
@@ -759,6 +778,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                         target_path = (ROOT / member.name).resolve()
                         if target_path.is_relative_to(ROOT):
                             archive.extract(member, path=ROOT)
+        except APIError:
+            raise
         except Exception:
             raise APIError('Nie udało się wyodrębnić plików.', 500)
 

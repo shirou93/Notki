@@ -5,6 +5,7 @@ import tarfile
 import tempfile
 import threading
 import unittest
+import unittest.mock
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError
@@ -401,6 +402,49 @@ class ServerFlowTests(unittest.TestCase):
         )
         self.assertEqual(status, 401)
         self.assertEqual(error['error'], 'Sign in to continue.')
+
+    def test_update_check_and_perform_version_comparison(self):
+        # Test check update with newer tag
+        tags_response = json.dumps([{'name': 'v0.1.1.7', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.1.7'}]).encode('utf-8')
+        with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
+            mock_cm = unittest.mock.MagicMock()
+            mock_cm.__enter__.return_value.read.return_value = tags_response
+            mock_urlopen.return_value = mock_cm
+
+            status, res = self.request(self.admin, 'GET', '/api/admin/update/check')
+            self.assertEqual(status, 200)
+            self.assertTrue(res['updateAvailable'])
+            self.assertEqual(res['latestVersion'], '0.1.1.7')
+
+        # Test check update with same tag
+        tags_response_same = json.dumps([{'name': 'v0.1.1.6', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.1.6'}]).encode('utf-8')
+        with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
+            mock_cm = unittest.mock.MagicMock()
+            mock_cm.__enter__.return_value.read.return_value = tags_response_same
+            mock_urlopen.return_value = mock_cm
+
+            status, res = self.request(self.admin, 'GET', '/api/admin/update/check')
+            self.assertEqual(status, 200)
+            self.assertFalse(res['updateAvailable'])
+
+        # Test perform update fails when tarball contains same version
+        tarball_buf = io.BytesIO()
+        server_code = f"VERSION = '{server.VERSION}'\n".encode('utf-8')
+        with tarfile.open(fileobj=tarball_buf, mode='w:gz') as archive:
+            member = tarfile.TarInfo('repo-tag/server.py')
+            member.size = len(server_code)
+            archive.addfile(member, io.BytesIO(server_code))
+
+        with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
+            mock_cm = unittest.mock.MagicMock()
+            mock_cm.__enter__.return_value.read.return_value = tarball_buf.getvalue()
+            mock_urlopen.return_value = mock_cm
+
+            status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.1.6'
+            })
+            self.assertEqual(status, 400)
+            self.assertEqual(res['error'], 'No newer version available.')
 
     def test_backup_restore_replaces_server_and_delete_removes_archive(self):
         original_note = {
