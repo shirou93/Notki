@@ -1,7 +1,7 @@
 services:
   notki:
     # Uses the stock Alpine image as-is; nothing is built.
-    image: alpine:3.20
+    image: alpine:latest
     container_name: notki
     restart: unless-stopped
     working_dir: /notki/app
