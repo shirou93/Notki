@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <style>
+    .m { stroke: #52734c; }
+    @media (prefers-color-scheme: dark) { .m { stroke: #b8d98c; } }
+  </style>
+  <g class="m" transform="rotate(-8 12 12)" fill="none" stroke-width="1.7">
+    <rect x="1.85" y="1.85" width="7.8" height="20.3" rx="2.15" />
+    <rect x="14.35" y="1.85" width="7.8" height="7.8" rx="2.15" />
+    <rect x="14.35" y="14.35" width="7.8" height="7.8" rx="2.15" />
+  </g>
+</svg>
