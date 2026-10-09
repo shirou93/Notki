@@ -305,20 +305,26 @@ class APIError(Exception):
 import subprocess
 
 def aes_encrypt(data, password_str):
+    env = os.environ.copy()
+    env['NOTKI_BACKUP_PASS'] = password_str
     proc = subprocess.run(
-        ['openssl', 'enc', '-aes-256-cbc', '-pbkdf2', '-pass', f'pass:{password_str}'],
+        ['openssl', 'enc', '-aes-256-cbc', '-pbkdf2', '-pass', 'env:NOTKI_BACKUP_PASS'],
         input=data,
         capture_output=True,
-        check=True
+        check=True,
+        env=env
     )
     return proc.stdout
 
 def aes_decrypt(data, password_str):
+    env = os.environ.copy()
+    env['NOTKI_BACKUP_PASS'] = password_str
     proc = subprocess.run(
-        ['openssl', 'enc', '-d', '-aes-256-cbc', '-pbkdf2', '-pass', f'pass:{password_str}'],
+        ['openssl', 'enc', '-d', '-aes-256-cbc', '-pbkdf2', '-pass', 'env:NOTKI_BACKUP_PASS'],
         input=data,
         capture_output=True,
-        check=True
+        check=True,
+        env=env
     )
     return proc.stdout
 
