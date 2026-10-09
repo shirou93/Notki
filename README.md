@@ -1,6 +1,6 @@
 # Notki
 
-Private notes app with per-user SQLite storage, invitation-only registration, and an administrator dashboard. **ALPHA 0.1.1.9**
+Private notes app with per-user SQLite storage, invitation-only registration, and an administrator dashboard. **ALPHA 0.1.2.0**
 
 ![Notes app](docs/notes.png)
 
