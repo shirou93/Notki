@@ -12,6 +12,8 @@ if ! command -v python3 &> /dev/null; then
         dnf install -y python3 git
     elif [ -x "$(command -v pacman)" ]; then
         pacman -Sy --noconfirm python3 git
+    elif [ -x "$(command -v apk)" ]; then
+        apk add --no-cache python3 git
     else
         echo "Please install python3 and git manually."
         exit 1

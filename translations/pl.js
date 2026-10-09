@@ -226,7 +226,7 @@ window.notkiTranslations.pl = {
   'admin.update.check': 'Sprawdź aktualizacje',
   'admin.update.available': 'Dostępna jest aktualizacja! Najnowsza wersja:',
   'admin.update.perform': 'Aktualizuj teraz',
-  'admin.update.upToDate': 'System jest aktualny.',
+  'admin.update.upToDate': 'System jest aktualny (wersja {version}).',
   'admin.update.updating': 'Aktualizacja systemu...',
   'admin.update.success': 'System został pomyślnie zaktualizowany.',
   'admin.backups.empty': 'Brak zapisanych backupów.',

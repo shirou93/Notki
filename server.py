@@ -22,7 +22,7 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.3.4'
+VERSION = '0.1.3.5'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -779,7 +779,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             with urllib.request.urlopen(req, timeout=10) as response:
                 tags = json.loads(response.read().decode('utf-8'))
                 if not tags:
-                    self.send_json({'updateAvailable': False})
+                    self.send_json({'updateAvailable': False, 'currentVersion': VERSION})
                     return
 
                 latest_tag = max(tags, key=lambda t: parse_version(t.get('name', '')))
@@ -788,7 +788,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 if latest_version and parse_version(latest_version) > parse_version(VERSION):
                     self.send_json({'updateAvailable': True, 'latestVersion': latest_version, 'tarballUrl': latest_tag.get('tarball_url')})
                 else:
-                    self.send_json({'updateAvailable': False})
+                    self.send_json({'updateAvailable': False, 'currentVersion': VERSION})
         except Exception:
             raise APIError('Nie udało się pobrać informacji o aktualizacji.', 500)
 

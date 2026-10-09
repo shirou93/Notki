@@ -220,7 +220,7 @@ window.notkiTranslations.en = {
   'admin.update.check': 'Check for updates',
   'admin.update.available': 'An update is available! Latest version:',
   'admin.update.perform': 'Update now',
-  'admin.update.upToDate': 'The system is up to date.',
+  'admin.update.upToDate': 'The system is up to date (version {version}).',
   'admin.update.updating': 'Updating system...',
   'admin.update.success': 'System updated successfully.',
   'admin.backups.empty': 'No saved backups.',
