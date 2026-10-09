@@ -17,7 +17,7 @@
     noteTitle: $('#note-title'), noteBody: $('#note-body'), tags: $('#note-tags'), saveState: $('#save-state'), date: $('#editor-date'),
     words: $('#editor-words'), pin: $('#pin-note'), archive: $('#archive-note'), delete: $('#delete-note'), toast: $('#toast'), themeToggle: $('#theme-toggle'),
     appShell: $('#app-shell'), authView: $('#auth-view'), authHeading: $('#auth-heading'), authDescription: $('#auth-description'), authMessage: $('#auth-message'),
-    loginForm: $('#login-form'), registerForm: $('#register-form'), authSwitch: $('#auth-switch'), adminLink: $('#admin-link'),
+    loginForm: $('#login-form'), registerForm: $('#register-form'), authSwitch: $('#auth-switch'), adminLink: $('#admin-link'), navAdmin: $('#nav-admin'), adminArea: $('#admin-area'), pageHeading: $('.page-heading'), captureWrap: $('.capture-wrap'), notesArea: $('.notes-area'), topbarSearch: $('.search-box'),
     sharedBanner: $('#shared-banner'), sharedTitle: $('#shared-title'), sharedPreview: $('#shared-preview'),
     avatar: $('#avatar'), profilePanel: $('#profile-panel'), profileBackdrop: $('#profile-backdrop'), profileAccount: $('#profile-account'),
     profileMessage: $('#profile-message'), passwordForm: $('#password-form'),
@@ -182,6 +182,8 @@
     elements.appShell.hidden = false;
     elements.panel.hidden = false;
     elements.adminLink.hidden = !user.isAdmin;
+    elements.navAdmin.hidden = !user.isAdmin;
+    if (user.isAdmin) { document.querySelector('#admin-account').textContent = user.email; }
     elements.avatar.title = user.email;
     elements.avatar.setAttribute('aria-label', t('topbar.accountAria', { email: user.email }));
     elements.profileAccount.textContent = user.email;
@@ -192,17 +194,189 @@
     applyHashIntent();
   }
 
-  function applyHashIntent() {
-    const intent = window.location.hash.replace(/^#/, '');
+    function applyHashIntent() {
+    let intent = window.location.pathname === '/admin' ? 'admin' : window.location.hash.replace(/^#/, '');
     if (!intent || intent.startsWith('share=')) return;
-    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    if (intent !== 'admin') window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
     if (intent === 'new') {
       openEditor();
       return;
     }
-    if (VIEW_KEYS[intent]) {
+    if (intent === 'admin' && currentUser && !currentUser.isAdmin) {
+      window.history.replaceState(null, '', '/');
+      intent = 'all';
+    }
+    if (VIEW_KEYS[intent] || intent === 'admin') {
       view = intent;
       render();
+    }
+  }
+
+  function renderStats(stats) {
+    const items = [
+      ['admin.stats.users', stats.users], ['admin.stats.notes', stats.notes], ['admin.stats.active', stats.active],
+      ['admin.stats.archived', stats.archived], ['admin.stats.trash', stats.trash], ['admin.stats.pendingInvites', stats.pendingInvites],
+    ];
+    document.querySelector('#admin-stats').replaceChildren(...items.map(([labelKey, value]) => {
+      const item = document.createElement('div');
+      item.className = 'admin-stat';
+      const name = document.createElement('span');
+      name.textContent = t(labelKey);
+      const count = document.createElement('strong');
+      count.textContent = String(value ?? 0);
+      item.append(name, count);
+      return item;
+    }));
+  }
+
+  async function deleteUser(userId) {
+    if (!confirm(t('admin.users.confirmDelete'))) return;
+    try {
+      await apiRequest(`/api/admin/users/${userId}`, { method: 'DELETE' });
+      await refresh();
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
+  function renderUsers(users) {
+    const rows = users.map(user => {
+      const row = document.createElement('tr');
+      const actions = document.createElement('td');
+      actions.className = 'admin-table-actions';
+      if (user.role !== 'admin') {
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'action-icon';
+        delBtn.textContent = '×';
+        delBtn.title = t('admin.users.delete');
+        delBtn.addEventListener('click', () => deleteUser(user.id));
+        actions.append(delBtn);
+      }
+      row.append(
+        tableCell(user.email),
+        tableCell(t(user.role === 'admin' ? 'admin.role.admin' : 'admin.role.user')),
+        tableCell(formatDate(user.createdAt)),
+        tableCell(String(user.notes)),
+        actions
+      );
+      return row;
+    });
+    document.querySelector('#admin-users').replaceChildren(...rows);
+  }
+
+  function renderInvites(invites) {
+    const rows = invites.map(invite => {
+      const row = document.createElement('tr');
+      const expired = new Date(invite.expiresAt) <= new Date();
+      row.append(
+        tableCell(formatDate(invite.createdAt)),
+        tableCell(formatDate(invite.expiresAt)),
+        tableCell(t(invite.usedAt ? 'admin.invites.used' : expired ? 'admin.invites.expired' : 'admin.invites.pending')),
+      );
+      return row;
+    });
+    document.querySelector('#admin-invites').replaceChildren(...rows);
+  }
+
+  function backupAction(label, title, handler) {
+    const button = document.createElement('button');
+    button.className = 'button-secondary backup-action';
+    button.type = 'button';
+    button.textContent = label;
+    button.title = title;
+    button.setAttribute('aria-label', title);
+    button.addEventListener('click', handler);
+    return button;
+  }
+
+  function renderBackups(backups) {
+    const body = document.querySelector('#server-backups');
+    if (!backups.length) {
+      const row = document.createElement('tr');
+      const empty = tableCell(t('admin.backups.empty'));
+      empty.colSpan = 4;
+      empty.className = 'admin-empty-cell';
+      empty.style.textAlign = 'center';
+      row.append(empty);
+      body.replaceChildren(row);
+      return;
+    }
+    const rows = backups.map(backup => {
+      const row = document.createElement('tr');
+      const filename = tableCell(backup.filename);
+      filename.className = 'backup-filename';
+      const size = `${window.i18n.formatNumber(backup.sizeBytes / 1024 / 1024, { maximumFractionDigits: 2 })} MB`;
+      const actions = document.createElement('td');
+      actions.className = 'backup-actions';
+      actions.append(
+        backupAction('↓', t('admin.backups.download'), () => downloadBackup(backup.filename)),
+        backupAction('↻', t('admin.backups.restore'), () => restoreBackup(backup.filename)),
+        backupAction('×', t('admin.backups.delete'), () => deleteBackup(backup.filename)),
+      );
+      row.append(filename, tableCell(formatDate(backup.createdAt)), tableCell(size), actions);
+      return row;
+    });
+    body.replaceChildren(...rows);
+  }
+
+  async function refreshAdmin() {
+    const [summary, backupList] = await Promise.all([
+      apiRequest('/api/admin/summary'),
+      apiRequest('/api/admin/backups'),
+    ]);
+    renderStats(summary.stats);
+    renderUsers(summary.users);
+    renderInvites(summary.invites);
+    renderBackups(backupList.backups);
+  }
+
+  function setBackupMessage(message, isError = false) {
+    const element = document.querySelector('#backup-message');
+    element.textContent = message;
+    element.classList.toggle('is-error', isError);
+    element.hidden = !message;
+  }
+
+  async function downloadBackup(filename) {
+    try {
+      const response = await fetch(`/api/admin/backups/${encodeURIComponent(filename)}`, { credentials: 'same-origin' });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || t('admin.backups.downloadFailed'));
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      setBackupMessage(error.message, true);
+    }
+  }
+
+  async function restoreBackup(filename) {
+    const confirmed = window.confirm(t('admin.backups.confirmRestore', { filename }));
+    if (!confirmed) return;
+    try {
+      await apiRequest(`/api/admin/backups/${encodeURIComponent(filename)}/restore`, { method: 'POST', body: '{}' });
+      window.location.replace('/');
+    } catch (error) {
+      setBackupMessage(error.message, true);
+    }
+  }
+
+  async function deleteBackup(filename) {
+    if (!window.confirm(t('admin.backups.confirmDelete', { filename }))) return;
+    try {
+      await apiRequest(`/api/admin/backups/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+      setBackupMessage(t('admin.backups.deleted', { filename }));
+      await refresh();
+    } catch (error) {
+      setBackupMessage(error.message, true);
     }
   }
 
@@ -558,9 +732,14 @@
 
   function plainTextToHtml(text) {
     const output = document.createElement('div');
-    String(text || '').split(/\r\n|\r|\n/).forEach((line, index) => {
-      if (index) output.append(document.createElement('br'));
-      output.append(document.createTextNode(line));
+    String(text || '').split(/\r\n|\r|\n/).forEach((line) => {
+      const div = document.createElement('div');
+      if (line) {
+        div.append(document.createTextNode(line));
+      } else {
+        div.append(document.createElement('br'));
+      }
+      output.append(div);
     });
     return output.innerHTML;
   }
@@ -1024,30 +1203,51 @@
     elements.trashCount.textContent = String(notes.filter(note => note.deleted).length);
     elements.sharedCount.textContent = String(sharedNotes.length);
     elements.nav.forEach(button => button.classList.toggle('is-active', button.dataset.view === view));
-    elements.breadcrumb.textContent = t(NAV_KEYS[view]);
-    elements.title.replaceChildren(
-      document.createTextNode(t(VIEW_KEYS[view])),
-      Object.assign(document.createElement('span'), { className: 'heading-period', textContent: '.' }),
-    );
+    elements.navAdmin.classList.toggle('is-active', view === 'admin');
 
-    const visible = filteredNotes();
-    const splitPinned = view === 'all' && !query;
-    const pinnedItems = splitPinned ? visible.filter(note => note.pinned) : [];
-    const regularItems = splitPinned ? visible.filter(note => !note.pinned) : visible;
-    elements.pinnedGrid.replaceChildren(...pinnedItems.map(makeCard));
-    elements.grid.replaceChildren(...regularItems.map(makeCard));
-    elements.pinnedLabel.hidden = pinnedItems.length === 0;
-    elements.otherLabel.hidden = pinnedItems.length === 0 || regularItems.length === 0;
-    elements.otherLabelText.textContent = t('section.other');
-    elements.empty.hidden = visible.length !== 0;
-    elements.countLabel.textContent = query
-      ? t('count.searchResults', { count: visible.length })
-      : `${visible.length} ${pluralText(view === 'shared' ? 'count.sharedLabel' : 'count.notesLabel', visible.length)}`;
-    elements.footerCount.textContent = `${visible.length} ${pluralText('footer.count', visible.length)}`;
-    updateEmptyState();
-    if (activeId) {
-      const current = notes.find(note => note.id === activeId) || sharedNotes.find(note => note.id === activeId);
-      if (current) updateEditorActions(current);
+    if (view === 'admin') {
+      elements.pageHeading.hidden = true;
+      elements.captureWrap.hidden = true;
+      elements.notesArea.hidden = true;
+      elements.topbarSearch.hidden = true;
+      elements.adminArea.hidden = false;
+      elements.breadcrumb.textContent = t('nav.adminPanel');
+      refreshAdmin().catch(() => {});
+      window.history.pushState(null, '', '/admin');
+    } else {
+      elements.pageHeading.hidden = false;
+      elements.captureWrap.hidden = false;
+      elements.notesArea.hidden = false;
+      elements.topbarSearch.hidden = false;
+      elements.adminArea.hidden = true;
+      elements.breadcrumb.textContent = t(NAV_KEYS[view]);
+      if (window.location.pathname === '/admin') {
+         window.history.pushState(null, '', '/');
+      }
+      elements.title.replaceChildren(
+        document.createTextNode(t(VIEW_KEYS[view])),
+        Object.assign(document.createElement('span'), { className: 'heading-period', textContent: '.' }),
+      );
+
+      const visible = filteredNotes();
+      const splitPinned = view === 'all' && !query;
+      const pinnedItems = splitPinned ? visible.filter(note => note.pinned) : [];
+      const regularItems = splitPinned ? visible.filter(note => !note.pinned) : visible;
+      elements.pinnedGrid.replaceChildren(...pinnedItems.map(makeCard));
+      elements.grid.replaceChildren(...regularItems.map(makeCard));
+      elements.pinnedLabel.hidden = pinnedItems.length === 0;
+      elements.otherLabel.hidden = pinnedItems.length === 0 || regularItems.length === 0;
+      elements.otherLabelText.textContent = t('section.other');
+      elements.empty.hidden = visible.length !== 0;
+      elements.countLabel.textContent = query
+        ? t('count.searchResults', { count: visible.length })
+        : `${visible.length} ${pluralText(view === 'shared' ? 'count.sharedLabel' : 'count.notesLabel', visible.length)}`;
+      elements.footerCount.textContent = `${visible.length} ${pluralText('footer.count', visible.length)}`;
+      updateEmptyState();
+      if (activeId) {
+        const current = notes.find(note => note.id === activeId) || sharedNotes.find(note => note.id === activeId);
+        if (current) updateEditorActions(current);
+      }
     }
   }
 
@@ -1458,6 +1658,20 @@
   $('#empty-create').addEventListener('click', () => openEditor());
   $('#close-editor').addEventListener('click', closeEditor);
   elements.backdrop.addEventListener('click', closeEditor);
+
+  elements.navAdmin.addEventListener('click', () => {
+    if (activeId) closeEditor();
+    view = 'admin';
+    render();
+  });
+  elements.adminLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    $('#settings-menu').open = false;
+    if (activeId) closeEditor();
+    view = 'admin';
+    render();
+  });
+
   elements.nav.forEach(button => button.addEventListener('click', () => {
     if (activeId) closeEditor();
     view = button.dataset.view;
@@ -1572,7 +1786,124 @@
     if (event.key === 'Escape' && activeId) closeEditor();
   });
 
+
+  document.querySelector('#create-invite')?.addEventListener('click', async () => {
+    const message = document.querySelector('#invite-message');
+    message.hidden = true;
+    try {
+      const invite = await apiRequest('/api/admin/invites', { method: 'POST', body: '{}' });
+      document.querySelector('#invite-url').value = invite.url;
+      document.querySelector('#invite-expiry').textContent = t('admin.invites.expiry', { date: window.i18n.formatDateTime(invite.expiresAt) });
+      document.querySelector('#invite-result').hidden = false;
+      await refreshAdmin();
+    } catch (error) {
+      message.textContent = error.message;
+      message.classList.add('is-error');
+      message.hidden = false;
+    }
+  });
+
+  document.querySelector('#backup-unencrypted-toggle')?.addEventListener('change', event => {
+    const pwdInput = document.querySelector('#backup-password');
+    if (pwdInput) pwdInput.disabled = event.target.checked;
+  });
+
   initializeApp();
+
+  let currentTarballUrl = null;
+
+  document.querySelector('#check-update').addEventListener('click', async event => {
+    const button = event.currentTarget;
+    const message = document.querySelector('#update-message');
+    const resultDiv = document.querySelector('#update-result');
+
+    button.disabled = true;
+    message.hidden = true;
+    resultDiv.hidden = true;
+
+    try {
+      const result = await apiRequest('/api/admin/update/check');
+      if (result.updateAvailable) {
+        document.querySelector('#update-latest-version').textContent = result.latestVersion;
+        currentTarballUrl = result.tarballUrl;
+        resultDiv.hidden = false;
+      } else {
+        message.textContent = t('admin.update.upToDate');
+        message.classList.remove('is-error');
+        message.hidden = false;
+      }
+    } catch (error) {
+      message.textContent = error.message;
+      message.classList.add('is-error');
+      message.hidden = false;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector('#perform-update').addEventListener('click', async event => {
+    const button = event.currentTarget;
+    const message = document.querySelector('#update-message');
+
+    if (!currentTarballUrl) return;
+
+    button.disabled = true;
+    message.hidden = true;
+    message.classList.remove('is-error');
+    message.textContent = t('admin.update.updating');
+    message.hidden = false;
+
+    try {
+      await apiRequest('/api/admin/update/perform', {
+        method: 'POST',
+        body: JSON.stringify({ tarballUrl: currentTarballUrl })
+      });
+      message.textContent = t('admin.update.success');
+      // Reload after short delay to show success message
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (error) {
+      message.textContent = error.message;
+      message.classList.add('is-error');
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector('#copy-invite').addEventListener('click', async event => {
+    const button = event.currentTarget;
+    try {
+      await navigator.clipboard.writeText(document.querySelector('#invite-url').value);
+      button.textContent = t('admin.invites.copied');
+      window.setTimeout(() => { button.textContent = t('admin.invites.copy'); }, 1600);
+    } catch {
+      const input = document.querySelector('#invite-url');
+      input.select();
+      document.execCommand('copy');
+    }
+  });
+
+  document.querySelector('#create-backup').addEventListener('click', async event => {
+    const button = event.currentTarget;
+    const isUnencrypted = document.querySelector('#backup-unencrypted-toggle')?.checked;
+    const password = document.querySelector('#backup-password')?.value || '';
+    if (!isUnencrypted && !password) {
+      setBackupMessage(t('admin.backups.passwordRequired'), true);
+      return;
+    }
+    button.disabled = true;
+    setBackupMessage(t('admin.backups.creating'));
+    try {
+      const backup = await apiRequest('/api/admin/backups', {
+        method: 'POST',
+        body: JSON.stringify({ password: isUnencrypted ? null : password })
+      });
+      setBackupMessage(t('admin.backups.created', { filename: backup.filename }));
+      await refresh();
+    } catch (error) {
+      setBackupMessage(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
 
   window.i18n.onChange(() => {
     applyTheme(document.documentElement.dataset.theme);
