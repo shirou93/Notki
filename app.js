@@ -1078,11 +1078,19 @@
       const note = notes.find(item => item.id === dragState.noteId);
       const preview = document.createElement('div');
       preview.className = 'note-drag-preview';
+      if (note && COLORS.includes(note.color)) preview.classList.add(`color-${note.color}`);
+      else preview.classList.add('color-default');
       preview.setAttribute('aria-hidden', 'true');
       const title = document.createElement('strong');
       title.textContent = note?.title || t('editor.untitled');
       const body = document.createElement('span');
-      body.textContent = (note ? noteText(note) : '') || t('editor.emptyNote');
+      body.className = 'card-body';
+
+      if (note && note.bodyFormat === 1 && note.body) {
+        body.innerHTML = sanitizeRichHtml(note.body);
+      } else {
+        body.textContent = (note ? noteText(note) : '') || t('editor.emptyNote');
+      }
       preview.append(title, body);
       document.body.append(preview);
       dragState.preview = preview;
