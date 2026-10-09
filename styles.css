@@ -45,7 +45,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .sidebar .admin-link.is-active { background: #ffffff18; color: #fff; }
 .sidebar .admin-link > span:first-child { width: 19px; color: #b5d27b; font-size: 15px; text-align: center; }
 .admin-page { min-height: 100vh; background: var(--canvas); color: var(--ink); }
-.admin-page .main-content { animation: page-enter .34s cubic-bezier(.2,.75,.25,1) both; }
+.admin-page .main-content { animation: page-enter .34s cubic-bezier(.2,.75,.25,1) backwards; }
 .admin-main { padding: 50px 0 70px; }
 .admin-table tbody tr { animation: row-enter .3s both; }
 .admin-table tbody tr:nth-child(2) { animation-delay: .04s; }
@@ -341,7 +341,7 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
   .topbar { height: 56px; }
   .breadcrumbs > span:first-child, .breadcrumb-slash { display: none; }
   .breadcrumbs { font-size: 8px; letter-spacing: .75px; }
-  .topbar-actions { position: fixed; top: 10px; right: 14px; z-index: 10; gap: 10px; }
+  .topbar-actions { position: fixed; top: 10px; right: 14px; z-index: 3; gap: 10px; }
   .search-box { width: min(30vw, 150px); height: 34px; gap: 5px; padding: 0 7px; }
   .search-box input { font-size: 16px; }
   .search-box kbd { display: none; }
