@@ -1854,6 +1854,7 @@
       const result = await apiRequest('/api/admin/update/check');
       if (result.updateAvailable) {
         document.querySelector('#update-latest-version').textContent = result.latestVersion;
+        document.querySelector('#update-current-version').textContent = result.currentVersion;
         currentTarballUrl = result.tarballUrl;
         resultDiv.hidden = false;
       } else {

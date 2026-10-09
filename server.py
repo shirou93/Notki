@@ -787,7 +787,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 latest_version = latest_tag.get('name', '').lstrip('v')
 
                 if latest_version and parse_version(latest_version) > parse_version(VERSION):
-                    self.send_json({'updateAvailable': True, 'latestVersion': latest_version, 'tarballUrl': latest_tag.get('tarball_url')})
+                    self.send_json({'updateAvailable': True, 'latestVersion': latest_version, 'currentVersion': VERSION, 'tarballUrl': latest_tag.get('tarball_url')})
                 else:
                     self.send_json({'updateAvailable': False, 'currentVersion': VERSION})
         except Exception:
