@@ -1310,24 +1310,15 @@
         nextHandle?.focus();
       }
     });
-    const shareButton = $('.card-share', card);
-    shareButton.setAttribute('aria-label', t('editor.share'));
-    shareButton.title = t('editor.shareTitle');
     if (shared) {
       // A recipient cannot re-share or reorder someone else's note.
       dragHandle.hidden = true;
       pin.hidden = true;
-      shareButton.hidden = true;
       const badge = document.createElement('span');
       badge.className = `card-owner${readOnly ? ' is-read-only' : ''}`;
       badge.textContent = readOnly ? t('share.readOnlyBadge') : t('share.writeBadge');
       badge.title = t('share.ownerLabel', { email: note.ownerEmail });
       $('.card-tags', card).append(badge);
-    } else {
-      shareButton.addEventListener('click', event => {
-        event.stopPropagation();
-        openShare(note.id);
-      });
     }
     const tags = $('.card-tags', card);
     (note.tags || []).slice(0, 3).forEach(tag => {
@@ -1340,7 +1331,7 @@
       const clickedCheckbox = event.target.closest('input[type="checkbox"], .task-checkbox');
       if (clickedCheckbox) return;
       if (event.target.closest('button')) return;
-      if (event.target.closest('.card-drag, .card-pin, .card-share')) return;
+      if (event.target.closest('.card-drag, .card-pin')) return;
       openEditor(note.id);
     });
 
@@ -1866,7 +1857,7 @@
         currentTarballUrl = result.tarballUrl;
         resultDiv.hidden = false;
       } else {
-        message.textContent = t('admin.update.upToDate');
+        message.textContent = t('admin.update.upToDate', { version: result.currentVersion });
         message.classList.remove('is-error');
         message.hidden = false;
       }
