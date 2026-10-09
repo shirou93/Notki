@@ -85,7 +85,7 @@ python server.py
 
 On a fresh database, open the local address printed by the server. Notki opens the first-run administrator form, which is available only from the local machine and can be used once. The password must be at least 12 characters long.
 
-After setup, sign in and choose **Panel administracyjny** / **Admin panel** to create registration links. The SQLite database lives at `data/notki.sqlite3`.
+After setup, sign in and choose **Admin panel** to create registration links. The SQLite database lives at `data/notki.sqlite3`.
 
 The first administrator can also be created from a terminal:
 
@@ -95,7 +95,7 @@ python server.py --create-admin
 
 ## Admin panel
 
-From **Backupy całego serwera** / **Server backups** you can create timestamped `.tgz` archives stored in `data/backups`. Each archive contains all accounts, password hashes, notes, and invitations; active sessions are excluded. Keep backups private because they contain password hashes. Restoring replaces the current server data and logs everyone out.
+From **Server backups** you can create timestamped `.tgz` archives stored in `data/backups`. Each archive contains all accounts, password hashes, notes, and invitations; active sessions are excluded. Keep backups private because they contain password hashes. Restoring replaces the current server data and logs everyone out.
 
 On a fresh server you can import a `.tgz` backup on the first-run setup page instead of creating an administrator.
 
