@@ -1573,7 +1573,8 @@
   }
 
   document.addEventListener('selectionchange', event => {
-    if (elements.noteBody.contains(event.target) || elements.noteBody === event.target) {
+    const selection = window.getSelection();
+    if (selection?.anchorNode && elements.noteBody.contains(selection.anchorNode)) {
       rememberEditorRange();
     }
   });
@@ -1615,10 +1616,21 @@
     const anchor = selection?.focusNode || selection?.anchorNode;
     const anchorElement = anchor?.nodeType === Node.ELEMENT_NODE ? anchor : anchor?.parentElement;
     const item = anchorElement?.closest('li');
-    const list = item?.closest('ul.task-list');
+    const list = item?.closest('ul, ol');
     if (!item || !list) return;
-    event.preventDefault();
-    if (!item.textContent.trim() && item === list.lastElementChild) {
+
+    const isTaskList = list.classList.contains('task-list');
+
+    // Check if the item is essentially empty.
+    // For task lists, it might contain a checkbox but empty text.
+    // For normal lists, it might just be empty text.
+    const taskTextNode = item.querySelector('.task-text');
+    const isItemEmpty = isTaskList
+        ? (!taskTextNode || !taskTextNode.textContent.replace(/[\u200B\u00A0\u200C\u200D\uFEFF\u200e\u200f]/g, '').trim())
+        : !item.textContent.replace(/[\u200B\u00A0\u200C\u200D\uFEFF\u200e\u200f]/g, '').trim();
+
+    if (isItemEmpty && item === list.lastElementChild) {
+      event.preventDefault();
       const host = list.parentElement;
       const followingNode = list.nextSibling;
       item.remove();
@@ -1630,18 +1642,36 @@
       paragraph.append(document.createElement('br'));
       if (host === elements.noteBody) host.insertBefore(paragraph, followingNode);
       else host.after(paragraph);
-      window.setTimeout(() => placeEditorCaret(paragraph), 0);
-    } else {
+      window.setTimeout(() => {
+        placeEditorCaret(paragraph);
+        // Force the browser to update command state
+        if (!isTaskList) {
+           if (document.queryCommandState('insertOrderedList')) document.execCommand('insertOrderedList', false, null);
+           if (document.queryCommandState('insertUnorderedList')) document.execCommand('insertUnorderedList', false, null);
+        }
+      }, 0);
+
+      if (isTaskList) {
+        normalizeChecklistGroups();
+        $('#task-restore-suggestions').hidden = true;
+      }
+      updateWordCount();
+      scheduleSave();
+      return;
+    }
+
+    // For task lists, we have custom behaviour on non-empty items
+    if (isTaskList) {
+      event.preventDefault();
       const nextItem = createChecklistItem();
       item.after(nextItem);
       normalizeChecklistGroups();
       const nextText = nextItem.querySelector('.task-text');
       window.setTimeout(() => placeEditorCaret(nextText), 0);
+      $('#task-restore-suggestions').hidden = true;
+      updateWordCount();
+      scheduleSave();
     }
-    normalizeChecklistGroups();
-    $('#task-restore-suggestions').hidden = true;
-    updateWordCount();
-    scheduleSave();
   });
   elements.noteBody.addEventListener('pointerdown', event => {
     if (event.button === 0) placeTaskCaretFromPointer(event);
