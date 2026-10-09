@@ -1082,7 +1082,7 @@
       const title = document.createElement('strong');
       title.textContent = note?.title || t('editor.untitled');
       const body = document.createElement('span');
-      body.textContent = note?.body || t('editor.emptyNote');
+      body.textContent = (note ? noteText(note) : '') || t('editor.emptyNote');
       preview.append(title, body);
       document.body.append(preview);
       dragState.preview = preview;
