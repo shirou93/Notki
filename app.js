@@ -142,7 +142,7 @@
     const headers = new Headers(options.headers || {});
     if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
     headers.set('Accept-Language', window.i18n.getLanguage());
-    const response = await fetch(path, { ...options, headers, credentials: 'same-origin' });
+    const response = await fetch(path, { ...options, headers, credentials: 'same-origin', cache: 'no-store' });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || t('error.server'));
     return payload;
