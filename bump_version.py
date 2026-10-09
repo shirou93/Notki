@@ -6,7 +6,7 @@ for filepath in files_to_update:
     with open(filepath, 'r') as f:
         content = f.read()
 
-    content = content.replace('0.1.3.4', '0.1.3.5')
+    content = content.replace('0.1.3.5', '0.1.3.6')
 
     with open(filepath, 'w') as f:
         f.write(content)

@@ -12,6 +12,7 @@ import secrets
 import sqlite3
 import sys
 import tarfile
+import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from http import cookies
@@ -22,7 +23,7 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.3.5'
+VERSION = '0.1.3.6'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -849,6 +850,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         except Exception:
             raise APIError('Nie udało się wyodrębnić plików.', 500)
 
+        threading.Timer(1.0, lambda: os._exit(0)).start()
         self.send_json({'success': True})
 
     def import_snapshot_archive(self, archive_bytes, password=None):
