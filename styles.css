@@ -282,8 +282,8 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .editor-body .task-list:empty { display: none; }
 .editor-body .task-list li { display: grid; grid-template-columns: 18px 15px minmax(0, 1fr); align-items: center; gap: 6px; min-height: 22px; margin: 0 0 6px; }
 .editor-body .task-list li.is-dragging-task { opacity: 0.5; }
-.editor-body .task-list li > .task-drag-handle { width: 18px; height: 18px; display: grid; place-items: center; cursor: grab; color: #a5b2a9; font-size: 16px; font-family: sans-serif; opacity: 0; transition: opacity 0.2s; user-select: none; }
-.editor-body .task-list li:hover > .task-drag-handle { opacity: 1; }
+.editor-body .task-list li > .task-drag-handle { width: 18px; height: 18px; display: grid; place-items: center; cursor: grab; color: #8f9b92; font-size: 16px; font-family: sans-serif; opacity: 0.85; transition: opacity 0.2s, color 0.2s; user-select: none; touch-action: none; }
+.editor-body .task-list li:hover > .task-drag-handle { opacity: 1; color: #202a25; }
 .editor-body .task-list li > .task-drag-handle:active { cursor: grabbing; }
 .editor-body .task-list li > .task-text { display: block; min-width: 1ch; min-height: 1.35em; margin: 0; outline: none; color: #414b44; caret-color: #0066cc; white-space: pre-wrap; word-break: break-word; line-height: 1.35; }
 .editor-body .task-list li > .task-text:empty::before { content: ' '; display: inline-block; min-width: 1ch; }

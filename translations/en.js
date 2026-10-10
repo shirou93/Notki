@@ -124,7 +124,13 @@ window.notkiTranslations.en = {
   'share.readOnlySaveFailed': 'You do not have permission to edit this note.',
 
   'nav.shared': 'Shared with me',
+  'nav.labels': 'Labels',
   'view.shared': 'Shared with me',
+  'labels.title': 'Edit Labels',
+  'labels.description': 'Add and delete labels. Labels apply to all notes.',
+  'labels.newPlaceholder': 'New label',
+  'labels.add': 'Add',
+  'labels.remove': 'Remove',
   'empty.shared.title': 'Nobody has shared a note with you yet.',
   'empty.shared.copy': 'When someone gives you access to their note, you will find it right here.',
   'count.sharedLabel': 'shared',
