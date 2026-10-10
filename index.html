@@ -62,7 +62,7 @@
       </nav>
       <div class="sidebar-bottom">
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.3.8</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.3.9</span>
       </div>
     </aside>
 
@@ -71,6 +71,8 @@
         <div class="breadcrumbs"><span data-i18n="topbar.breadcrumb">YOUR NOTEBOOK</span><span class="breadcrumb-slash">/</span><span id="breadcrumb-view">All</span></div>
         <div class="topbar-actions">
           <label class="search-box" for="search-input"><span class="search-icon" aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="Search notes" autocomplete="off" data-i18n-placeholder="topbar.search"><kbd>⌘ K</kbd></label>
+
+          <button class="icon-button" id="view-toggle" type="button" aria-label="Toggle view" title="Toggle view">▤</button>
 
           <details class="settings-menu" id="settings-menu">
             <summary class="avatar" id="avatar" aria-label="Local profile" title="Local profile" data-i18n-aria-label="topbar.profile" data-i18n-title="topbar.profile">N</summary>
@@ -126,7 +128,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p style="margin-top: -10px; margin-bottom: 15px; color: #81988a; font-size: 13px;"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.3.8</strong></p>
+      <p style="margin-top: -10px; margin-bottom: 15px; color: #81988a; font-size: 13px;"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.3.9</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
@@ -187,7 +189,26 @@
       </div>
       <footer class="page-footer"><span id="footer-count">0 notes</span><span data-i18n="footer.privacy">Your ideas stay yours.</span></footer>
     </main>
+    <button class="fab-add-note" id="fab-add-note" type="button" aria-label="Add note" title="Add note" hidden>+</button>
   </div>
+
+  <div class="modal-backdrop" id="labels-backdrop" hidden></div>
+  <section class="profile-panel labels-panel" id="labels-panel" role="dialog" aria-modal="true" aria-labelledby="labels-title" aria-hidden="true" hidden>
+    <div class="profile-topbar">
+      <h2 class="profile-title" id="labels-title">Edit Labels</h2>
+      <button class="icon-button editor-close" id="close-labels" type="button" aria-label="Close" title="Close" data-i18n-aria-label="topbar.close" data-i18n-title="topbar.close">×</button>
+    </div>
+    <div class="profile-content">
+      <p class="profile-description">Add, rename, or delete labels. Labels apply to all notes.</p>
+      <form class="profile-form" id="add-label-form">
+        <div style="display: flex; gap: 8px;">
+          <input class="auth-input" id="new-label-input" type="text" placeholder="New label" required maxlength="80">
+          <button class="button-primary" type="submit">Add</button>
+        </div>
+      </form>
+      <div id="labels-edit-list" style="margin-top: 15px; display: grid; gap: 8px;"></div>
+    </div>
+  </section>
 
   <div class="modal-backdrop" id="profile-backdrop" hidden></div>
   <section class="profile-panel" id="profile-panel" role="dialog" aria-modal="true" aria-labelledby="profile-title" aria-hidden="true" hidden>
@@ -285,8 +306,8 @@
       <div class="task-restore-suggestions" id="task-restore-suggestions" role="status" hidden></div>
       <div class="editor-meta"><span id="editor-date"></span><span class="meta-separator">·</span><span id="editor-words">0 words</span></div>
       <div class="editor-divider"></div>
-      <label class="field-label" for="note-tags" data-i18n="editor.tags">TAGS</label>
-      <input class="tags-input" id="note-tags" type="text" placeholder="e.g. work, ideas" autocomplete="off" data-i18n-placeholder="editor.tagsPlaceholder">
+      <div class="field-label labels-label-row"><span data-i18n="editor.tags">TAGS</span> <button type="button" class="icon-button labels-edit-button" id="edit-labels" aria-label="Edit labels">✎</button></div>
+      <div class="labels-container" id="note-labels"></div>
       <div class="field-label color-label" data-i18n="editor.color">NOTE COLOR</div>
       <div class="color-picker" role="group" aria-label="Note color" data-i18n-aria-label="editor.colorGroup">
         <button class="color-swatch swatch-default is-selected" data-color="default" type="button" aria-label="Default" title="Default" data-i18n-aria-label="editor.color.default" data-i18n-title="editor.color.default"></button>
