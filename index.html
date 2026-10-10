@@ -88,7 +88,7 @@
           </div>
         </details>
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.4.3</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.4.4</span>
       </div>
     </aside>
 
@@ -154,7 +154,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p style="margin-top: -10px; margin-bottom: 15px; color: #81988a; font-size: 13px;"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.4.3</strong></p>
+      <p style="margin-top: -10px; margin-bottom: 15px; color: #81988a; font-size: 13px;"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.4.4</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
@@ -173,9 +173,6 @@
       </form>
       <p class="admin-message" id="backup-message" role="status" hidden></p>
       <div class="admin-table-wrap">
-        <div style="padding: 10px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px;">
-          <input class="auth-input" id="restore-password" type="password" data-i18n-placeholder="admin.backups.passwordPlaceholder" style="max-width: 250px;" placeholder="Backup password (if any)">
-        </div>
         <table class="admin-table">
           <thead><tr><th data-i18n="admin.table.file">FILE</th><th data-i18n="admin.table.created">CREATED</th><th data-i18n="admin.table.size">SIZE</th><th data-i18n="admin.table.actions">ACTIONS</th></tr></thead>
           <tbody id="server-backups"></tbody>
