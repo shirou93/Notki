@@ -22,6 +22,7 @@
     avatar: $('#avatar'), profilePanel: $('#profile-panel'), profileBackdrop: $('#profile-backdrop'), profileAccount: $('#profile-account'),
     profileMessage: $('#profile-message'), passwordForm: $('#password-form'),
     avatarPreview: $('#profile-avatar-preview'), avatarInput: $('#avatar-input'), avatarMessage: $('#avatar-message'),
+    sidebar: $('#sidebar'), sidebarBackdrop: $('#sidebar-backdrop'), hamburgerToggle: $('#hamburger-toggle'),
     sharedCount: $('#count-shared'), sharePanel: $('#share-panel'), shareBackdrop: $('#share-backdrop'),
     shareForm: $('#share-form'), shareEmail: $('#share-email'), sharePermission: $('#share-permission'),
     shareMessage: $('#share-message'), shareList: $('#share-list'), shareEmpty: $('#share-empty'),
@@ -235,7 +236,7 @@
     if (!confirm(t('admin.users.confirmDelete'))) return;
     try {
       await apiRequest(`/api/admin/users/${userId}`, { method: 'DELETE' });
-      await refresh();
+      await refreshAdmin();
     } catch (error) {
       alert(error.message);
     }
@@ -380,7 +381,7 @@
     try {
       await apiRequest(`/api/admin/backups/${encodeURIComponent(filename)}`, { method: 'DELETE' });
       setBackupMessage(t('admin.backups.deleted', { filename }));
-      await refresh();
+      await refreshAdmin();
     } catch (error) {
       setBackupMessage(error.message, true);
     }
@@ -1362,12 +1363,69 @@
       tags.append(label);
     });
     card.addEventListener('click', event => {
-      const clickedCheckbox = event.target.closest('input[type="checkbox"], .task-checkbox');
-      if (clickedCheckbox) return;
+      if (event.target.closest('input[type="checkbox"], .task-checkbox, .task-drag-handle')) return;
       if (event.target.closest('button')) return;
       if (event.target.closest('.card-drag, .card-pin')) return;
       openEditor(note.id);
     });
+
+    let cardTaskDragItem = null;
+    let cardTaskPointerId = null;
+
+    card.addEventListener('pointerdown', event => {
+      if (readOnly) return;
+      const handle = event.target.closest?.('.task-drag-handle');
+      if (!handle) return;
+      const item = handle.closest('li');
+      if (!item || !item.closest('ul.task-list')) return;
+
+      event.stopPropagation();
+      cardTaskDragItem = item;
+      cardTaskPointerId = event.pointerId;
+      item.classList.add('is-dragging-task');
+      try { handle.setPointerCapture(event.pointerId); } catch {}
+    });
+
+    card.addEventListener('pointermove', event => {
+      if (!cardTaskDragItem || event.pointerId !== cardTaskPointerId) return;
+      const list = cardTaskDragItem.closest('ul.task-list');
+      if (!list) return;
+
+      const elemBelow = document.elementFromPoint(event.clientX, event.clientY);
+      const target = elemBelow?.closest?.('li');
+      if (!target || target === cardTaskDragItem || target.closest('ul.task-list') !== list) return;
+
+      const rect = target.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      if (event.clientY < mid) {
+        target.before(cardTaskDragItem);
+      } else {
+        target.after(cardTaskDragItem);
+      }
+    });
+
+    const endCardTaskPointerDrag = (event) => {
+      if (!cardTaskDragItem || (cardTaskPointerId !== null && event.pointerId !== cardTaskPointerId)) return;
+      cardTaskDragItem.classList.remove('is-dragging-task');
+      cardTaskDragItem = null;
+      cardTaskPointerId = null;
+
+      const cardBody = $('.card-body', card);
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = cardBody.innerHTML;
+      normalizeChecklistGroups(wrapper);
+      note.body = sanitizeRichHtml(wrapper.innerHTML);
+      note.updatedAt = new Date().toISOString();
+      if (shared && !readOnly) {
+        persistShared(note);
+      } else {
+        persist();
+      }
+      render();
+    };
+
+    card.addEventListener('pointerup', endCardTaskPointerDrag);
+    card.addEventListener('pointercancel', endCardTaskPointerDrag);
 
     card.addEventListener('change', event => {
       if (event.target.matches('input[type="checkbox"]')) {
@@ -1924,6 +1982,10 @@
       originalRender();
       if (view === 'admin') {
         $('#fab-add-note').hidden = true;
+      } else if (elements.captureWrap) {
+        const rect = elements.captureWrap.getBoundingClientRect();
+        const isVisible = rect.bottom > 0 && rect.top < window.innerHeight;
+        $('#fab-add-note').hidden = isVisible;
       }
     };
   }
@@ -1945,8 +2007,26 @@
     applyViewPref();
   });
 
+  function closeSidebar() {
+    elements.sidebar?.classList.remove('is-open');
+    if (elements.sidebarBackdrop) elements.sidebarBackdrop.hidden = true;
+  }
+
+  function toggleSidebar() {
+    if (elements.sidebar?.classList.contains('is-open')) {
+      closeSidebar();
+    } else {
+      elements.sidebar?.classList.add('is-open');
+      if (elements.sidebarBackdrop) elements.sidebarBackdrop.hidden = false;
+    }
+  }
+
+  elements.hamburgerToggle?.addEventListener('click', toggleSidebar);
+  elements.sidebarBackdrop?.addEventListener('click', closeSidebar);
+
   elements.navAdmin.addEventListener('click', () => {
     if (activeId) closeEditor();
+    closeSidebar();
     view = 'admin';
     render();
   });
@@ -1954,12 +2034,14 @@
     e.preventDefault();
     $('#settings-menu').open = false;
     if (activeId) closeEditor();
+    closeSidebar();
     view = 'admin';
     render();
   });
 
   elements.nav.forEach(button => button.addEventListener('click', () => {
     if (activeId) closeEditor();
+    closeSidebar();
     view = button.dataset.view;
     render();
   }));
@@ -2057,6 +2139,10 @@
       closeProfile();
       return;
     }
+    if (event.key === 'Escape' && elements.sidebar?.classList.contains('is-open')) {
+      closeSidebar();
+      return;
+    }
     if (event.key === 'Escape' && $('#settings-menu').open) {
       $('#settings-menu').open = false;
       return;
@@ -2091,7 +2177,10 @@
 
   document.querySelector('#backup-unencrypted-toggle')?.addEventListener('change', event => {
     const pwdInput = document.querySelector('#backup-password');
-    if (pwdInput) pwdInput.disabled = event.target.checked;
+    if (pwdInput) {
+      pwdInput.disabled = event.target.checked;
+      if (event.target.checked) pwdInput.value = '';
+    }
   });
 
   initializeApp();
@@ -2167,15 +2256,16 @@
     }
   });
 
-  document.querySelector('#create-backup').addEventListener('click', async event => {
-    const button = event.currentTarget;
+  const handleCreateBackup = async event => {
+    if (event) event.preventDefault();
+    const button = document.querySelector('#create-backup');
     const isUnencrypted = document.querySelector('#backup-unencrypted-toggle')?.checked;
     const password = document.querySelector('#backup-password')?.value || '';
     if (!isUnencrypted && !password) {
       setBackupMessage(t('admin.backups.passwordRequired'), true);
       return;
     }
-    button.disabled = true;
+    if (button) button.disabled = true;
     setBackupMessage(t('admin.backups.creating'));
     try {
       const backup = await apiRequest('/api/admin/backups', {
@@ -2183,13 +2273,17 @@
         body: JSON.stringify({ password: isUnencrypted ? null : password })
       });
       setBackupMessage(t('admin.backups.created', { filename: backup.filename }));
-      await refresh();
+      const pwdInput = document.querySelector('#backup-password');
+      if (pwdInput) pwdInput.value = '';
+      await refreshAdmin();
     } catch (error) {
       setBackupMessage(error.message, true);
     } finally {
-      button.disabled = false;
+      if (button) button.disabled = false;
     }
-  });
+  };
+
+  document.querySelector('#backup-form')?.addEventListener('submit', handleCreateBackup);
 
   window.i18n.onChange(() => {
     applyTheme(document.documentElement.dataset.theme);
