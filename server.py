@@ -23,7 +23,7 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.3.8'
+VERSION = '0.1.3.9'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -234,6 +234,8 @@ def initialize_database():
         columns = {row['name'] for row in connection.execute('PRAGMA table_info(users)')}
         if 'avatar' not in columns:
             connection.execute('ALTER TABLE users ADD COLUMN avatar TEXT')
+        if 'labels_json' not in columns:
+            connection.execute("ALTER TABLE users ADD COLUMN labels_json TEXT NOT NULL DEFAULT '[]'")
 
 
 def hash_password(password):
@@ -265,9 +267,16 @@ def normalize_email(value):
 
 def public_user(row):
     keys = row.keys()
+    labels = []
+    if 'labels_json' in keys and row['labels_json']:
+        try:
+            labels = json.loads(row['labels_json'])
+        except json.JSONDecodeError:
+            pass
     return {
         'id': row['id'], 'email': row['email'], 'isAdmin': row['role'] == 'admin',
         'createdAt': row['created_at'], 'avatar': row['avatar'] if 'avatar' in keys else None,
+        'labels': labels
     }
 
 
@@ -405,7 +414,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             return None
         with database() as connection:
             row = connection.execute('''
-                SELECT users.id, users.email, users.role, users.created_at, users.avatar
+                SELECT users.id, users.email, users.role, users.created_at, users.avatar, users.labels_json
                 FROM sessions JOIN users ON users.id = sessions.user_id
                 WHERE sessions.token_hash = ? AND sessions.expires_at > ?
             ''', (token_hash(token), iso_time())).fetchone()
@@ -555,6 +564,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 self.change_password(payload)
             elif path == '/api/account/avatar':
                 self.change_avatar(payload)
+            elif path == '/api/account/labels':
+                self.change_labels(payload)
             elif path.startswith('/api/notes/') and path.endswith('/shares'):
                 user = self.require_user()
                 note_id = path[len('/api/notes/'):-len('/shares')]
@@ -623,13 +634,13 @@ class NotkiHandler(BaseHTTPRequestHandler):
             user_id = cursor.lastrowid
         token = self.new_session(user_id)
         with database() as connection:
-            user = connection.execute('SELECT id, email, role, created_at, avatar FROM users WHERE id = ?', (user_id,)).fetchone()
+            user = connection.execute('SELECT id, email, role, created_at, avatar, labels_json FROM users WHERE id = ?', (user_id,)).fetchone()
         self.send_json({'user': public_user(user)}, 201, self.session_headers(token))
 
     def build_snapshot(self):
         with database() as connection:
             connection.execute('BEGIN')
-            users = connection.execute('SELECT id, email, password_hash, role, created_at, avatar FROM users ORDER BY id').fetchall()
+            users = connection.execute('SELECT id, email, password_hash, role, created_at, avatar, labels_json FROM users ORDER BY id').fetchall()
             notes = connection.execute('SELECT * FROM notes ORDER BY user_id, sort_order DESC').fetchall()
             invites = connection.execute('SELECT * FROM invites ORDER BY created_at').fetchall()
             shares = connection.execute('SELECT * FROM note_shares ORDER BY note_id, user_id').fetchall()
@@ -639,7 +650,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             'createdAt': iso_time(),
             'users': [
                 {'id': row['id'], 'email': row['email'], 'passwordHash': row['password_hash'], 'role': row['role'],
-                 'createdAt': row['created_at'], 'avatar': row['avatar']}
+                 'createdAt': row['created_at'], 'avatar': row['avatar'],
+                 'labels': json.loads(row['labels_json']) if 'labels_json' in row.keys() and row['labels_json'] else []}
                 for row in users
             ],
             'notes': [
@@ -921,7 +933,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     raise APIError('Snapshot zawiera nieprawidłowy avatar.')
             user_ids.add(user_id)
             emails.add(email)
-            prepared_users.append((user_id, email, password_hash, role, self.snapshot_date(user.get('createdAt')), avatar))
+            labels = user.get('labels')
+            labels_json = json.dumps(labels if isinstance(labels, list) else [])
+            prepared_users.append((user_id, email, password_hash, role, self.snapshot_date(user.get('createdAt')), avatar, labels_json))
         if not any(user[3] == 'admin' for user in prepared_users):
             raise APIError('Snapshot musi zawierać konto administratora.')
 
@@ -1005,7 +1019,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 connection.execute('DELETE FROM invites')
                 connection.execute('DELETE FROM users')
             connection.executemany(
-                'INSERT INTO users (id, email, password_hash, role, created_at, avatar) VALUES (?, ?, ?, ?, ?, ?)', prepared_users,
+                'INSERT INTO users (id, email, password_hash, role, created_at, avatar, labels_json) VALUES (?, ?, ?, ?, ?, ?, ?)', prepared_users,
             )
             connection.executemany('''
                 INSERT INTO notes (id, user_id, title, body, body_format, color, tags_json, pinned, archived,
@@ -1116,7 +1130,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             user_id = cursor.lastrowid
         token = self.new_session(user_id)
         with database() as connection:
-            user = connection.execute('SELECT id, email, role, created_at, avatar FROM users WHERE id = ?', (user_id,)).fetchone()
+            user = connection.execute('SELECT id, email, role, created_at, avatar, labels_json FROM users WHERE id = ?', (user_id,)).fetchone()
         self.send_json({'user': public_user(user)}, 201, self.session_headers(token))
 
     def change_password(self, payload):
@@ -1135,6 +1149,16 @@ class NotkiHandler(BaseHTTPRequestHandler):
             connection.execute('DELETE FROM sessions WHERE user_id = ?', (user['id'],))
         token = self.new_session(user['id'])
         self.send_json({'changed': True}, extra_headers=self.session_headers(token))
+
+    def change_labels(self, payload):
+        user = self.require_user()
+        labels = payload.get('labels')
+        if not isinstance(labels, list):
+            raise APIError('Oczekiwano danych JSON.')
+        labels = [str(label)[:80] for label in labels[:200]]
+        with database() as connection:
+            connection.execute('UPDATE users SET labels_json = ? WHERE id = ?', (json.dumps(labels), user['id']))
+        self.send_json({'labels': labels})
 
     def change_avatar(self, payload):
         user = self.require_user()

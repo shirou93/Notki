@@ -14,7 +14,7 @@
     pinnedLabel: $('#pinned-label'), pinnedGrid: $('#pinned-grid'), otherLabel: $('#other-label'), otherLabelText: $('#other-label-text'),
     grid: $('#notes-grid'), empty: $('#empty-state'), emptyTitle: $('#empty-title'), emptyCopy: $('#empty-copy'),
     footerCount: $('#footer-count'), search: $('#search-input'), panel: $('#editor-panel'), backdrop: $('#editor-backdrop'),
-    noteTitle: $('#note-title'), noteBody: $('#note-body'), tags: $('#note-tags'), saveState: $('#save-state'), date: $('#editor-date'),
+    noteTitle: $('#note-title'), noteBody: $('#note-body'), labelsContainer: $('#note-labels'), saveState: $('#save-state'), date: $('#editor-date'),
     words: $('#editor-words'), pin: $('#pin-note'), archive: $('#archive-note'), delete: $('#delete-note'), toast: $('#toast'), themeToggle: $('#theme-toggle'),
     appShell: $('#app-shell'), authView: $('#auth-view'), authHeading: $('#auth-heading'), authDescription: $('#auth-description'), authMessage: $('#auth-message'),
     loginForm: $('#login-form'), registerForm: $('#register-form'), authSwitch: $('#auth-switch'), adminLink: $('#admin-link'), navAdmin: $('#nav-admin'), adminArea: $('#admin-area'), pageHeading: $('.page-heading'), captureWrap: $('.capture-wrap'), notesArea: $('.notes-area'), topbarSearch: $('.search-box'),
@@ -30,6 +30,7 @@
 
   let notes = [];
   let sharedNotes = [];
+  let userLabels = [];
   const legacyNotes = loadNotes();
   const inviteToken = new URLSearchParams(window.location.search).get('invite');
   let currentUser = null;
@@ -188,6 +189,7 @@
     elements.avatar.setAttribute('aria-label', t('topbar.accountAria', { email: user.email }));
     elements.profileAccount.textContent = user.email;
     renderAvatar(user);
+    userLabels = user.labels || [];
     document.body.classList.remove('is-auth');
     render();
     readSharedNote();
@@ -361,8 +363,12 @@
   async function restoreBackup(filename) {
     const confirmed = window.confirm(t('admin.backups.confirmRestore', { filename }));
     if (!confirmed) return;
+    const password = document.querySelector('#restore-password')?.value || '';
     try {
-      await apiRequest(`/api/admin/backups/${encodeURIComponent(filename)}/restore`, { method: 'POST', body: '{}' });
+      await apiRequest(`/api/admin/backups/${encodeURIComponent(filename)}/restore`, {
+        method: 'POST',
+        body: JSON.stringify({ password })
+      });
       window.location.replace('/');
     } catch (error) {
       setBackupMessage(error.message, true);
@@ -706,12 +712,21 @@
       if (node.tagName === 'UL' && node.classList.contains('task-list')) {
         safeNode.className = node.classList.contains('task-list-completed') ? 'task-list task-list-completed' : 'task-list';
       }
+      if (node.tagName === 'LI' && node.closest('.task-list')) {
+        safeNode.setAttribute('draggable', 'true');
+      }
       if (node.tagName === 'P' && node.classList.contains('task-group-label')) {
         safeNode.className = 'task-group-label';
         safeNode.contentEditable = 'false';
       }
+      if (node.tagName === 'SPAN' && node.classList.contains('task-drag-handle')) {
+        safeNode.className = 'task-drag-handle';
+        safeNode.contentEditable = 'false';
+        safeNode.setAttribute('aria-label', t('card.drag'));
+        safeNode.title = t('card.dragTitle');
+      }
       if (node.tagName === 'SPAN' && (node.classList.contains('task-text')
-          || (node.parentElement?.matches('li') && node.parentElement.querySelector('input[type="checkbox"]')))) {
+          || (!node.classList.contains('task-drag-handle') && node.parentElement?.matches('li') && node.parentElement.querySelector('input[type="checkbox"]')))) {
         safeNode.className = 'task-text';
         safeNode.tabIndex = 0;
       }
@@ -767,10 +782,21 @@
 
   function normalizeChecklistItemMarkup(root = elements.noteBody) {
     root.querySelectorAll('ul.task-list > li').forEach(item => {
+      item.setAttribute('draggable', 'true');
       const checkbox = item.querySelector(':scope > input.task-checkbox');
       if (!checkbox) return;
+      let dragHandle = item.querySelector(':scope > .task-drag-handle');
+      if (!dragHandle) {
+        dragHandle = document.createElement('span');
+        dragHandle.className = 'task-drag-handle';
+        dragHandle.contentEditable = 'false';
+        dragHandle.textContent = '⠿';
+        dragHandle.setAttribute('aria-label', t('card.drag'));
+        dragHandle.title = t('card.dragTitle');
+        item.insertBefore(dragHandle, checkbox);
+      }
       let text = item.querySelector(':scope > .task-text');
-      const strayNodes = [...item.childNodes].filter(node => node !== checkbox && node !== text);
+      const strayNodes = [...item.childNodes].filter(node => node !== checkbox && node !== text && node !== dragHandle);
       if (!strayNodes.length && text) return;
       const strayText = strayNodes.map(node => node.textContent.trim()).filter(Boolean).join(' ');
       if (!text) {
@@ -937,6 +963,14 @@
 
   function createChecklistItem() {
     const item = document.createElement('li');
+    item.setAttribute('draggable', 'true');
+    const dragHandle = document.createElement('span');
+    dragHandle.className = 'task-drag-handle';
+    dragHandle.contentEditable = 'false';
+    dragHandle.textContent = '⠿';
+    dragHandle.setAttribute('aria-label', t('card.drag'));
+    dragHandle.title = t('card.dragTitle');
+
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.className = 'task-checkbox';
@@ -947,7 +981,7 @@
     content.className = 'task-text';
     content.tabIndex = 0;
     content.textContent = '\u00A0';
-    item.append(checkbox, content);
+    item.append(dragHandle, checkbox, content);
     return item;
   }
 
@@ -1389,7 +1423,7 @@
     normalizeChecklistGroups();
     $('#task-restore-suggestions').replaceChildren();
     $('#task-restore-suggestions').hidden = true;
-    elements.tags.value = (note.tags || []).join(', ');
+    renderLabels(note.tags || []);
     elements.date.textContent = t('editor.created', { date: window.i18n.formatFullDate(note.createdAt) });
     updateWordCount();
     updateEditorActions(note);
@@ -1421,10 +1455,112 @@
     render();
   }
 
+
+  function renderLabels(activeTags) {
+    elements.labelsContainer.replaceChildren();
+    userLabels.forEach(label => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'label-chip';
+      if (activeTags.includes(label)) {
+        chip.classList.add('is-active');
+      }
+      chip.textContent = label;
+      chip.dataset.label = label;
+      chip.addEventListener('click', () => {
+        const note = notes.find(item => item.id === activeId) || sharedNotes.find(item => item.id === activeId);
+        if (note && note.ownerEmail && note.permission !== 'write') return; // Readonly check
+        chip.classList.toggle('is-active');
+        scheduleSave();
+      });
+      elements.labelsContainer.append(chip);
+    });
+  }
+
+  function renderLabelsEditList() {
+    const list = document.getElementById('labels-edit-list');
+    list.replaceChildren();
+    userLabels.forEach(label => {
+      const item = document.createElement('div');
+      item.style.display = 'flex';
+      item.style.justifyContent = 'space-between';
+      item.style.alignItems = 'center';
+      item.style.padding = '8px';
+      item.style.border = '1px solid var(--line)';
+      item.style.borderRadius = '5px';
+
+      const span = document.createElement('span');
+      span.textContent = label;
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'share-revoke';
+      delBtn.type = 'button';
+      delBtn.textContent = 'Remove';
+      delBtn.addEventListener('click', async () => {
+        userLabels = userLabels.filter(l => l !== label);
+        try {
+          await apiRequest('/api/account/labels', {
+            method: 'POST',
+            body: JSON.stringify({ labels: userLabels })
+          });
+          renderLabelsEditList();
+          if (activeId) {
+            const note = notes.find(item => item.id === activeId) || sharedNotes.find(item => item.id === activeId);
+            if (note) renderLabels(note.tags || []);
+          }
+        } catch (error) {
+          showToast(error.message);
+        }
+      });
+
+      item.append(span, delBtn);
+      list.append(item);
+    });
+  }
+
+  $('#edit-labels').addEventListener('click', () => {
+    document.getElementById('labels-panel').hidden = false;
+    document.getElementById('labels-panel').classList.add('is-open');
+    document.getElementById('labels-panel').setAttribute('aria-hidden', 'false');
+    document.getElementById('labels-backdrop').hidden = false;
+    renderLabelsEditList();
+  });
+
+  $('#close-labels').addEventListener('click', () => {
+    document.getElementById('labels-panel').classList.remove('is-open');
+    document.getElementById('labels-panel').setAttribute('aria-hidden', 'true');
+    document.getElementById('labels-panel').hidden = true;
+    document.getElementById('labels-backdrop').hidden = true;
+  });
+
+  $('#add-label-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const input = document.getElementById('new-label-input');
+    const newLabel = input.value.trim();
+    if (!newLabel || userLabels.includes(newLabel)) return;
+
+    userLabels.push(newLabel);
+    input.value = '';
+
+    try {
+      await apiRequest('/api/account/labels', {
+        method: 'POST',
+        body: JSON.stringify({ labels: userLabels })
+      });
+      renderLabelsEditList();
+      if (activeId) {
+        const note = notes.find(item => item.id === activeId) || sharedNotes.find(item => item.id === activeId);
+        if (note) renderLabels(note.tags || []);
+      }
+    } catch (error) {
+      showToast(error.message);
+    }
+  });
+
   function hasEditorContent() {
     return Boolean(
       elements.noteTitle.value.trim()
-      || elements.tags.value.split(',').some(tag => tag.trim())
+      || [...elements.labelsContainer.querySelectorAll('.label-chip.is-active')].length > 0
       || normalizeTaskText(elements.noteBody.textContent),
     );
   }
@@ -1443,7 +1579,7 @@
     note.title = elements.noteTitle.value.trim();
     note.body = serializedEditorBody();
     note.bodyFormat = 1;
-    note.tags = [...new Set(elements.tags.value.split(',').map(tag => tag.trim().toLocaleLowerCase()).filter(Boolean))];
+    note.tags = [...elements.labelsContainer.querySelectorAll('.label-chip.is-active')].map(chip => chip.dataset.label);
     note.color = activeColor;
     note.updatedAt = new Date().toISOString();
     if (shared) {
@@ -1499,7 +1635,6 @@
     elements.delete.hidden = shared;
     $('#share-note').hidden = note.deleted || shared;
     elements.noteTitle.readOnly = readOnly;
-    elements.tags.readOnly = readOnly;
     elements.noteBody.contentEditable = readOnly ? 'false' : 'true';
     elements.panel.classList.toggle('is-read-only', readOnly);
     $('#format-toolbar').hidden = readOnly;
@@ -1582,7 +1717,7 @@
       restoreEditorRange();
       const previousRange = editorRange?.cloneRange();
       if (button.hasAttribute('data-insert-checklist')) {
-        document.execCommand('insertHTML', false, `<ul class="task-list"><li><input type="checkbox" class="task-checkbox" contenteditable="false" aria-label="${t('editor.checkboxAria')}"><span class="task-text" tabindex="0">&#8203;</span></li></ul>`);
+        document.execCommand('insertHTML', false, `<ul class="task-list"><li draggable="true"><span class="task-drag-handle" contenteditable="false" aria-label="Drag task" title="Drag to reorder">⠿</span><input type="checkbox" class="task-checkbox" contenteditable="false" aria-label="${t('editor.checkboxAria')}"><span class="task-text" tabindex="0">&#8203;</span></li></ul>`);
       } else if (button.dataset.command) {
         document.execCommand(button.dataset.command, false, null);
       }
@@ -1683,10 +1818,81 @@
     }
   });
 
+  let taskDragItem = null;
+  elements.noteBody.addEventListener('dragstart', event => {
+    const item = event.target.closest?.('li');
+    if (!item || !item.closest('ul.task-list')) return;
+    taskDragItem = item;
+    event.dataTransfer.effectAllowed = 'move';
+    item.classList.add('is-dragging-task');
+  });
+
+  elements.noteBody.addEventListener('dragover', event => {
+    if (!taskDragItem) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    const list = taskDragItem.closest('ul.task-list');
+    const target = event.target.closest?.('li');
+    if (!target || target === taskDragItem || target.closest('ul.task-list') !== list) return;
+
+    const rect = target.getBoundingClientRect();
+    const mid = rect.top + rect.height / 2;
+    if (event.clientY < mid) {
+      target.before(taskDragItem);
+    } else {
+      target.after(taskDragItem);
+    }
+  });
+
+  elements.noteBody.addEventListener('dragend', event => {
+    if (!taskDragItem) return;
+    taskDragItem.classList.remove('is-dragging-task');
+    taskDragItem = null;
+    normalizeChecklistGroups();
+    scheduleSave();
+  });
+
   $('#capture-note').addEventListener('click', () => openEditor());
+  $('#fab-add-note').addEventListener('click', () => openEditor());
+
+  if (window.IntersectionObserver) {
+    const fabObserver = new IntersectionObserver((entries) => {
+      const isVisible = entries[0].isIntersecting;
+      // Only show FAB if capture box is not visible AND we are not in admin view
+      if (!isVisible && view !== 'admin') {
+        $('#fab-add-note').hidden = false;
+      } else {
+        $('#fab-add-note').hidden = true;
+      }
+    }, { threshold: 0 });
+    fabObserver.observe(elements.captureWrap[0] || elements.captureWrap); // it's queried via $$ sometimes, fix just in case
+
+    // Also re-check on view changes
+    const originalRender = render;
+    render = function() {
+      originalRender();
+      if (view === 'admin') {
+        $('#fab-add-note').hidden = true;
+      }
+    };
+  }
   $('#empty-create').addEventListener('click', () => openEditor());
   $('#close-editor').addEventListener('click', closeEditor);
   elements.backdrop.addEventListener('click', closeEditor);
+
+  let listViewPref = localStorage.getItem('notki.list-view') === '1';
+  function applyViewPref() {
+    elements.pinnedGrid.classList.toggle('is-list-view', listViewPref);
+    elements.grid.classList.toggle('is-list-view', listViewPref);
+    $('#view-toggle').textContent = listViewPref ? '▦' : '▤';
+  }
+  applyViewPref();
+
+  $('#view-toggle').addEventListener('click', () => {
+    listViewPref = !listViewPref;
+    localStorage.setItem('notki.list-view', listViewPref ? '1' : '0');
+    applyViewPref();
+  });
 
   elements.navAdmin.addEventListener('click', () => {
     if (activeId) closeEditor();
@@ -1710,7 +1916,7 @@
     query = elements.search.value.trim();
     render();
   });
-  [elements.noteTitle, elements.noteBody, elements.tags].forEach(input => input.addEventListener('input', event => {
+  [elements.noteTitle, elements.noteBody].forEach(input => input.addEventListener('input', event => {
     if (input === elements.noteBody) {
       normalizeChecklistItemMarkup();
       updateWordCount();
