@@ -186,6 +186,7 @@
     elements.panel.hidden = false;
     elements.adminLink.hidden = !user.isAdmin;
     elements.navAdmin.hidden = !user.isAdmin;
+    if ($('#sidebar-admin-link')) $('#sidebar-admin-link').hidden = !user.isAdmin;
     if (user.isAdmin) { document.querySelector('#admin-account').textContent = user.email; }
     elements.avatar.title = user.email;
     elements.avatar.setAttribute('aria-label', t('topbar.accountAria', { email: user.email }));
@@ -613,9 +614,27 @@
     $('#settings-menu').open = false;
     openProfile();
   });
-  elements.sidebarProfileButton?.addEventListener('click', () => {
+  $('#sidebar-profile-link')?.addEventListener('click', () => {
+    if ($('#sidebar-user-menu')) $('#sidebar-user-menu').open = false;
     closeSidebar();
     openProfile();
+  });
+  $('#sidebar-admin-link')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    if ($('#sidebar-user-menu')) $('#sidebar-user-menu').open = false;
+    if (activeId) closeEditor();
+    closeLabelsModal();
+    closeSidebar();
+    view = 'admin';
+    render();
+  });
+  $('#sidebar-logout-button')?.addEventListener('click', async () => {
+    try {
+      await apiRequest('/api/logout', { method: 'POST', body: '{}' });
+      window.location.assign('/');
+    } catch (error) {
+      showToast(error.message);
+    }
   });
   $('#close-profile').addEventListener('click', closeProfile);
   elements.profileBackdrop.addEventListener('click', closeProfile);
@@ -2153,7 +2172,9 @@
   });
   document.addEventListener('click', event => {
     const menu = $('#settings-menu');
-    if (menu.open && !menu.contains(event.target) && !elements.noteBody.contains(event.target) && !event.target.closest('.editor-panel')) menu.open = false;
+    if (menu?.open && !menu.contains(event.target) && !elements.noteBody.contains(event.target) && !event.target.closest('.editor-panel')) menu.open = false;
+    const sidebarMenu = $('#sidebar-user-menu');
+    if (sidebarMenu?.open && !sidebarMenu.contains(event.target)) sidebarMenu.open = false;
   });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && !elements.sharePanel.hidden && elements.sharePanel.classList.contains('is-open')) {
@@ -2164,11 +2185,15 @@
       closeProfile();
       return;
     }
+    if (event.key === 'Escape' && $('#sidebar-user-menu')?.open) {
+      $('#sidebar-user-menu').open = false;
+      return;
+    }
     if (event.key === 'Escape' && elements.sidebar?.classList.contains('is-open')) {
       closeSidebar();
       return;
     }
-    if (event.key === 'Escape' && $('#settings-menu').open) {
+    if (event.key === 'Escape' && $('#settings-menu')?.open) {
       $('#settings-menu').open = false;
       return;
     }

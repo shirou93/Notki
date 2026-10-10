@@ -70,15 +70,25 @@
               <button class="nav-item" type="button" data-view="admin" id="nav-admin" hidden><span class="nav-icon" aria-hidden="true">⚙</span><span data-i18n="nav.adminPanel">Admin panel</span></button>
       </nav>
       <div class="sidebar-bottom">
-        <button class="sidebar-user" id="sidebar-profile-button" type="button">
-          <span class="avatar sidebar-avatar" id="sidebar-avatar" aria-hidden="true">N</span>
-          <div class="sidebar-user-info">
-            <span class="sidebar-user-email" id="sidebar-user-email"></span>
-            <span class="sidebar-user-label" data-i18n="topbar.profileMenu">Profile</span>
+        <details class="settings-menu sidebar-user-menu" id="sidebar-user-menu">
+          <summary class="sidebar-user" id="sidebar-profile-button">
+            <span class="avatar sidebar-avatar" id="sidebar-avatar" aria-hidden="true">N</span>
+            <div class="sidebar-user-info">
+              <span class="sidebar-user-email" id="sidebar-user-email"></span>
+              <span class="sidebar-user-label" data-i18n="topbar.profileMenu">Profile</span>
+            </div>
+          </summary>
+          <div class="settings-popover sidebar-user-popover" role="group" aria-label="Account" data-i18n-aria-label="topbar.account">
+            <span class="settings-heading" data-i18n="topbar.account">ACCOUNT</span>
+            <div class="data-actions">
+              <button class="data-action" id="sidebar-profile-link" type="button"><span class="action-icon" aria-hidden="true">◍</span><span class="action-label" data-i18n="topbar.profileMenu">Profile</span></button>
+              <button class="data-action" id="sidebar-admin-link" type="button" data-view="admin" hidden><span class="action-icon" aria-hidden="true">⚙</span><span class="action-label" data-i18n="nav.adminPanel">Admin panel</span></button>
+              <button class="data-action" id="sidebar-logout-button" type="button"><span class="action-icon" aria-hidden="true">↪</span><span class="action-label" data-i18n="topbar.logout">Sign out</span></button>
+            </div>
           </div>
-        </button>
+        </details>
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.4.2</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.4.3</span>
       </div>
     </aside>
 
@@ -144,7 +154,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p style="margin-top: -10px; margin-bottom: 15px; color: #81988a; font-size: 13px;"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.4.2</strong></p>
+      <p style="margin-top: -10px; margin-bottom: 15px; color: #81988a; font-size: 13px;"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.4.3</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
