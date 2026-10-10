@@ -378,7 +378,7 @@
   async function restoreBackup(filename) {
     const confirmed = window.confirm(t('admin.backups.confirmRestore', { filename }));
     if (!confirmed) return;
-    const password = document.querySelector('#restore-password')?.value || '';
+    const password = document.querySelector('#backup-password')?.value || '';
     try {
       await apiRequest(`/api/admin/backups/${encodeURIComponent(filename)}/restore`, {
         method: 'POST',
@@ -2082,7 +2082,7 @@
 
   elements.nav.forEach(button => button.addEventListener('click', () => {
     if (activeId) closeEditor();
-    closeLabelsModal();
+    if (button.id !== 'nav-labels') closeLabelsModal();
     closeSidebar();
     if (button.dataset.view) {
       view = button.dataset.view;

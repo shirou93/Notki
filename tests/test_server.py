@@ -405,7 +405,7 @@ class ServerFlowTests(unittest.TestCase):
 
     def test_update_check_and_perform_version_comparison(self):
         # Test check update with newer tag
-        tags_response = json.dumps([{'name': '0.1.4.4', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.4.4'}]).encode('utf-8')
+        tags_response = json.dumps([{'name': '0.1.4.5', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.4.5'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response
@@ -414,10 +414,10 @@ class ServerFlowTests(unittest.TestCase):
             status, res = self.request(self.admin, 'GET', '/api/admin/update/check')
             self.assertEqual(status, 200)
             self.assertTrue(res.get('updateAvailable', False))
-            self.assertEqual(res.get('latestVersion'), '0.1.4.4')
+            self.assertEqual(res.get('latestVersion'), '0.1.4.5')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.4.3', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.4.3'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.4.4', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.4.4'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -441,7 +441,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.4.3'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.4.4'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
