@@ -22,6 +22,7 @@
     avatar: $('#avatar'), profilePanel: $('#profile-panel'), profileBackdrop: $('#profile-backdrop'), profileAccount: $('#profile-account'),
     profileMessage: $('#profile-message'), passwordForm: $('#password-form'),
     avatarPreview: $('#profile-avatar-preview'), avatarInput: $('#avatar-input'), avatarMessage: $('#avatar-message'),
+    sidebarAvatar: $('#sidebar-avatar'), sidebarUserEmail: $('#sidebar-user-email'), sidebarProfileButton: $('#sidebar-profile-button'),
     sidebar: $('#sidebar'), sidebarBackdrop: $('#sidebar-backdrop'), hamburgerToggle: $('#hamburger-toggle'),
     sharedCount: $('#count-shared'), sharePanel: $('#share-panel'), shareBackdrop: $('#share-backdrop'),
     shareForm: $('#share-form'), shareEmail: $('#share-email'), sharePermission: $('#share-permission'),
@@ -189,6 +190,7 @@
     elements.avatar.title = user.email;
     elements.avatar.setAttribute('aria-label', t('topbar.accountAria', { email: user.email }));
     elements.profileAccount.textContent = user.email;
+    if (elements.sidebarUserEmail) elements.sidebarUserEmail.textContent = user.email;
     renderAvatar(user);
     userLabels = user.labels || [];
     document.body.classList.remove('is-auth');
@@ -213,6 +215,17 @@
       view = intent;
       render();
     }
+  }
+
+  function tableCell(content) {
+    const cell = document.createElement('td');
+    cell.textContent = content;
+    return cell;
+  }
+
+  function formatDate(isoString) {
+    if (!isoString) return '';
+    return window.i18n.formatDateTime(isoString);
   }
 
   function renderStats(stats) {
@@ -450,7 +463,8 @@
   function renderAvatar(user) {
     const initial = user.email.slice(0, 1).toLocaleUpperCase();
     const avatar = user.avatar || '';
-    for (const node of [elements.avatar, elements.avatarPreview]) {
+    const targets = [elements.avatar, elements.avatarPreview, elements.sidebarAvatar].filter(Boolean);
+    for (const node of targets) {
       node.textContent = avatar ? '' : initial;
       node.style.backgroundImage = avatar ? `url("${avatar}")` : '';
       node.classList.toggle('has-image', Boolean(avatar));
@@ -597,6 +611,10 @@
 
   $('#profile-button').addEventListener('click', () => {
     $('#settings-menu').open = false;
+    openProfile();
+  });
+  elements.sidebarProfileButton?.addEventListener('click', () => {
+    closeSidebar();
     openProfile();
   });
   $('#close-profile').addEventListener('click', closeProfile);
@@ -1253,6 +1271,7 @@
       elements.captureWrap.hidden = true;
       elements.notesArea.hidden = true;
       elements.topbarSearch.hidden = true;
+      if ($('#view-toggle')) $('#view-toggle').hidden = true;
       elements.adminArea.hidden = false;
       elements.breadcrumb.textContent = t('nav.adminPanel');
       refreshAdmin().catch(() => {});
@@ -1262,6 +1281,7 @@
       elements.captureWrap.hidden = false;
       elements.notesArea.hidden = false;
       elements.topbarSearch.hidden = false;
+      if ($('#view-toggle')) $('#view-toggle').hidden = false;
       elements.adminArea.hidden = true;
       elements.breadcrumb.textContent = t(NAV_KEYS[view]);
       if (window.location.pathname === '/admin') {
@@ -2026,6 +2046,7 @@
 
   elements.navAdmin.addEventListener('click', () => {
     if (activeId) closeEditor();
+    closeLabelsModal();
     closeSidebar();
     view = 'admin';
     render();
@@ -2034,6 +2055,7 @@
     e.preventDefault();
     $('#settings-menu').open = false;
     if (activeId) closeEditor();
+    closeLabelsModal();
     closeSidebar();
     view = 'admin';
     render();
@@ -2041,9 +2063,12 @@
 
   elements.nav.forEach(button => button.addEventListener('click', () => {
     if (activeId) closeEditor();
+    closeLabelsModal();
     closeSidebar();
-    view = button.dataset.view;
-    render();
+    if (button.dataset.view) {
+      view = button.dataset.view;
+      render();
+    }
   }));
   elements.search.addEventListener('input', () => {
     query = elements.search.value.trim();
