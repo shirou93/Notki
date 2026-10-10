@@ -1456,9 +1456,10 @@
   }
 
 
-  function renderLabels(activeTags) {
+  function renderLabels(activeTags = []) {
     elements.labelsContainer.replaceChildren();
-    userLabels.forEach(label => {
+    const combined = [...new Set([...userLabels, ...(activeTags || [])])];
+    combined.forEach(label => {
       const chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'label-chip';
@@ -1475,6 +1476,21 @@
       });
       elements.labelsContainer.append(chip);
     });
+  }
+
+  function openLabelsModal() {
+    document.getElementById('labels-panel').hidden = false;
+    document.getElementById('labels-panel').classList.add('is-open');
+    document.getElementById('labels-panel').setAttribute('aria-hidden', 'false');
+    document.getElementById('labels-backdrop').hidden = false;
+    renderLabelsEditList();
+  }
+
+  function closeLabelsModal() {
+    document.getElementById('labels-panel').classList.remove('is-open');
+    document.getElementById('labels-panel').setAttribute('aria-hidden', 'true');
+    document.getElementById('labels-panel').hidden = true;
+    document.getElementById('labels-backdrop').hidden = true;
   }
 
   function renderLabelsEditList() {
@@ -1495,7 +1511,7 @@
       const delBtn = document.createElement('button');
       delBtn.className = 'share-revoke';
       delBtn.type = 'button';
-      delBtn.textContent = 'Remove';
+      delBtn.textContent = t('labels.remove');
       delBtn.addEventListener('click', async () => {
         userLabels = userLabels.filter(l => l !== label);
         try {
@@ -1518,20 +1534,10 @@
     });
   }
 
-  $('#edit-labels').addEventListener('click', () => {
-    document.getElementById('labels-panel').hidden = false;
-    document.getElementById('labels-panel').classList.add('is-open');
-    document.getElementById('labels-panel').setAttribute('aria-hidden', 'false');
-    document.getElementById('labels-backdrop').hidden = false;
-    renderLabelsEditList();
-  });
-
-  $('#close-labels').addEventListener('click', () => {
-    document.getElementById('labels-panel').classList.remove('is-open');
-    document.getElementById('labels-panel').setAttribute('aria-hidden', 'true');
-    document.getElementById('labels-panel').hidden = true;
-    document.getElementById('labels-backdrop').hidden = true;
-  });
+  $('#edit-labels').addEventListener('click', openLabelsModal);
+  $('#nav-labels').addEventListener('click', openLabelsModal);
+  $('#close-labels').addEventListener('click', closeLabelsModal);
+  $('#labels-backdrop').addEventListener('click', closeLabelsModal);
 
   $('#add-label-form').addEventListener('submit', async event => {
     event.preventDefault();
@@ -1819,6 +1825,8 @@
   });
 
   let taskDragItem = null;
+  let taskPointerId = null;
+
   elements.noteBody.addEventListener('dragstart', event => {
     const item = event.target.closest?.('li');
     if (!item || !item.closest('ul.task-list')) return;
@@ -1852,6 +1860,49 @@
     scheduleSave();
   });
 
+  // Pointer event support for touch/mouse handle dragging in task list
+  elements.noteBody.addEventListener('pointerdown', event => {
+    const handle = event.target.closest?.('.task-drag-handle');
+    if (!handle) return;
+    const item = handle.closest('li');
+    if (!item || !item.closest('ul.task-list')) return;
+
+    taskDragItem = item;
+    taskPointerId = event.pointerId;
+    item.classList.add('is-dragging-task');
+    try { handle.setPointerCapture(event.pointerId); } catch {}
+  });
+
+  elements.noteBody.addEventListener('pointermove', event => {
+    if (!taskDragItem || event.pointerId !== taskPointerId) return;
+    const list = taskDragItem.closest('ul.task-list');
+    if (!list) return;
+
+    const elemBelow = document.elementFromPoint(event.clientX, event.clientY);
+    const target = elemBelow?.closest?.('li');
+    if (!target || target === taskDragItem || target.closest('ul.task-list') !== list) return;
+
+    const rect = target.getBoundingClientRect();
+    const mid = rect.top + rect.height / 2;
+    if (event.clientY < mid) {
+      target.before(taskDragItem);
+    } else {
+      target.after(taskDragItem);
+    }
+  });
+
+  const endTaskPointerDrag = (event) => {
+    if (!taskDragItem || (taskPointerId !== null && event.pointerId !== taskPointerId)) return;
+    taskDragItem.classList.remove('is-dragging-task');
+    taskDragItem = null;
+    taskPointerId = null;
+    normalizeChecklistGroups();
+    scheduleSave();
+  };
+
+  elements.noteBody.addEventListener('pointerup', endTaskPointerDrag);
+  elements.noteBody.addEventListener('pointercancel', endTaskPointerDrag);
+
   $('#capture-note').addEventListener('click', () => openEditor());
   $('#fab-add-note').addEventListener('click', () => openEditor());
 
@@ -1865,7 +1916,7 @@
         $('#fab-add-note').hidden = true;
       }
     }, { threshold: 0 });
-    fabObserver.observe(elements.captureWrap[0] || elements.captureWrap); // it's queried via $$ sometimes, fix just in case
+    if (elements.captureWrap) fabObserver.observe(elements.captureWrap);
 
     // Also re-check on view changes
     const originalRender = render;

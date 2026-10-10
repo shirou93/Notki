@@ -128,7 +128,13 @@ window.notkiTranslations.pl = {
   'share.readOnlySaveFailed': 'Nie masz uprawnień do edycji tej notatki.',
 
   'nav.shared': 'Udostępnione mi',
+  'nav.labels': 'Etykiety',
   'view.shared': 'Udostępnione mi',
+  'labels.title': 'Edycja etykiet',
+  'labels.description': 'Dodawaj i usuwaj etykiety. Etykiety są dostępne we wszystkich notatkach.',
+  'labels.newPlaceholder': 'Nowa etykieta',
+  'labels.add': 'Dodaj',
+  'labels.remove': 'Usuń',
   'empty.shared.title': 'Nikt nie udostępnił Ci jeszcze notatki.',
   'empty.shared.copy': 'Gdy ktoś da Ci dostęp do swojej notatki, znajdziesz ją właśnie tutaj.',
   'count.sharedLabel': 'udostępnione',
