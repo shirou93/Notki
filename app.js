@@ -751,8 +751,7 @@
         safeNode.className = node.classList.contains('task-list-completed') ? 'task-list task-list-completed' : 'task-list';
       }
       if (node.tagName === 'LI' && node.closest('.task-list')) {
-        safeNode.setAttribute('draggable', 'true');
-      }
+        }
       if (node.tagName === 'P' && node.classList.contains('task-group-label')) {
         safeNode.className = 'task-group-label';
         safeNode.contentEditable = 'false';
@@ -820,7 +819,6 @@
 
   function normalizeChecklistItemMarkup(root = elements.noteBody) {
     root.querySelectorAll('ul.task-list > li').forEach(item => {
-      item.setAttribute('draggable', 'true');
       const checkbox = item.querySelector(':scope > input.task-checkbox');
       if (!checkbox) return;
       let dragHandle = item.querySelector(':scope > .task-drag-handle');
@@ -852,6 +850,7 @@
     const selection = window.getSelection();
     const node = selection?.focusNode || selection?.anchorNode;
     const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    if (event.target.closest?.('.task-drag-handle')) return;
     return element?.closest('.task-text') || null;
   }
 
@@ -868,6 +867,7 @@
     if (!range) return;
     const node = range.startContainer;
     const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    if (event.target.closest?.('.task-drag-handle')) return;
     if (event.target.closest?.('input.task-checkbox')) return;
     const taskText = event.target.closest?.('.task-text')
       || element?.closest('.task-text')
@@ -1001,7 +1001,6 @@
 
   function createChecklistItem() {
     const item = document.createElement('li');
-    item.setAttribute('draggable', 'true');
     const dragHandle = document.createElement('span');
     dragHandle.className = 'task-drag-handle';
     dragHandle.contentEditable = 'false';
@@ -1820,7 +1819,7 @@
       restoreEditorRange();
       const previousRange = editorRange?.cloneRange();
       if (button.hasAttribute('data-insert-checklist')) {
-        document.execCommand('insertHTML', false, `<ul class="task-list"><li draggable="true"><span class="task-drag-handle" contenteditable="false" aria-label="Drag task" title="Drag to reorder">⠿</span><input type="checkbox" class="task-checkbox" contenteditable="false" aria-label="${t('editor.checkboxAria')}"><span class="task-text" tabindex="0">&#8203;</span></li></ul>`);
+        document.execCommand('insertHTML', false, `<ul class="task-list"><li><span class="task-drag-handle" contenteditable="false" aria-label="Drag task" title="Drag to reorder">⠿</span><input type="checkbox" class="task-checkbox" contenteditable="false" aria-label="${t('editor.checkboxAria')}"><span class="task-text" tabindex="0">&#8203;</span></li></ul>`);
       } else if (button.dataset.command) {
         document.execCommand(button.dataset.command, false, null);
       }

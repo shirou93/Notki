@@ -224,7 +224,11 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .card-body ul, .card-body ol { margin: 0 0 8px; padding-left: 18px; }
 .card-body .task-list { padding-left: 0; list-style: none; }
 .card-body .task-list:empty { display: none; }
-.card-body .task-list li { display: grid; grid-template-columns: 18px 15px minmax(0, 1fr); align-items: center; gap: 6px; min-height: 18px; margin: 0 0 5px; }
+.card-body .task-list li { display: grid; grid-template-columns: 18px 15px minmax(0, 1fr); align-items: center; gap: 6px; min-height: 18px; margin: 0 0 5px; border-radius: 4px; }
+.card-body .task-list li.is-dragging-task { background: #eef4e7; box-shadow: inset 0 0 0 1px #8fae76; }
+.card-body .task-list li.is-dragging-task > * { visibility: hidden; }
+:root[data-theme="dark"] .card-body .task-list li.is-dragging-task { background: #25382b; box-shadow: inset 0 0 0 1px #7d9c63; }
+
 .card-body .task-list li > .task-drag-handle { width: 18px; height: 18px; display: grid; place-items: center; cursor: grab; color: #8f9b92; font-size: 15px; font-family: sans-serif; opacity: 0.85; transition: opacity 0.2s, color 0.2s; user-select: none; touch-action: none; }
 .card-body .task-list li:hover > .task-drag-handle { opacity: 1; color: #202a25; }
 .card-body .task-list li > .task-drag-handle:active { cursor: grabbing; }
@@ -304,8 +308,11 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .editor-body ul, .editor-body ol { padding-left: 24px; }
 .editor-body .task-list { padding-left: 0; list-style: none; }
 .editor-body .task-list:empty { display: none; }
-.editor-body .task-list li { display: grid; grid-template-columns: 18px 15px minmax(0, 1fr); align-items: center; gap: 6px; min-height: 22px; margin: 0 0 6px; }
-.editor-body .task-list li.is-dragging-task { opacity: 0.5; }
+.editor-body .task-list li { display: grid; grid-template-columns: 18px 15px minmax(0, 1fr); align-items: center; gap: 6px; min-height: 22px; margin: 0 0 6px; border-radius: 4px; }
+.editor-body .task-list li.is-dragging-task { background: #eef4e7; box-shadow: inset 0 0 0 1px #8fae76; }
+.editor-body .task-list li.is-dragging-task > * { visibility: hidden; }
+:root[data-theme="dark"] .editor-body .task-list li.is-dragging-task { background: #25382b; box-shadow: inset 0 0 0 1px #7d9c63; }
+
 .editor-body .task-list li > .task-drag-handle { width: 18px; height: 18px; display: grid; place-items: center; cursor: grab; color: #8f9b92; font-size: 16px; font-family: sans-serif; opacity: 0.85; transition: opacity 0.2s, color 0.2s; user-select: none; touch-action: none; }
 .editor-body .task-list li:hover > .task-drag-handle { opacity: 1; color: #202a25; }
 .editor-body .task-list li > .task-drag-handle:active { cursor: grabbing; }
@@ -341,6 +348,34 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
 .toast { position: fixed; right: 22px; bottom: 22px; z-index: 300; max-width: min(370px, calc(100vw - 32px)); padding: 11px 15px; border: 1px solid #e7ebe5; border-radius: 6px; background: #fff; color: #354339; font-size: 12px; box-shadow: 0 8px 24px #23382714; opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s, transform .18s; }
 .toast.is-visible { opacity: 1; transform: translateY(0); }
+
+.task-drag-preview {
+  position: fixed;
+  z-index: 310;
+  top: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: 18px 15px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: #fff;
+  border: 1px solid #c4d1bd;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  pointer-events: none;
+  font-size: 14px;
+  line-height: 1.35;
+  color: #414b44;
+  will-change: transform;
+}
+.task-drag-preview .task-drag-handle { width: 18px; height: 18px; display: grid; place-items: center; color: #202a25; font-size: 15px; font-family: sans-serif; }
+.task-drag-preview .task-checkbox { width: 15px; height: 15px; margin: 0; accent-color: #52754e; }
+.task-drag-preview .task-text { white-space: pre-wrap; word-break: break-word; margin: 0; }
+:root[data-theme="dark"] .task-drag-preview { background: var(--paper); border-color: #536456; color: var(--ink); box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+:root[data-theme="dark"] .task-drag-preview .task-drag-handle { color: var(--ink); }
+
+body.is-dragging-task-active, body.is-dragging-task-active * { cursor: var(--drag-cursor) !important; user-select: none !important; }
 
 @keyframes rise-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes gap-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
