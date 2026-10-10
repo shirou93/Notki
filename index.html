@@ -49,11 +49,12 @@
   <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
   <div class="app-shell" id="app-shell" hidden>
     <div class="mobile-header" id="mobile-header">
+      <button class="icon-button hamburger-toggle" id="hamburger-toggle" type="button" aria-label="Toggle menu" title="Menu">☰</button>
       <a class="brand" href="#all" aria-label="Notki, all notes" data-i18n-aria-label="brand.homeAria">
         <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
         <span>notki<span class="brand-period">.</span></span>
       </a>
-      <button class="icon-button hamburger-toggle" id="hamburger-toggle" type="button" aria-label="Toggle menu" title="Menu">☰</button>
+      <div class="header-right-spacer" aria-hidden="true"></div>
     </div>
     <aside class="sidebar" id="sidebar" aria-label="Navigation" data-i18n-aria-label="nav.aria">
       <a class="brand" href="#all" aria-label="Notki, all notes" data-i18n-aria-label="brand.homeAria">
@@ -65,8 +66,8 @@
         <button class="nav-item" type="button" data-view="pinned"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6l-3 3v2h10v-2l-3-3V3"/><path d="M12 14v7"/></svg></span><span data-i18n="nav.pinned">Pinned</span><span class="nav-count" id="count-pinned">0</span></button>
         <button class="nav-item" type="button" data-view="archive"><span class="nav-icon" aria-hidden="true">▣</span><span data-i18n="nav.archive">Archive</span><span class="nav-count" id="count-archive">0</span></button>
         <button class="nav-item" type="button" data-view="shared"><span class="nav-icon" aria-hidden="true">⇄</span><span data-i18n="nav.shared">Shared with me</span><span class="nav-count" id="count-shared">0</span></button>
-        <button class="nav-item" type="button" id="nav-labels"><span class="nav-icon" aria-hidden="true">🏷</span><span data-i18n="nav.labels">Labels</span></button>
         <button class="nav-item" type="button" data-view="trash"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></span><span data-i18n="nav.trash">Trash</span><span class="nav-count" id="count-trash">0</span></button>
+        <button class="nav-item" type="button" id="nav-labels"><span class="nav-icon" aria-hidden="true">🏷</span><span data-i18n="nav.labels">Labels</span></button>
               <button class="nav-item" type="button" data-view="admin" id="nav-admin" hidden><span class="nav-icon" aria-hidden="true">⚙</span><span data-i18n="nav.adminPanel">Admin panel</span></button>
       </nav>
       <div class="sidebar-bottom">
@@ -88,7 +89,7 @@
           </div>
         </details>
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.4.4</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.4.5</span>
       </div>
     </aside>
 
@@ -154,7 +155,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p style="margin-top: -10px; margin-bottom: 15px; color: #81988a; font-size: 13px;"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.4.4</strong></p>
+      <p style="margin-top: -10px; margin-bottom: 15px; color: #81988a; font-size: 13px;"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.4.5</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
