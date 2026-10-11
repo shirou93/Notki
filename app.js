@@ -2174,6 +2174,7 @@
   function closeSidebar() {
     elements.sidebar?.classList.remove('is-open');
     if (elements.sidebarBackdrop) elements.sidebarBackdrop.hidden = true;
+    document.body.style.overflow = '';
   }
 
   function toggleSidebar() {
@@ -2182,6 +2183,7 @@
     } else {
       elements.sidebar?.classList.add('is-open');
       if (elements.sidebarBackdrop) elements.sidebarBackdrop.hidden = false;
+      document.body.style.overflow = 'hidden';
     }
   }
 
