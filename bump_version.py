@@ -4,7 +4,7 @@ for filepath in files_to_update:
     try:
         with open(filepath, "r") as f_in:
             content = f_in.read()
-        content = content.replace("0.1.5.5", "0.1.5.6")
+        content = content.replace("0.1.5.6", "0.1.5.7")
         with open(filepath, "w") as f_out:
             f_out.write(content)
     except FileNotFoundError:

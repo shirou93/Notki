@@ -23,7 +23,7 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.6'
+VERSION = '0.1.5.7'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -315,18 +315,22 @@ class APIError(Exception):
 import subprocess
 
 def aes_encrypt(data, password_str):
+    env = dict(os.environ, NOTKI_ENC_PASS=password_str)
     proc = subprocess.run(
-        ['openssl', 'enc', '-aes-256-cbc', '-pbkdf2', '-pass', f'pass:{password_str}'],
+        ['openssl', 'enc', '-aes-256-cbc', '-pbkdf2', '-pass', 'env:NOTKI_ENC_PASS'],
         input=data,
+        env=env,
         capture_output=True,
         check=True
     )
     return proc.stdout
 
 def aes_decrypt(data, password_str):
+    env = dict(os.environ, NOTKI_ENC_PASS=password_str)
     proc = subprocess.run(
-        ['openssl', 'enc', '-d', '-aes-256-cbc', '-pbkdf2', '-pass', f'pass:{password_str}'],
+        ['openssl', 'enc', '-d', '-aes-256-cbc', '-pbkdf2', '-pass', 'env:NOTKI_ENC_PASS'],
         input=data,
+        env=env,
         capture_output=True,
         check=True
     )
