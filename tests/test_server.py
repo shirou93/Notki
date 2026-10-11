@@ -244,6 +244,27 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertIn('invitation', error['error'].lower())
 
+    def test_delete_invitation_by_admin(self):
+        status, invite = self.request(self.admin, 'POST', '/api/admin/invites', {})
+        self.assertEqual(status, 201)
+
+        status, summary = self.request(self.admin, 'GET', '/api/admin/summary')
+        self.assertEqual(status, 200)
+        self.assertTrue(len(summary['invites']) > 0)
+        token_hash = summary['invites'][0]['tokenHash']
+        self.assertTrue(bool(token_hash))
+
+        status, result = self.request(self.admin, 'DELETE', f'/api/admin/invites/{token_hash}')
+        self.assertEqual(status, 200)
+        self.assertEqual(result['deleted'], token_hash)
+
+        status, summary_after = self.request(self.admin, 'GET', '/api/admin/summary')
+        self.assertEqual(status, 200)
+        self.assertNotIn(token_hash, [inv['tokenHash'] for inv in summary_after['invites']])
+
+        status, result = self.request(self.admin, 'DELETE', f'/api/admin/invites/{token_hash}')
+        self.assertEqual(status, 404)
+
     def test_password_change_requires_current_password_and_keeps_session(self):
         status, _ = self.request(self.admin, 'POST', '/api/account/password', {
             'currentPassword': 'wrong-passphrase', 'newPassword': 'brand-new-passphrase-1',
@@ -405,7 +426,7 @@ class ServerFlowTests(unittest.TestCase):
 
     def test_update_check_and_perform_version_comparison(self):
         # Test check update with newer tag
-        tags_response = json.dumps([{'name': '0.1.5.1', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.1'}]).encode('utf-8')
+        tags_response = json.dumps([{'name': '0.1.5.2', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.2'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response
@@ -414,10 +435,10 @@ class ServerFlowTests(unittest.TestCase):
             status, res = self.request(self.admin, 'GET', '/api/admin/update/check')
             self.assertEqual(status, 200)
             self.assertTrue(res.get('updateAvailable', False))
-            self.assertEqual(res.get('latestVersion'), '0.1.5.1')
+            self.assertEqual(res.get('latestVersion'), '0.1.5.2')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.0', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.0'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.1', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.1'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same

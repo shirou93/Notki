@@ -272,6 +272,8 @@ window.notkiTranslations.en = {
   'admin.invites.used': 'Used',
   'admin.invites.expired': 'Expired',
   'admin.invites.pending': 'Pending',
+  'admin.invites.delete': 'Delete invitation',
+  'admin.invites.confirmDelete': 'Are you sure you want to delete this invitation?',
   'admin.error.server': 'Server error.',
 
   'setup.eyebrow': 'FIRST RUN',

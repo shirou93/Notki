@@ -23,7 +23,7 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.0'
+VERSION = '0.1.5.1'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -498,7 +498,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     'stats': {key: stats[key] or 0 for key in ('users', 'notes', 'active', 'archived', 'trash')}
                               | {'pendingInvites': pending},
                     'users': [{'id': row['id'], 'email': row['email'], 'role': row['role'], 'createdAt': row['created_at'], 'notes': row['note_count']} for row in users],
-                    'invites': [{'createdAt': row['created_at'], 'expiresAt': row['expires_at'], 'usedAt': row['used_at']} for row in invites],
+                    'invites': [{'tokenHash': row['token_hash'], 'createdAt': row['created_at'], 'expiresAt': row['expires_at'], 'usedAt': row['used_at']} for row in invites],
                 })
             elif path == '/api/admin/backups':
                 self.list_server_backups()
@@ -775,9 +775,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def delete_invite(self, token_hash):
         self.require_user(admin=True)
         with database() as connection:
-            cursor = connection.execute('DELETE FROM invites WHERE token_hash = ? AND used_at IS NULL', (token_hash,))
+            cursor = connection.execute('DELETE FROM invites WHERE token_hash = ?', (token_hash,))
             if not cursor.rowcount:
-                raise APIError('Nie znaleziono zaproszenia lub zostało już użyte.', 404)
+                raise APIError('Nie znaleziono zaproszenia.', 404)
         self.send_json({'deleted': token_hash})
 
     def restore_server_backup(self, filename, payload=None):
