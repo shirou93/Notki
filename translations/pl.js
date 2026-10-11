@@ -278,6 +278,8 @@ window.notkiTranslations.pl = {
   'admin.invites.used': 'Wykorzystane',
   'admin.invites.expired': 'Wygasłe',
   'admin.invites.pending': 'Oczekujące',
+  'admin.invites.delete': 'Usuń zaproszenie',
+  'admin.invites.confirmDelete': 'Czy na pewno chcesz usunąć to zaproszenie?',
   'admin.error.server': 'Błąd serwera.',
 
   'setup.eyebrow': 'PIERWSZE URUCHOMIENIE',

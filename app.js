@@ -282,14 +282,36 @@
     document.querySelector('#admin-users').replaceChildren(...rows);
   }
 
+  async function deleteInvite(tokenHash) {
+    if (!confirm(t('admin.invites.confirmDelete'))) return;
+    try {
+      await apiRequest(`/api/admin/invites/${encodeURIComponent(tokenHash)}`, { method: 'DELETE' });
+      await refreshAdmin();
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
   function renderInvites(invites) {
     const rows = invites.map(invite => {
       const row = document.createElement('tr');
       const expired = new Date(invite.expiresAt) <= new Date();
+      const actions = document.createElement('td');
+      actions.className = 'admin-table-actions';
+      if (invite.tokenHash) {
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'action-icon';
+        delBtn.textContent = '×';
+        delBtn.title = t('admin.invites.delete');
+        delBtn.addEventListener('click', () => deleteInvite(invite.tokenHash));
+        actions.append(delBtn);
+      }
       row.append(
         tableCell(formatDate(invite.createdAt)),
         tableCell(formatDate(invite.expiresAt)),
         tableCell(t(invite.usedAt ? 'admin.invites.used' : expired ? 'admin.invites.expired' : 'admin.invites.pending')),
+        actions
       );
       return row;
     });
@@ -1411,6 +1433,8 @@
     let cardTaskPointerId = null;
     let cardTaskDragPreview = null;
     let cardTaskDragFrame = null;
+    let cardTaskOffsetX = 0;
+    let cardTaskOffsetY = 0;
 
     card.addEventListener('pointerdown', event => {
       if (readOnly) return;
@@ -1422,12 +1446,19 @@
       event.stopPropagation();
       cardTaskDragItem = item;
       cardTaskPointerId = event.pointerId;
+      const itemRect = item.getBoundingClientRect();
+      cardTaskOffsetX = event.clientX - itemRect.left;
+      cardTaskOffsetY = event.clientY - itemRect.top;
+
       item.classList.add('is-dragging-task');
       document.body.classList.add('is-dragging-task-active');
       cardTaskDragPreview = document.createElement('div');
       cardTaskDragPreview.className = 'task-drag-preview';
+      cardTaskDragPreview.style.width = `${itemRect.width}px`;
+      const isChecked = item.querySelector('.task-checkbox')?.checked;
       const cDownContent = item.querySelector('.task-text')?.textContent || '';
-      cardTaskDragPreview.innerHTML = `<span class="task-drag-handle">⠿</span><input type="checkbox" class="task-checkbox" disabled><span class="task-text">${cDownContent}</span>`;
+      cardTaskDragPreview.innerHTML = `<span class="task-drag-handle">⠿</span><input type="checkbox" class="task-checkbox"${isChecked ? ' checked' : ''} disabled><span class="task-text">${cDownContent}</span>`;
+      cardTaskDragPreview.style.transform = `translate3d(${event.clientX - cardTaskOffsetX}px, ${event.clientY - cardTaskOffsetY}px, 0)`;
       document.body.append(cardTaskDragPreview);
       try { handle.setPointerCapture(event.pointerId); } catch {}
     });
@@ -1438,7 +1469,7 @@
         cardTaskDragFrame = requestAnimationFrame(() => {
           cardTaskDragFrame = null;
           if (!cardTaskDragPreview) return;
-          cardTaskDragPreview.style.transform = `translate3d(${event.clientX + 10}px, ${event.clientY + 10}px, 0)`;
+          cardTaskDragPreview.style.transform = `translate3d(${event.clientX - cardTaskOffsetX}px, ${event.clientY - cardTaskOffsetY}px, 0)`;
 
           const list = cardTaskDragItem.closest('ul.task-list');
           if (!list) return;
@@ -1945,18 +1976,26 @@
   let taskPointerId = null;
   let taskDragPreview = null;
   let taskDragFrame = null;
+  let taskOffsetX = 0;
+  let taskOffsetY = 0;
 
   elements.noteBody.addEventListener('dragstart', event => {
     const item = event.target.closest?.('li');
     if (!item || !item.closest('ul.task-list')) return;
     taskDragItem = item;
+    const itemRect = item.getBoundingClientRect();
+    taskOffsetX = event.clientX - itemRect.left;
+    taskOffsetY = event.clientY - itemRect.top;
     event.dataTransfer.effectAllowed = 'move';
     item.classList.add('is-dragging-task');
     document.body.classList.add('is-dragging-task-active');
     taskDragPreview = document.createElement('div');
     taskDragPreview.className = 'task-drag-preview';
+    taskDragPreview.style.width = `${itemRect.width}px`;
+    const isChecked = item.querySelector('.task-checkbox')?.checked;
     const dragStartTextContent = item.querySelector('.task-text')?.textContent || '';
-    taskDragPreview.innerHTML = `<span class="task-drag-handle">⠿</span><input type="checkbox" class="task-checkbox" disabled><span class="task-text">${dragStartTextContent}</span>`;
+    taskDragPreview.innerHTML = `<span class="task-drag-handle">⠿</span><input type="checkbox" class="task-checkbox"${isChecked ? ' checked' : ''} disabled><span class="task-text">${dragStartTextContent}</span>`;
+    taskDragPreview.style.transform = `translate3d(${event.clientX - taskOffsetX}px, ${event.clientY - taskOffsetY}px, 0)`;
     document.body.append(taskDragPreview);
     const emptyImage = new Image();
     emptyImage.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
@@ -1967,7 +2006,7 @@
     if (!taskDragItem) return;
     event.preventDefault();
     if (taskDragPreview) {
-      taskDragPreview.style.transform = `translate3d(${event.clientX + 10}px, ${event.clientY + 10}px, 0)`;
+      taskDragPreview.style.transform = `translate3d(${event.clientX - taskOffsetX}px, ${event.clientY - taskOffsetY}px, 0)`;
     }
     event.dataTransfer.dropEffect = 'move';
     const list = taskDragItem.closest('ul.task-list');
@@ -2005,12 +2044,19 @@
 
     taskDragItem = item;
     taskPointerId = event.pointerId;
+    const itemRect = item.getBoundingClientRect();
+    taskOffsetX = event.clientX - itemRect.left;
+    taskOffsetY = event.clientY - itemRect.top;
+
     item.classList.add('is-dragging-task');
     document.body.classList.add('is-dragging-task-active');
     taskDragPreview = document.createElement('div');
     taskDragPreview.className = 'task-drag-preview';
+    taskDragPreview.style.width = `${itemRect.width}px`;
+    const isChecked = item.querySelector('.task-checkbox')?.checked;
     const pDownContent = item.querySelector('.task-text')?.textContent || '';
-    taskDragPreview.innerHTML = `<span class="task-drag-handle">⠿</span><input type="checkbox" class="task-checkbox" disabled><span class="task-text">${pDownContent}</span>`;
+    taskDragPreview.innerHTML = `<span class="task-drag-handle">⠿</span><input type="checkbox" class="task-checkbox"${isChecked ? ' checked' : ''} disabled><span class="task-text">${pDownContent}</span>`;
+    taskDragPreview.style.transform = `translate3d(${event.clientX - taskOffsetX}px, ${event.clientY - taskOffsetY}px, 0)`;
     document.body.append(taskDragPreview);
     try { handle.setPointerCapture(event.pointerId); } catch {}
   });
@@ -2021,7 +2067,7 @@
       taskDragFrame = requestAnimationFrame(() => {
         taskDragFrame = null;
         if (!taskDragPreview) return;
-        taskDragPreview.style.transform = `translate3d(${event.clientX + 10}px, ${event.clientY + 10}px, 0)`;
+        taskDragPreview.style.transform = `translate3d(${event.clientX - taskOffsetX}px, ${event.clientY - taskOffsetY}px, 0)`;
 
         const list = taskDragItem.closest('ul.task-list');
         if (!list) return;
