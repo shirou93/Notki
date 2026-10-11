@@ -1161,7 +1161,10 @@
 
   function finishNoteDrag(event, commit) {
     if (!dragState || event.pointerId !== dragState.pointerId) return;
-    const { active, noteId, gapIndex, startIndex } = dragState;
+    const { active, noteId, gapIndex, startIndex, pointerId } = dragState;
+    if (event.target && typeof event.target.releasePointerCapture === 'function') {
+      try { event.target.releasePointerCapture(pointerId); } catch {}
+    }
     const moved = active && gapIndex !== startIndex;
     const neighbour = moved ? dropNeighbour(gapIndex) : null;
     // The grid is still showing the placeholder layout, so any drop needs a repaint.
@@ -1417,6 +1420,7 @@
     dragHandle.addEventListener('pointerdown', event => {
       if (event.button !== 0) return;
       event.preventDefault();
+      try { dragHandle.setPointerCapture(event.pointerId); } catch {}
       dragState = { noteId: note.id, card, grid: card.parentElement, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false, gapIndex: null, others: [], startIndex: 0 };
     });
     dragHandle.addEventListener('keydown', event => {
@@ -1522,6 +1526,7 @@
         window.removeEventListener('pointercancel', endCardTaskPointerDrag);
         window.removeEventListener('lostpointercapture', endCardTaskPointerDrag);
 
+        try { handle.releasePointerCapture(cardTaskPointerId); } catch {}
         cleanupAllTaskDrags();
         cardTaskDragItem = null;
         cardTaskPointerId = null;
@@ -2119,6 +2124,7 @@
       window.removeEventListener('pointercancel', endTaskPointerDrag);
       window.removeEventListener('lostpointercapture', endTaskPointerDrag);
 
+      try { handle.releasePointerCapture(taskPointerId); } catch {}
       cleanupAllTaskDrags();
       taskDragItem = null;
       taskPointerId = null;
@@ -2405,6 +2411,28 @@
     }
   });
 
+  function showUpdateLoadingOverlay() {
+    const backdrop = document.querySelector('#update-loading-backdrop');
+    if (backdrop) backdrop.hidden = false;
+  }
+
+  async function pollServerUntilOnline() {
+    const maxAttempts = 60;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      try {
+        const response = await fetch('/api/setup/status', { cache: 'no-store' });
+        if (response.ok) {
+          window.location.reload();
+          return;
+        }
+      } catch {
+        // Server still restarting / unreachable
+      }
+    }
+    window.location.reload();
+  }
+
   document.querySelector('#perform-update').addEventListener('click', async event => {
     const button = event.currentTarget;
     const message = document.querySelector('#update-message');
@@ -2423,8 +2451,8 @@
         body: JSON.stringify({ tarballUrl: currentTarballUrl })
       });
       message.textContent = t('admin.update.success');
-      // Reload after short delay to show success message
-      setTimeout(() => window.location.reload(), 2000);
+      showUpdateLoadingOverlay();
+      pollServerUntilOnline();
     } catch (error) {
       message.textContent = error.message;
       message.classList.add('is-error');

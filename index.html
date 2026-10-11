@@ -3,8 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f6f8f5" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#141c17" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f8f5">
   <meta name="description" content="Notki — a private notebook in your browser." data-i18n-content="meta.description">
   <title data-i18n="meta.title">Notki — Your notebook</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -90,7 +89,7 @@
           </div>
         </details>
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.4</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.5</span>
       </div>
     </aside>
 
@@ -156,7 +155,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p style="margin-top: -10px; margin-bottom: 15px; color: #81988a; font-size: 13px;"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.4</strong></p>
+      <p style="margin-top: -10px; margin-bottom: 15px; color: #81988a; font-size: 13px;"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.5</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
@@ -352,6 +351,11 @@
     </div>
   </aside>
 
+  <div class="modal-backdrop" id="update-loading-backdrop" style="z-index: 500; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; color: #fff; text-align: center; padding: 20px;" hidden>
+    <div style="width: 42px; height: 42px; border: 4px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+    <p id="update-loading-text" style="font-size: 16px; font-weight: 600; margin: 0;" data-i18n="admin.update.restarting">Restarting server and loading interface...</p>
+  </div>
+  <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <template id="note-template">
     <article class="note-card">
