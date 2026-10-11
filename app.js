@@ -1409,6 +1409,8 @@
 
     let cardTaskDragItem = null;
     let cardTaskPointerId = null;
+    let cardTaskDragPreview = null;
+    let cardTaskDragFrame = null;
 
     card.addEventListener('pointerdown', event => {
       if (readOnly) return;
@@ -1421,29 +1423,48 @@
       cardTaskDragItem = item;
       cardTaskPointerId = event.pointerId;
       item.classList.add('is-dragging-task');
+      document.body.classList.add('is-dragging-task-active');
+      cardTaskDragPreview = document.createElement('div');
+      cardTaskDragPreview.className = 'task-drag-preview';
+      const cDownContent = item.querySelector('.task-text')?.textContent || '';
+      cardTaskDragPreview.innerHTML = `<span class="task-drag-handle">⠿</span><input type="checkbox" class="task-checkbox" disabled><span class="task-text">${cDownContent}</span>`;
+      document.body.append(cardTaskDragPreview);
       try { handle.setPointerCapture(event.pointerId); } catch {}
     });
 
     card.addEventListener('pointermove', event => {
       if (!cardTaskDragItem || event.pointerId !== cardTaskPointerId) return;
-      const list = cardTaskDragItem.closest('ul.task-list');
-      if (!list) return;
+      if (!cardTaskDragFrame) {
+        cardTaskDragFrame = requestAnimationFrame(() => {
+          cardTaskDragFrame = null;
+          if (!cardTaskDragPreview) return;
+          cardTaskDragPreview.style.transform = `translate3d(${event.clientX + 10}px, ${event.clientY + 10}px, 0)`;
 
-      const elemBelow = document.elementFromPoint(event.clientX, event.clientY);
-      const target = elemBelow?.closest?.('li');
-      if (!target || target === cardTaskDragItem || target.closest('ul.task-list') !== list) return;
+          const list = cardTaskDragItem.closest('ul.task-list');
+          if (!list) return;
 
-      const rect = target.getBoundingClientRect();
-      const mid = rect.top + rect.height / 2;
-      if (event.clientY < mid) {
-        target.before(cardTaskDragItem);
-      } else {
-        target.after(cardTaskDragItem);
+          const elemBelow = document.elementFromPoint(event.clientX, event.clientY);
+          const target = elemBelow?.closest?.('li');
+          if (!target || target === cardTaskDragItem || target.closest('ul.task-list') !== list) return;
+
+          const rect = target.getBoundingClientRect();
+          const mid = rect.top + rect.height / 2;
+          if (event.clientY < mid) {
+            target.before(cardTaskDragItem);
+          } else {
+            target.after(cardTaskDragItem);
+          }
+        });
       }
     });
 
     const endCardTaskPointerDrag = (event) => {
       if (!cardTaskDragItem || (cardTaskPointerId !== null && event.pointerId !== cardTaskPointerId)) return;
+      if (cardTaskDragPreview) {
+        cardTaskDragPreview.remove();
+        cardTaskDragPreview = null;
+      }
+      document.body.classList.remove('is-dragging-task-active');
       cardTaskDragItem.classList.remove('is-dragging-task');
       cardTaskDragItem = null;
       cardTaskPointerId = null;
@@ -1922,6 +1943,8 @@
 
   let taskDragItem = null;
   let taskPointerId = null;
+  let taskDragPreview = null;
+  let taskDragFrame = null;
 
   elements.noteBody.addEventListener('dragstart', event => {
     const item = event.target.closest?.('li');
@@ -1929,11 +1952,23 @@
     taskDragItem = item;
     event.dataTransfer.effectAllowed = 'move';
     item.classList.add('is-dragging-task');
+    document.body.classList.add('is-dragging-task-active');
+    taskDragPreview = document.createElement('div');
+    taskDragPreview.className = 'task-drag-preview';
+    const dragStartTextContent = item.querySelector('.task-text')?.textContent || '';
+    taskDragPreview.innerHTML = `<span class="task-drag-handle">⠿</span><input type="checkbox" class="task-checkbox" disabled><span class="task-text">${dragStartTextContent}</span>`;
+    document.body.append(taskDragPreview);
+    const emptyImage = new Image();
+    emptyImage.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    event.dataTransfer.setDragImage(emptyImage, 0, 0);
   });
 
   elements.noteBody.addEventListener('dragover', event => {
     if (!taskDragItem) return;
     event.preventDefault();
+    if (taskDragPreview) {
+      taskDragPreview.style.transform = `translate3d(${event.clientX + 10}px, ${event.clientY + 10}px, 0)`;
+    }
     event.dataTransfer.dropEffect = 'move';
     const list = taskDragItem.closest('ul.task-list');
     const target = event.target.closest?.('li');
@@ -1950,6 +1985,11 @@
 
   elements.noteBody.addEventListener('dragend', event => {
     if (!taskDragItem) return;
+    if (taskDragPreview) {
+      taskDragPreview.remove();
+      taskDragPreview = null;
+    }
+    document.body.classList.remove('is-dragging-task-active');
     taskDragItem.classList.remove('is-dragging-task');
     taskDragItem = null;
     normalizeChecklistGroups();
@@ -1966,29 +2006,48 @@
     taskDragItem = item;
     taskPointerId = event.pointerId;
     item.classList.add('is-dragging-task');
+    document.body.classList.add('is-dragging-task-active');
+    taskDragPreview = document.createElement('div');
+    taskDragPreview.className = 'task-drag-preview';
+    const pDownContent = item.querySelector('.task-text')?.textContent || '';
+    taskDragPreview.innerHTML = `<span class="task-drag-handle">⠿</span><input type="checkbox" class="task-checkbox" disabled><span class="task-text">${pDownContent}</span>`;
+    document.body.append(taskDragPreview);
     try { handle.setPointerCapture(event.pointerId); } catch {}
   });
 
   elements.noteBody.addEventListener('pointermove', event => {
     if (!taskDragItem || event.pointerId !== taskPointerId) return;
-    const list = taskDragItem.closest('ul.task-list');
-    if (!list) return;
+    if (!taskDragFrame) {
+      taskDragFrame = requestAnimationFrame(() => {
+        taskDragFrame = null;
+        if (!taskDragPreview) return;
+        taskDragPreview.style.transform = `translate3d(${event.clientX + 10}px, ${event.clientY + 10}px, 0)`;
 
-    const elemBelow = document.elementFromPoint(event.clientX, event.clientY);
-    const target = elemBelow?.closest?.('li');
-    if (!target || target === taskDragItem || target.closest('ul.task-list') !== list) return;
+        const list = taskDragItem.closest('ul.task-list');
+        if (!list) return;
 
-    const rect = target.getBoundingClientRect();
-    const mid = rect.top + rect.height / 2;
-    if (event.clientY < mid) {
-      target.before(taskDragItem);
-    } else {
-      target.after(taskDragItem);
+        const elemBelow = document.elementFromPoint(event.clientX, event.clientY);
+        const target = elemBelow?.closest?.('li');
+        if (!target || target === taskDragItem || target.closest('ul.task-list') !== list) return;
+
+        const rect = target.getBoundingClientRect();
+        const mid = rect.top + rect.height / 2;
+        if (event.clientY < mid) {
+          target.before(taskDragItem);
+        } else {
+          target.after(taskDragItem);
+        }
+      });
     }
   });
 
   const endTaskPointerDrag = (event) => {
     if (!taskDragItem || (taskPointerId !== null && event.pointerId !== taskPointerId)) return;
+    if (taskDragPreview) {
+      taskDragPreview.remove();
+      taskDragPreview = null;
+    }
+    document.body.classList.remove('is-dragging-task-active');
     taskDragItem.classList.remove('is-dragging-task');
     taskDragItem = null;
     taskPointerId = null;

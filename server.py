@@ -23,7 +23,7 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.4.6'
+VERSION = '0.1.5.0'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -489,7 +489,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                         GROUP BY users.id ORDER BY users.created_at DESC
                     ''').fetchall()
                     invites = connection.execute('''
-                        SELECT created_at, expires_at, used_at FROM invites ORDER BY created_at DESC LIMIT 30
+                        SELECT token_hash, created_at, expires_at, used_at FROM invites ORDER BY created_at DESC LIMIT 30
                     ''').fetchall()
                     pending = connection.execute(
                         'SELECT COUNT(*) FROM invites WHERE used_at IS NULL AND expires_at > ?', (iso_time(),)
@@ -571,7 +571,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 note_id = path[len('/api/notes/'):-len('/shares')]
                 self.create_share(user, note_id, payload)
             elif path == '/api/admin/invites':
-                self.create_invite()
+                self.create_invite(payload)
             elif path == '/api/admin/backups':
                 self.create_server_backup(payload)
             elif path.startswith('/api/admin/backups/'):
@@ -601,6 +601,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
             match = re.fullmatch(r'/api/admin/backups/([^/]+)', path)
             if match:
                 self.delete_server_backup(match.group(1))
+                return
+            invite_match = re.fullmatch(r'/api/admin/invites/([^/]+)', path)
+            if invite_match:
+                self.delete_invite(invite_match.group(1))
                 return
             user_match = re.fullmatch(r'/api/admin/users/(\d+)', path)
             if user_match:
@@ -767,6 +771,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 raise APIError('Nie znaleziono użytkownika.', 404)
             connection.execute('DELETE FROM users WHERE id = ?', (user_id,))
         self.send_json({'deleted': user_id})
+
+    def delete_invite(self, token_hash):
+        self.require_user(admin=True)
+        with database() as connection:
+            cursor = connection.execute('DELETE FROM invites WHERE token_hash = ? AND used_at IS NULL', (token_hash,))
+            if not cursor.rowcount:
+                raise APIError('Nie znaleziono zaproszenia lub zostało już użyte.', 404)
+        self.send_json({'deleted': token_hash})
 
     def restore_server_backup(self, filename, payload=None):
         payload = payload or {}
@@ -1187,11 +1199,16 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 connection.execute('DELETE FROM sessions WHERE token_hash = ?', (token_hash(token),))
         self.send_json({'loggedOut': True}, extra_headers=self.session_headers('', 0))
 
-    def create_invite(self):
+    def create_invite(self, payload=None):
         user = self.require_user(admin=True)
         token = secrets.token_urlsafe(32)
         created = utc_now()
-        expires = created + timedelta(days=INVITE_DAYS)
+        payload = payload or {}
+        try:
+            days = int(payload.get('days', INVITE_DAYS))
+        except ValueError:
+            days = INVITE_DAYS
+        expires = created + timedelta(days=days)
         with database() as connection:
             connection.execute(
                 'INSERT INTO invites (token_hash, created_by, created_at, expires_at) VALUES (?, ?, ?, ?)',
