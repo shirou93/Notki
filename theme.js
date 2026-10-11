@@ -31,6 +31,11 @@
 
     document.documentElement.dataset.theme = resolved;
 
+    const colorValue = resolved === DARK ? '#141c17' : '#f6f8f5';
+    document.querySelectorAll('meta[name="theme-color"]').forEach(meta => {
+      meta.setAttribute('content', colorValue);
+    });
+
     if (persist) {
       if (theme === SYSTEM) {
         window.localStorage?.removeItem(STORAGE_KEY); // Store nothing or 'system' as default

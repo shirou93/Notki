@@ -54,6 +54,12 @@
   let shareNoteId = null;
   let shareReturnFocus = null;
 
+  function cleanupAllTaskDrags() {
+    $$('.task-drag-preview').forEach(preview => preview.remove());
+    $$('.is-dragging-task').forEach(item => item.classList.remove('is-dragging-task'));
+    document.body.classList.remove('is-dragging-task-active');
+  }
+
   // Aborting every card tween leaves the grid at its settled geometry, so measurements stay stable.
   function settleCards() {
     for (const animation of document.getAnimations()) {
@@ -1465,6 +1471,7 @@
       if (!item || !item.closest('ul.task-list')) return;
 
       event.stopPropagation();
+      cleanupAllTaskDrags();
       cardTaskDragItem = item;
       cardTaskPointerId = event.pointerId;
       const itemRect = item.getBoundingClientRect();
@@ -1481,62 +1488,65 @@
       cardTaskDragPreview.innerHTML = `<span class="task-drag-handle">⠿</span><input type="checkbox" class="task-checkbox"${isChecked ? ' checked' : ''} disabled><span class="task-text">${cDownContent}</span>`;
       cardTaskDragPreview.style.transform = `translate3d(${event.clientX - cardTaskOffsetX}px, ${event.clientY - cardTaskOffsetY}px, 0)`;
       document.body.append(cardTaskDragPreview);
+
+      const onCardPointerMove = (e) => {
+        if (!cardTaskDragItem || e.pointerId !== cardTaskPointerId) return;
+        if (!cardTaskDragFrame) {
+          cardTaskDragFrame = requestAnimationFrame(() => {
+            cardTaskDragFrame = null;
+            if (!cardTaskDragPreview) return;
+            cardTaskDragPreview.style.transform = `translate3d(${e.clientX - cardTaskOffsetX}px, ${e.clientY - cardTaskOffsetY}px, 0)`;
+
+            const list = cardTaskDragItem.closest('ul.task-list');
+            if (!list) return;
+
+            const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
+            const target = elemBelow?.closest?.('li');
+            if (!target || target === cardTaskDragItem || target.closest('ul.task-list') !== list) return;
+
+            const rect = target.getBoundingClientRect();
+            const mid = rect.top + rect.height / 2;
+            if (e.clientY < mid) {
+              target.before(cardTaskDragItem);
+            } else {
+              target.after(cardTaskDragItem);
+            }
+          });
+        }
+      };
+
+      const endCardTaskPointerDrag = (e) => {
+        if (!cardTaskDragItem || (e && cardTaskPointerId !== null && e.pointerId !== cardTaskPointerId)) return;
+        window.removeEventListener('pointermove', onCardPointerMove);
+        window.removeEventListener('pointerup', endCardTaskPointerDrag);
+        window.removeEventListener('pointercancel', endCardTaskPointerDrag);
+        window.removeEventListener('lostpointercapture', endCardTaskPointerDrag);
+
+        cleanupAllTaskDrags();
+        cardTaskDragItem = null;
+        cardTaskPointerId = null;
+
+        const cardBody = $('.card-body', card);
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = cardBody.innerHTML;
+        normalizeChecklistGroups(wrapper);
+        note.body = sanitizeRichHtml(wrapper.innerHTML);
+        note.updatedAt = new Date().toISOString();
+        if (shared && !readOnly) {
+          persistShared(note);
+        } else {
+          persist();
+        }
+        render();
+      };
+
+      window.addEventListener('pointermove', onCardPointerMove);
+      window.addEventListener('pointerup', endCardTaskPointerDrag);
+      window.addEventListener('pointercancel', endCardTaskPointerDrag);
+      window.addEventListener('lostpointercapture', endCardTaskPointerDrag);
+
       try { handle.setPointerCapture(event.pointerId); } catch {}
     });
-
-    card.addEventListener('pointermove', event => {
-      if (!cardTaskDragItem || event.pointerId !== cardTaskPointerId) return;
-      if (!cardTaskDragFrame) {
-        cardTaskDragFrame = requestAnimationFrame(() => {
-          cardTaskDragFrame = null;
-          if (!cardTaskDragPreview) return;
-          cardTaskDragPreview.style.transform = `translate3d(${event.clientX - cardTaskOffsetX}px, ${event.clientY - cardTaskOffsetY}px, 0)`;
-
-          const list = cardTaskDragItem.closest('ul.task-list');
-          if (!list) return;
-
-          const elemBelow = document.elementFromPoint(event.clientX, event.clientY);
-          const target = elemBelow?.closest?.('li');
-          if (!target || target === cardTaskDragItem || target.closest('ul.task-list') !== list) return;
-
-          const rect = target.getBoundingClientRect();
-          const mid = rect.top + rect.height / 2;
-          if (event.clientY < mid) {
-            target.before(cardTaskDragItem);
-          } else {
-            target.after(cardTaskDragItem);
-          }
-        });
-      }
-    });
-
-    const endCardTaskPointerDrag = (event) => {
-      if (!cardTaskDragItem || (cardTaskPointerId !== null && event.pointerId !== cardTaskPointerId)) return;
-      if (cardTaskDragPreview) {
-        cardTaskDragPreview.remove();
-        cardTaskDragPreview = null;
-      }
-      document.body.classList.remove('is-dragging-task-active');
-      cardTaskDragItem.classList.remove('is-dragging-task');
-      cardTaskDragItem = null;
-      cardTaskPointerId = null;
-
-      const cardBody = $('.card-body', card);
-      const wrapper = document.createElement('div');
-      wrapper.innerHTML = cardBody.innerHTML;
-      normalizeChecklistGroups(wrapper);
-      note.body = sanitizeRichHtml(wrapper.innerHTML);
-      note.updatedAt = new Date().toISOString();
-      if (shared && !readOnly) {
-        persistShared(note);
-      } else {
-        persist();
-      }
-      render();
-    };
-
-    card.addEventListener('pointerup', endCardTaskPointerDrag);
-    card.addEventListener('pointercancel', endCardTaskPointerDrag);
 
     card.addEventListener('change', event => {
       if (event.target.matches('input[type="checkbox"]')) {
@@ -2003,6 +2013,7 @@
   elements.noteBody.addEventListener('dragstart', event => {
     const item = event.target.closest?.('li');
     if (!item || !item.closest('ul.task-list')) return;
+    cleanupAllTaskDrags();
     taskDragItem = item;
     const itemRect = item.getBoundingClientRect();
     taskOffsetX = event.clientX - itemRect.left;
@@ -2043,14 +2054,8 @@
     }
   });
 
-  elements.noteBody.addEventListener('dragend', event => {
-    if (!taskDragItem) return;
-    if (taskDragPreview) {
-      taskDragPreview.remove();
-      taskDragPreview = null;
-    }
-    document.body.classList.remove('is-dragging-task-active');
-    taskDragItem.classList.remove('is-dragging-task');
+  elements.noteBody.addEventListener('dragend', () => {
+    cleanupAllTaskDrags();
     taskDragItem = null;
     normalizeChecklistGroups();
     scheduleSave();
@@ -2063,6 +2068,7 @@
     const item = handle.closest('li');
     if (!item || !item.closest('ul.task-list')) return;
 
+    cleanupAllTaskDrags();
     taskDragItem = item;
     taskPointerId = event.pointerId;
     const itemRect = item.getBoundingClientRect();
@@ -2079,51 +2085,54 @@
     taskDragPreview.innerHTML = `<span class="task-drag-handle">⠿</span><input type="checkbox" class="task-checkbox"${isChecked ? ' checked' : ''} disabled><span class="task-text">${pDownContent}</span>`;
     taskDragPreview.style.transform = `translate3d(${event.clientX - taskOffsetX}px, ${event.clientY - taskOffsetY}px, 0)`;
     document.body.append(taskDragPreview);
+
+    const onTaskPointerMove = (e) => {
+      if (!taskDragItem || e.pointerId !== taskPointerId) return;
+      if (!taskDragFrame) {
+        taskDragFrame = requestAnimationFrame(() => {
+          taskDragFrame = null;
+          if (!taskDragPreview) return;
+          taskDragPreview.style.transform = `translate3d(${e.clientX - taskOffsetX}px, ${e.clientY - taskOffsetY}px, 0)`;
+
+          const list = taskDragItem.closest('ul.task-list');
+          if (!list) return;
+
+          const elemBelow = document.elementFromPoint(e.clientX, e.clientY);
+          const target = elemBelow?.closest?.('li');
+          if (!target || target === taskDragItem || target.closest('ul.task-list') !== list) return;
+
+          const rect = target.getBoundingClientRect();
+          const mid = rect.top + rect.height / 2;
+          if (e.clientY < mid) {
+            target.before(taskDragItem);
+          } else {
+            target.after(taskDragItem);
+          }
+        });
+      }
+    };
+
+    const endTaskPointerDrag = (e) => {
+      if (!taskDragItem || (e && taskPointerId !== null && e.pointerId !== taskPointerId)) return;
+      window.removeEventListener('pointermove', onTaskPointerMove);
+      window.removeEventListener('pointerup', endTaskPointerDrag);
+      window.removeEventListener('pointercancel', endTaskPointerDrag);
+      window.removeEventListener('lostpointercapture', endTaskPointerDrag);
+
+      cleanupAllTaskDrags();
+      taskDragItem = null;
+      taskPointerId = null;
+      normalizeChecklistGroups();
+      scheduleSave();
+    };
+
+    window.addEventListener('pointermove', onTaskPointerMove);
+    window.addEventListener('pointerup', endTaskPointerDrag);
+    window.addEventListener('pointercancel', endTaskPointerDrag);
+    window.addEventListener('lostpointercapture', endTaskPointerDrag);
+
     try { handle.setPointerCapture(event.pointerId); } catch {}
   });
-
-  elements.noteBody.addEventListener('pointermove', event => {
-    if (!taskDragItem || event.pointerId !== taskPointerId) return;
-    if (!taskDragFrame) {
-      taskDragFrame = requestAnimationFrame(() => {
-        taskDragFrame = null;
-        if (!taskDragPreview) return;
-        taskDragPreview.style.transform = `translate3d(${event.clientX - taskOffsetX}px, ${event.clientY - taskOffsetY}px, 0)`;
-
-        const list = taskDragItem.closest('ul.task-list');
-        if (!list) return;
-
-        const elemBelow = document.elementFromPoint(event.clientX, event.clientY);
-        const target = elemBelow?.closest?.('li');
-        if (!target || target === taskDragItem || target.closest('ul.task-list') !== list) return;
-
-        const rect = target.getBoundingClientRect();
-        const mid = rect.top + rect.height / 2;
-        if (event.clientY < mid) {
-          target.before(taskDragItem);
-        } else {
-          target.after(taskDragItem);
-        }
-      });
-    }
-  });
-
-  const endTaskPointerDrag = (event) => {
-    if (!taskDragItem || (taskPointerId !== null && event.pointerId !== taskPointerId)) return;
-    if (taskDragPreview) {
-      taskDragPreview.remove();
-      taskDragPreview = null;
-    }
-    document.body.classList.remove('is-dragging-task-active');
-    taskDragItem.classList.remove('is-dragging-task');
-    taskDragItem = null;
-    taskPointerId = null;
-    normalizeChecklistGroups();
-    scheduleSave();
-  };
-
-  elements.noteBody.addEventListener('pointerup', endTaskPointerDrag);
-  elements.noteBody.addEventListener('pointercancel', endTaskPointerDrag);
 
   $('#capture-note').addEventListener('click', () => openEditor());
   $('#fab-add-note').addEventListener('click', () => openEditor());
@@ -2303,6 +2312,9 @@
     const sidebarMenu = $('#sidebar-user-menu');
     if (sidebarMenu?.open && !sidebarMenu.contains(event.target)) sidebarMenu.open = false;
   });
+  window.addEventListener('blur', cleanupAllTaskDrags);
+  window.addEventListener('pointercancel', cleanupAllTaskDrags);
+
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && !elements.sharePanel.hidden && elements.sharePanel.classList.contains('is-open')) {
       closeShare();
