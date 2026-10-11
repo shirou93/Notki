@@ -256,6 +256,21 @@
     }
   }
 
+  function createTrashIconSvg() {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '1em');
+    svg.setAttribute('height', '1em');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.7');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.innerHTML = '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/>';
+    return svg;
+  }
+
   function renderUsers(users) {
     const rows = users.map(user => {
       const row = document.createElement('tr');
@@ -264,9 +279,10 @@
       if (user.role !== 'admin') {
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
-        delBtn.className = 'action-icon';
-        delBtn.textContent = '×';
+        delBtn.className = 'action-icon admin-delete-btn';
+        delBtn.append(createTrashIconSvg());
         delBtn.title = t('admin.users.delete');
+        delBtn.setAttribute('aria-label', t('admin.users.delete'));
         delBtn.addEventListener('click', () => deleteUser(user.id));
         actions.append(delBtn);
       }
@@ -301,9 +317,10 @@
       if (invite.tokenHash) {
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
-        delBtn.className = 'action-icon';
-        delBtn.textContent = '×';
+        delBtn.className = 'action-icon admin-delete-btn';
+        delBtn.append(createTrashIconSvg());
         delBtn.title = t('admin.invites.delete');
+        delBtn.setAttribute('aria-label', t('admin.invites.delete'));
         delBtn.addEventListener('click', () => deleteInvite(invite.tokenHash));
         actions.append(delBtn);
       }
@@ -318,11 +335,15 @@
     document.querySelector('#admin-invites').replaceChildren(...rows);
   }
 
-  function backupAction(label, title, handler) {
+  function backupAction(content, title, handler, isDanger = false) {
     const button = document.createElement('button');
-    button.className = 'button-secondary backup-action';
+    button.className = `button-secondary backup-action${isDanger ? ' backup-action-danger' : ''}`;
     button.type = 'button';
-    button.textContent = label;
+    if (typeof content === 'string') {
+      button.textContent = content;
+    } else {
+      button.append(content);
+    }
     button.title = title;
     button.setAttribute('aria-label', title);
     button.addEventListener('click', handler);
@@ -351,7 +372,7 @@
       actions.append(
         backupAction('↓', t('admin.backups.download'), () => downloadBackup(backup.filename)),
         backupAction('↻', t('admin.backups.restore'), () => restoreBackup(backup.filename)),
-        backupAction('×', t('admin.backups.delete'), () => deleteBackup(backup.filename)),
+        backupAction(createTrashIconSvg(), t('admin.backups.delete'), () => deleteBackup(backup.filename), true),
       );
       row.append(filename, tableCell(formatDate(backup.createdAt)), tableCell(size), actions);
       return row;
