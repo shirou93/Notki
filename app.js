@@ -1524,7 +1524,6 @@
         window.removeEventListener('pointermove', onCardPointerMove);
         window.removeEventListener('pointerup', endCardTaskPointerDrag);
         window.removeEventListener('pointercancel', endCardTaskPointerDrag);
-        window.removeEventListener('lostpointercapture', endCardTaskPointerDrag);
 
         try { handle.releasePointerCapture(cardTaskPointerId); } catch {}
         cleanupAllTaskDrags();
@@ -1548,7 +1547,6 @@
       window.addEventListener('pointermove', onCardPointerMove);
       window.addEventListener('pointerup', endCardTaskPointerDrag);
       window.addEventListener('pointercancel', endCardTaskPointerDrag);
-      window.addEventListener('lostpointercapture', endCardTaskPointerDrag);
 
       try { handle.setPointerCapture(event.pointerId); } catch {}
     });
@@ -2122,7 +2120,6 @@
       window.removeEventListener('pointermove', onTaskPointerMove);
       window.removeEventListener('pointerup', endTaskPointerDrag);
       window.removeEventListener('pointercancel', endTaskPointerDrag);
-      window.removeEventListener('lostpointercapture', endTaskPointerDrag);
 
       try { handle.releasePointerCapture(taskPointerId); } catch {}
       cleanupAllTaskDrags();
@@ -2135,7 +2132,6 @@
     window.addEventListener('pointermove', onTaskPointerMove);
     window.addEventListener('pointerup', endTaskPointerDrag);
     window.addEventListener('pointercancel', endTaskPointerDrag);
-    window.addEventListener('lostpointercapture', endTaskPointerDrag);
 
     try { handle.setPointerCapture(event.pointerId); } catch {}
   });
