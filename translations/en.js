@@ -268,6 +268,7 @@ window.notkiTranslations.en = {
   'admin.backups.restore': 'Restore this backup',
   'admin.backups.delete': 'Delete this backup',
   'admin.backups.downloadFailed': 'Could not download the backup.',
+  'admin.backups.promptPassword': 'Enter password for encrypted backup:',
   'admin.backups.confirmRestore': 'Restore {filename}? This replaces every account, note, and invitation. All users will be signed out.',
   'admin.backups.confirmDelete': 'Delete backup {filename}? This cannot be undone.',
   'admin.backups.deleted': 'Deleted {filename}.',

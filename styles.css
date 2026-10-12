@@ -22,7 +22,7 @@
 }
 
 * { box-sizing: border-box; }
-html { background: var(--canvas); min-height: 100%; }
+html { background: var(--canvas); height: 100%; min-height: 100%; }
 body { margin: 0; min-height: 100%; min-height: 100vh; min-height: 100lvh; background: var(--canvas); color: var(--ink); font-family: var(--sans); font-size: 14px; -webkit-font-smoothing: antialiased; }
 button, input, textarea { font: inherit; }
 button { color: inherit; }
@@ -131,7 +131,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .setup-import .button-secondary { justify-self: center; }
 .setup-divider { margin: 22px 0 0; color: var(--muted); font-size: 10px; text-align: center; }
 
-.app-shell { min-height: 100%; min-height: 100vh; min-height: 100lvh; }
+.app-shell { min-height: 100%; min-height: 100vh; min-height: 100lvh; display: flex; flex-direction: column; background: var(--canvas); }
 .mobile-header { display: flex !important; align-items: center; justify-content: space-between; padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); background: var(--forest); color: #f1f5ee; position: sticky; top: 0; z-index: 10; }
 .mobile-header .brand { margin: 0; font-size: 20px; color: #f5f7f1; }
 .mobile-header .hamburger-toggle { display: inline-flex !important; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 6px; background: rgba(255, 255, 255, 0.12); color: #fff; font-size: 20px; cursor: pointer; margin: 0; }
@@ -174,7 +174,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .storage-dot, .save-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #a9d377; }
 .sidebar-version { display: block; padding: 13px 10px 0; border-top: 1px solid #ffffff20; color: #81988a; font-size: 9px; letter-spacing: 1.2px; }
 
-.main-content { min-height: 100%; min-height: 100vh; min-height: 100lvh; margin-left: 0; max-width: 1280px; margin-right: auto; margin-left: auto; padding: 0 40px 24px; }
+.main-content { margin-left: 0; max-width: 1280px; margin-right: auto; margin-left: auto; padding: 0 40px 24px; display: flex; flex-direction: column; flex: 1; background: var(--canvas); }
 .topbar { height: 77px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); }
 .breadcrumbs { display: flex; align-items: center; gap: 10px; color: #85908a; font-size: 10px; font-weight: 700; letter-spacing: 1.05px; }
 .breadcrumb-slash { color: #c1c9c3; }
@@ -228,7 +228,7 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .capture-box:hover { border-color: #c4d1bd; box-shadow: 0 5px 18px #2338270b; }
 .capture-plus { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%; background: #edf3e7; color: #59784e; font-size: 19px; }
 .capture-shortcut { margin-left: auto; padding: 3px 7px; border: 1px solid #edf0ec; border-radius: 4px; color: #a3aca5; font-size: 10px; }
-.notes-area { min-height: 210px; }
+.notes-area { min-height: 210px; flex: 1; }
 .section-label { display: flex; align-items: center; gap: 13px; margin: 0 0 14px; color: #8b958d; font-size: 9px; font-weight: 700; letter-spacing: 1.35px; }
 .section-rule { height: 1px; flex: 1; background: #e8ece7; }
 .notes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 218px), 1fr)); align-items: stretch; gap: 14px; margin: 0 0 27px; }
@@ -454,7 +454,7 @@ body.is-dragging-task-active, body.is-dragging-task-active * { cursor: var(--dra
   .nav-icon { width: 15px; font-size: 14px; }
   .nav-count { font-size: 10px; }
   .sidebar-bottom { display: block; margin-top: auto; }
-  .main-content { min-height: 100%; min-height: 100vh; min-height: 100lvh; margin-left: 0; padding: 0 max(20px, env(safe-area-inset-right)) max(24px, calc(18px + env(safe-area-inset-bottom))) max(20px, env(safe-area-inset-left)); }
+  .main-content { margin-left: 0; padding: 0 max(20px, env(safe-area-inset-right)) max(24px, calc(18px + env(safe-area-inset-bottom))) max(20px, env(safe-area-inset-left)); display: flex; flex-direction: column; flex: 1; background: var(--canvas); }
   .topbar { height: auto; min-height: 52px; padding: 12px 0; gap: 10px; flex-wrap: wrap; }
   .breadcrumbs { display: none; }
   .topbar-actions { position: static; width: 100%; gap: 8px; margin-left: 0; }

@@ -437,7 +437,7 @@
       actions.className = 'backup-actions';
       actions.append(
         backupAction('↓', t('admin.backups.download'), () => downloadBackup(backup.filename)),
-        backupAction('↻', t('admin.backups.restore'), () => restoreBackup(backup.filename)),
+        backupAction('↻', t('admin.backups.restore'), () => restoreBackup(backup)),
         backupAction(createTrashIconSvg(), t('admin.backups.delete'), () => deleteBackup(backup.filename), true),
       );
       row.append(filename, tableCell(formatDate(backup.createdAt)), tableCell(size), actions);
@@ -498,10 +498,20 @@
     }
   }
 
-  async function restoreBackup(filename) {
+  async function restoreBackup(backupTarget) {
+    const filename = typeof backupTarget === 'string' ? backupTarget : backupTarget.filename;
+    const isEncrypted = typeof backupTarget === 'object' && backupTarget !== null ? !!backupTarget.isEncrypted : false;
+
     const confirmed = window.confirm(t('admin.backups.confirmRestore', { filename }));
     if (!confirmed) return;
-    const password = document.querySelector('#backup-password')?.value || '';
+
+    let password = '';
+    if (isEncrypted) {
+      const promptedPassword = window.prompt(t('admin.backups.promptPassword'));
+      if (promptedPassword === null) return; // User cancelled prompt
+      password = promptedPassword;
+    }
+
     try {
       await apiRequest(`/api/admin/backups/${encodeURIComponent(filename)}/restore`, {
         method: 'POST',
