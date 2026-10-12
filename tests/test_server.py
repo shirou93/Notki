@@ -184,19 +184,14 @@ class ServerFlowTests(unittest.TestCase):
         self.request(owner, 'PUT', '/api/notes', {'notes': [self.note_payload('backup-1', 'Kopia')]})
         self.request(owner, 'POST', '/api/notes/backup-1/shares', {'email': 'reader3@example.com', 'permission': 'write'})
 
-        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {'password': 'backupPassword123!'})
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
         self.assertEqual(status, 201)
 
         status, backup_list = self.request(self.admin, 'GET', '/api/admin/backups')
         self.assertEqual(status, 200)
         matching_backup = next(b for b in backup_list['backups'] if b['filename'] == backup['filename'])
-        self.assertTrue(matching_backup['isEncrypted'])
 
-        # Attempt restore with invalid password
-        status, res = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {'password': 'wrong'})
-        self.assertEqual(status, 400)
-
-        status, result = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {'password': 'backupPassword123!'})
+        status, result = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {})
         self.assertEqual(status, 200)
         self.assertEqual(result['shares'], 1)
 
@@ -474,7 +469,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.28', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.28'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.29', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.29'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -498,7 +493,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.28'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.29'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
@@ -536,84 +531,6 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn('logs', logs_resp)
         self.assertIsInstance(logs_resp['logs'], list)
-
-    def test_encrypted_backup_flow_create_restore_upload(self):
-        original_note = {
-            'id': 'enc-note', 'title': 'Szyfrowana notatka', 'body': 'Tajny backup',
-            'bodyFormat': 0, 'color': 'default', 'tags': [], 'pinned': False,
-            'archived': False, 'deleted': False, 'createdAt': server.iso_time(),
-            'updatedAt': server.iso_time(), 'order': 1,
-        }
-        status, _ = self.request(self.admin, 'PUT', '/api/notes', {'notes': [original_note]})
-        self.assertEqual(status, 200)
-
-        # 1. Create encrypted backup
-        pwd = 'secret-passphrase-999'
-        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {'password': pwd})
-        self.assertEqual(status, 201)
-        filename = backup['filename']
-
-        # 2. List backups and check isEncrypted flag
-        status, backups = self.request(self.admin, 'GET', '/api/admin/backups')
-        self.assertEqual(status, 200)
-        found = [b for b in backups['backups'] if b['filename'] == filename][0]
-        self.assertTrue(found['isEncrypted'])
-
-        # 3. Restore without password -> fails with 400
-        status, err = self.request(self.admin, 'POST', f'/api/admin/backups/{filename}/restore', {})
-        self.assertEqual(status, 400)
-        self.assertIn('zaszyfrowany', err['error'])
-
-        # 4. Restore with wrong password -> fails with 400
-        status, err = self.request(self.admin, 'POST', f'/api/admin/backups/{filename}/restore', {'password': 'bad'})
-        self.assertEqual(status, 400)
-
-        # 5. Restore with correct password -> succeeds
-        status, restored = self.request(self.admin, 'POST', f'/api/admin/backups/{filename}/restore', {'password': pwd})
-        self.assertEqual(status, 200)
-        self.assertTrue(restored['restored'])
-
-        # Log back in after restore
-        restored_admin = self.new_client()
-        status, _ = self.request(restored_admin, 'POST', '/api/login', {
-            'email': 'admin@example.com', 'password': 'secure-passphrase-1',
-        })
-        self.assertEqual(status, 200)
-
-        # 6. Upload-restore encrypted file via multipart/form-data
-        import urllib.request
-        req = urllib.request.Request(self.base_url + f'/api/admin/backups/{filename}')
-        with restored_admin.open(req) as resp:
-            enc_bytes = resp.read()
-
-        boundary = '----WebKitFormBoundaryEncryptedBackupTest'
-        body = (
-            f'--{boundary}\r\n'
-            f'Content-Disposition: form-data; name="archive"; filename="{filename}"\r\n'
-            f'Content-Type: application/gzip\r\n\r\n'
-        ).encode('utf-8') + enc_bytes + f'\r\n--{boundary}\r\nContent-Disposition: form-data; name="password"\r\n\r\n{pwd}\r\n--{boundary}--\r\n'.encode('utf-8')
-
-        status, up_res = self.request_raw_client(restored_admin, 'POST', '/api/admin/backups/upload-restore', body, content_type=f'multipart/form-data; boundary={boundary}')
-        self.assertEqual(status, 200)
-        self.assertTrue(up_res['restored'])
-
-    def test_aes_encrypt_decrypt_helpers(self):
-        plain_text = b'Sensitive backup data test string'
-        password = 'super-secret-backup-passphrase'
-        encrypted = server.aes_encrypt(plain_text, password)
-        self.assertNotEqual(encrypted, plain_text)
-        self.assertTrue(encrypted.startswith(b'Salted__'))
-        decrypted = server.aes_decrypt(encrypted, password)
-        self.assertEqual(decrypted, plain_text)
-
-        # Test error handling when password is missing or wrong
-        with self.assertRaises(server.APIError) as ctx:
-            server.aes_decrypt(encrypted, '')
-        self.assertEqual(ctx.exception.status, 400)
-
-        with self.assertRaises(server.APIError) as ctx:
-            server.aes_decrypt(encrypted, 'wrong-password')
-        self.assertEqual(ctx.exception.status, 400)
 
     def test_upload_restore_server_backup(self):
         created_at = server.iso_time()
@@ -698,45 +615,6 @@ class ServerFlowTests(unittest.TestCase):
         status, backups = self.request(restored_admin, 'GET', '/api/admin/backups')
         self.assertEqual(status, 200)
         self.assertEqual(backups['backups'], [])
-
-    def test_encrypted_backup_creation_and_restore_flow(self):
-        note = {
-            'id': 'enc-note-1', 'title': 'Zaszyfrowana notatka', 'body': 'Tajne dane',
-            'bodyFormat': 0, 'color': 'default', 'tags': [], 'pinned': False,
-            'archived': False, 'deleted': False, 'createdAt': server.iso_time(),
-            'updatedAt': server.iso_time(), 'order': 1,
-        }
-        status, _ = self.request(self.admin, 'PUT', '/api/notes', {'notes': [note]})
-        self.assertEqual(status, 200)
-
-        pwd = 'MySecretEncPassword123!'
-        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {'password': pwd})
-        self.assertEqual(status, 201)
-        self.assertTrue(backup['filename'].startswith('notki-server-'))
-
-        status, backups = self.request(self.admin, 'GET', '/api/admin/backups')
-        self.assertEqual(status, 200)
-        enc_backup = next(b for b in backups['backups'] if b['filename'] == backup['filename'])
-        self.assertTrue(enc_backup['isEncrypted'])
-
-        # Restore without password -> 400
-        status, err = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {})
-        self.assertEqual(status, 400)
-
-        # Restore with wrong password -> 400
-        status, err = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {'password': 'wrong-pass'})
-        self.assertEqual(status, 400)
-
-        # Restore with correct password -> 200
-        status, restored = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {'password': pwd})
-        self.assertEqual(status, 200)
-        self.assertTrue(restored['restored'])
-
-    def test_encrypted_backup_missing_openssl_error(self):
-        with unittest.mock.patch('subprocess.run', side_effect=FileNotFoundError('openssl not found')):
-            status, err = self.request(self.admin, 'POST', '/api/admin/backups', {'password': 'some-password'})
-            self.assertEqual(status, 500)
-            self.assertIn('OpenSSL', err['error'])
 
     def test_totp_and_passkey_2fa_flow(self):
         user_client = self.register_user('user2fa@example.com', 'user-passphrase-123')
@@ -979,44 +857,6 @@ class FirstRunSetupTests(unittest.TestCase):
 
         status, _ = self.request('POST', '/api/setup/import', {'snapshot': snapshot})
         self.assertEqual(status, 409)
-
-    def test_encrypted_tgz_backup_import_on_fresh_server(self):
-        created_at = server.iso_time()
-        snapshot = {
-            'format': 'notki-server-snapshot', 'version': 1, 'createdAt': created_at,
-            'users': [{
-                'id': 1, 'email': 'enc-setup-admin@example.com',
-                'passwordHash': server.hash_password('enc-setup-admin-password'),
-                'role': 'admin', 'createdAt': created_at,
-            }],
-            'notes': [], 'invites': [],
-        }
-        snapshot_bytes = json.dumps(snapshot).encode('utf-8')
-        archive_buf = io.BytesIO()
-        with tarfile.open(fileobj=archive_buf, mode='w:gz') as archive:
-            member = tarfile.TarInfo('snapshot.json')
-            member.size = len(snapshot_bytes)
-            archive.addfile(member, io.BytesIO(snapshot_buf := snapshot_bytes))
-
-        pwd = 'enc-setup-password-123'
-        enc_archive = server.aes_encrypt(archive_buf.getvalue(), pwd)
-
-        boundary = '----WebKitFormBoundaryEncryptedSetupTest'
-        body = (
-            f'--{boundary}\r\n'
-            f'Content-Disposition: form-data; name="archive"; filename="backup.tgz"\r\n'
-            f'Content-Type: application/gzip\r\n\r\n'
-        ).encode('utf-8') + enc_archive + f'\r\n--{boundary}\r\nContent-Disposition: form-data; name="password"\r\n\r\n{pwd}\r\n--{boundary}--\r\n'.encode('utf-8')
-
-        status, result = self.request_raw('POST', '/api/setup/import-backup', body, content_type=f'multipart/form-data; boundary={boundary}')
-        self.assertEqual(status, 201)
-        self.assertTrue(result['imported'])
-
-        status, login = self.request('POST', '/api/login', {
-            'email': 'enc-setup-admin@example.com', 'password': 'enc-setup-admin-password',
-        })
-        self.assertEqual(status, 200)
-        self.assertTrue(login['user']['isAdmin'])
 
     def test_tgz_backup_import_is_available_on_fresh_server(self):
         created_at = server.iso_time()

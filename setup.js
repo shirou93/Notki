@@ -70,8 +70,6 @@
       if (file.name.toLowerCase().endsWith('.tgz')) {
         const formData = new FormData();
         formData.append('archive', file);
-        const password = document.querySelector('#restore-password')?.value || '';
-        if (password) formData.append('password', password);
         const response = await fetch('/api/setup/import-backup', {
           method: 'POST',
           headers: { 'Accept-Language': window.i18n.getLanguage() },
