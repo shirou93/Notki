@@ -23,7 +23,7 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.10'
+VERSION = '0.1.5.11'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -40,6 +40,21 @@ STATIC_FILES = {
 TRANSLATION_FILES = {'translations/pl.js', 'translations/en.js'}
 DEFAULT_LANGUAGE = 'en'
 SUPPORTED_LANGUAGES = ('pl', 'en')
+
+LOG_BUFFER = []
+LOG_BUFFER_LOCK = threading.Lock()
+MAX_LOG_ENTRIES = 200
+
+def add_log(level, message):
+    entry = {
+        'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'level': level,
+        'message': message
+    }
+    with LOG_BUFFER_LOCK:
+        LOG_BUFFER.append(entry)
+        if len(LOG_BUFFER) > MAX_LOG_ENTRIES:
+            LOG_BUFFER.pop(0)
 
 # Polish messages are the source strings; this catalog provides their English counterparts.
 ENGLISH_MESSAGES = {
@@ -488,6 +503,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 user = self.require_user()
                 note_id = path[len('/api/notes/'):-len('/shares')]
                 self.send_json({'shares': self.list_shares(user, note_id)})
+            elif path == '/api/admin/settings':
+                self.get_settings()
+            elif path == '/api/admin/logs':
+                self.get_logs()
             elif path == '/api/admin/summary':
                 self.require_user(admin=True)
                 with database() as connection:
@@ -587,6 +606,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 user = self.require_user()
                 note_id = path[len('/api/notes/'):-len('/shares')]
                 self.create_share(user, note_id, payload)
+            elif path == '/api/admin/settings':
+                self.save_settings(payload)
             elif path == '/api/admin/invites':
                 self.create_invite(payload)
             elif path == '/api/admin/backups':
@@ -1409,7 +1430,35 @@ class NotkiHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def get_settings(self):
+        self.require_user(admin=True)
+        with database() as connection:
+            rows = connection.execute('SELECT key, value FROM settings').fetchall()
+            settings_dict = {row['key']: row['value'] for row in rows}
+        require_2fa = settings_dict.get('require2FA') == 'true'
+        log_level = settings_dict.get('logLevel', 'INFO')
+        self.send_json({'require2FA': require_2fa, 'logLevel': log_level})
+
+    def save_settings(self, payload):
+        self.require_user(admin=True)
+        require_2fa = 'true' if payload.get('require2FA') else 'false'
+        log_level = str(payload.get('logLevel') or 'INFO').upper()
+        if log_level not in ('INFO', 'WARNING', 'ERROR', 'DEBUG'):
+            log_level = 'INFO'
+        with database() as connection:
+            connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('require2FA', require_2fa))
+            connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('logLevel', log_level))
+        self.send_json({'require2FA': require_2fa == 'true', 'logLevel': log_level})
+
+    def get_logs(self):
+        self.require_user(admin=True)
+        with LOG_BUFFER_LOCK:
+            logs = list(LOG_BUFFER)
+        self.send_json({'logs': logs})
+
     def log_message(self, format_string, *args):
+        msg = format_string % args
+        add_log('INFO', msg)
         super().log_message('%s %s', self.command, urlsplit(self.path).path)
 
 
