@@ -506,7 +506,8 @@
 
     try {
       await apiRequest(`/api/admin/backups/${encodeURIComponent(filename)}/restore`, {
-        method: 'POST'
+        method: 'POST',
+        body: '{}'
       });
       window.location.replace('/');
     } catch (error) {
@@ -2720,7 +2721,8 @@
     setBackupMessage(t('admin.backups.creating'));
     try {
       const backup = await apiRequest('/api/admin/backups', {
-        method: 'POST'
+        method: 'POST',
+        body: '{}'
       });
       setBackupMessage(t('admin.backups.created', { filename: backup.filename }));
       await refreshAdmin();
