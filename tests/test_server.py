@@ -474,7 +474,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.24', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.24'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.25', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.25'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -498,7 +498,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.24'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.25'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
@@ -542,8 +542,18 @@ class ServerFlowTests(unittest.TestCase):
         password = 'super-secret-backup-passphrase'
         encrypted = server.aes_encrypt(plain_text, password)
         self.assertNotEqual(encrypted, plain_text)
+        self.assertTrue(encrypted.startswith(b'Salted__'))
         decrypted = server.aes_decrypt(encrypted, password)
         self.assertEqual(decrypted, plain_text)
+
+        # Test error handling when password is missing or wrong
+        with self.assertRaises(server.APIError) as ctx:
+            server.aes_decrypt(encrypted, '')
+        self.assertEqual(ctx.exception.status, 400)
+
+        with self.assertRaises(server.APIError) as ctx:
+            server.aes_decrypt(encrypted, 'wrong-password')
+        self.assertEqual(ctx.exception.status, 400)
 
     def test_upload_restore_server_backup(self):
         created_at = server.iso_time()
