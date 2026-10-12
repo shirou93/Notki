@@ -184,10 +184,19 @@ class ServerFlowTests(unittest.TestCase):
         self.request(owner, 'PUT', '/api/notes', {'notes': [self.note_payload('backup-1', 'Kopia')]})
         self.request(owner, 'POST', '/api/notes/backup-1/shares', {'email': 'reader3@example.com', 'permission': 'write'})
 
-        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {'password': 'backupPassword123!'})
         self.assertEqual(status, 201)
 
-        status, result = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {})
+        status, backup_list = self.request(self.admin, 'GET', '/api/admin/backups')
+        self.assertEqual(status, 200)
+        matching_backup = next(b for b in backup_list['backups'] if b['filename'] == backup['filename'])
+        self.assertTrue(matching_backup['isEncrypted'])
+
+        # Attempt restore with invalid password
+        status, res = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {'password': 'wrong'})
+        self.assertEqual(status, 400)
+
+        status, result = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {'password': 'backupPassword123!'})
         self.assertEqual(status, 200)
         self.assertEqual(result['shares'], 1)
 
@@ -457,7 +466,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.15', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.15'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.16', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.16'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -481,7 +490,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.15'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.16'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')

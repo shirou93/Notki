@@ -274,6 +274,7 @@ window.notkiTranslations.pl = {
   'admin.backups.restore': 'Przywróć ten backup',
   'admin.backups.delete': 'Usuń ten backup',
   'admin.backups.downloadFailed': 'Nie udało się pobrać backupu.',
+  'admin.backups.promptPassword': 'Podaj hasło do zaszyfrowanego backupu:',
   'admin.backups.confirmRestore': 'Przywrócić {filename}? Zastąpi to wszystkie konta, notatki i zaproszenia. Wszyscy użytkownicy zostaną wylogowani.',
   'admin.backups.confirmDelete': 'Usunąć backup {filename}? Tej operacji nie można cofnąć.',
   'admin.backups.deleted': 'Usunięto {filename}.',

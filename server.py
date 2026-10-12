@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.15'
+VERSION = '0.1.5.16'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -94,6 +94,8 @@ ENGLISH_MESSAGES = {
     'Plik backupu przekracza limit rozmiaru.': 'The backup file exceeds the size limit.',
     'Nie można odczytać archiwum backupu.': 'The backup archive cannot be read.',
     'Archiwum backupu ma nieprawidłową zawartość.': 'The backup archive has invalid contents.',
+    'Nieprawidłowe hasło backupu.': 'Incorrect backup password.',
+    'Hasło jest wymagane do odszyfrowania backupu.': 'Password is required to decrypt the backup.',
     'Nie można odczytać snapshotu z archiwum.': 'The snapshot cannot be read from the archive.',
     'Import snapshotu jest dostępny tylko lokalnie.': 'Snapshot import is available only locally.',
     'Plik nie jest prawidłowym snapshotem serwera Notki.': 'The file is not a valid Notki server snapshot.',
@@ -442,15 +444,20 @@ def aes_encrypt(data, password_str):
     return proc.stdout
 
 def aes_decrypt(data, password_str):
+    if not password_str:
+        raise APIError('Hasło jest wymagane do odszyfrowania backupu.', 400)
     env = dict(os.environ, NOTKI_ENC_PASS=password_str)
-    proc = subprocess.run(
-        ['openssl', 'enc', '-d', '-aes-256-cbc', '-pbkdf2', '-pass', 'env:NOTKI_ENC_PASS'],
-        input=data,
-        env=env,
-        capture_output=True,
-        check=True
-    )
-    return proc.stdout
+    try:
+        proc = subprocess.run(
+            ['openssl', 'enc', '-d', '-aes-256-cbc', '-pbkdf2', '-pass', 'env:NOTKI_ENC_PASS'],
+            input=data,
+            env=env,
+            capture_output=True,
+            check=True
+        )
+        return proc.stdout
+    except subprocess.CalledProcessError as error:
+        raise APIError('Nieprawidłowe hasło backupu.', 400) from error
 
 
 class NotkiHandler(BaseHTTPRequestHandler):
@@ -892,10 +899,19 @@ class NotkiHandler(BaseHTTPRequestHandler):
             if not BACKUP_FILENAME_PATTERN.fullmatch(path.name) or path.is_symlink() or not path.is_file():
                 continue
             stat = path.stat()
+            is_encrypted = False
+            try:
+                with path.open('rb') as f:
+                    header = f.read(8)
+                    if header.startswith(b'Salted__'):
+                        is_encrypted = True
+            except OSError:
+                pass
             backups.append({
                 'filename': path.name,
                 'createdAt': datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
                 'sizeBytes': stat.st_size,
+                'isEncrypted': is_encrypted,
             })
         backups.sort(key=lambda backup: backup['createdAt'], reverse=True)
         self.send_json({'backups': backups})
