@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.27'
+VERSION = '0.1.5.28'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -445,6 +445,8 @@ def aes_encrypt(data, password_str):
             check=True
         )
         return proc.stdout
+    except FileNotFoundError as error:
+        raise APIError('Narzędzie OpenSSL nie jest zainstalowane na serwerze.', 500) from error
     except (subprocess.CalledProcessError, OSError) as error:
         raise APIError('Nie udało się zaszyfrować backupu.', 500) from error
 
@@ -461,6 +463,8 @@ def aes_decrypt(data, password_str):
             check=True
         )
         return proc.stdout
+    except FileNotFoundError as error:
+        raise APIError('Narzędzie OpenSSL nie jest zainstalowane na serwerze.', 500) from error
     except (subprocess.CalledProcessError, OSError) as error:
         raise APIError('Nieprawidłowe hasło backupu lub uszkodzony plik.', 400) from error
 
@@ -695,6 +699,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     pdict['CONTENT-LENGTH'] = int(self.headers.get('Content-Length', 0))
                     fields = cgi.parse_multipart(self.rfile, pdict)
                     archive_bytes = fields.get('archive', [b''])[0]
+                    if isinstance(archive_bytes, str):
+                        archive_bytes = archive_bytes.encode('iso-8859-1')
                     password_field = fields.get('password', [b''])[0]
                     password = password_field.decode('utf-8') if isinstance(password_field, bytes) else str(password_field)
                     if not archive_bytes:
@@ -997,6 +1003,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             pdict['CONTENT-LENGTH'] = int(self.headers.get('Content-Length', 0))
             fields = cgi.parse_multipart(self.rfile, pdict)
             archive_bytes = fields.get('archive', [b''])[0]
+            if isinstance(archive_bytes, str):
+                archive_bytes = archive_bytes.encode('iso-8859-1')
             password_field = fields.get('password', [b''])[0]
             password = password_field.decode('utf-8') if isinstance(password_field, bytes) else str(password_field)
             if not archive_bytes:

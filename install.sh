@@ -3,19 +3,19 @@ set -e
 
 echo "Installing Notki..."
 
-# 1. Install python3 if not present
-if ! command -v python3 &> /dev/null; then
-    echo "Python3 not found. Installing..."
+# 1. Install python3 and openssl if not present
+if ! command -v python3 &> /dev/null || ! command -v openssl &> /dev/null; then
+    echo "Dependencies missing. Installing python3, git, openssl..."
     if [ -x "$(command -v apt)" ]; then
-        apt update && apt install -y python3 git
+        apt update && apt install -y python3 git openssl
     elif [ -x "$(command -v dnf)" ]; then
-        dnf install -y python3 git
+        dnf install -y python3 git openssl
     elif [ -x "$(command -v pacman)" ]; then
-        pacman -Sy --noconfirm python3 git
+        pacman -Sy --noconfirm python3 git openssl
     elif [ -x "$(command -v apk)" ]; then
-        apk add --no-cache python3 git
+        apk add --no-cache python3 git openssl
     else
-        echo "Please install python3 and git manually."
+        echo "Please install python3, git and openssl manually."
         exit 1
     fi
 fi

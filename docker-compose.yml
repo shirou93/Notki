@@ -22,7 +22,7 @@ services:
             curl -sL "$$LATEST_TARBALL" | tar -xz -C /notki/app --strip-components=1
           fi
         fi
-        apk add --no-cache python3
+        apk add --no-cache python3 openssl
         exec python3 server.py
     ports:
       - "${NOTKI_HTTP_PORT:-8000}:8000"
