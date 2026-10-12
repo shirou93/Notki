@@ -469,7 +469,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.29', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.29'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.30', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.30'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -493,7 +493,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.29'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.30'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
@@ -726,6 +726,58 @@ class ServerFlowTests(unittest.TestCase):
         self.assertFalse(res['hasTotp'])
         self.assertEqual(res['passkeys'], [])
 
+    def test_totp_passkey_settings_survive_backup_restore(self):
+        user_client = self.register_user('user2fa2@example.com', 'user-passphrase-123')
+
+        # Setup TOTP
+        status, res = self.request(user_client, 'POST', '/api/account/totp', {})
+        secret = res['secret']
+        code = server.compute_totp_code(secret)
+        self.request(user_client, 'POST', '/api/account/totp/verify', {'code': code})
+
+        # Setup Passkey
+        ec_key = subprocess.run(['openssl', 'ecparam', '-name', 'prime256v1', '-genkey'], capture_output=True, check=True).stdout
+        spki_der = subprocess.run(['openssl', 'ec', '-pubout', '-outform', 'DER'], input=ec_key, capture_output=True, check=True).stdout
+        spki_b64 = base64.b64encode(spki_der).decode('utf-8')
+        passkey_id = 'test-passkey-id-456'
+        self.request(user_client, 'POST', '/api/account/passkey', {
+            'id': passkey_id, 'name': 'Laptop 2', 'publicKey': spki_b64
+        })
+
+        # Change admin settings
+        self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': False, 'logLevel': 'DEBUG'})
+
+        # Create backup
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
+        self.assertEqual(status, 201)
+
+        # Restore backup
+        status, restored = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(restored.get('passkeys'), 1)
+        self.assertEqual(restored.get('settings'), 2)
+
+        # Verify settings restored
+        admin_client = self.new_client()
+        status, _ = self.request(admin_client, 'POST', '/api/login', {'email': 'admin@example.com', 'password': 'secure-passphrase-1'})
+        self.assertEqual(status, 200)
+        status, settings = self.request(admin_client, 'GET', '/api/admin/settings')
+        self.assertEqual(status, 200)
+        self.assertEqual(settings['logLevel'], 'DEBUG')
+
+        # Verify 2FA status restored for user
+        user2_client = self.new_client()
+        status, res = self.request(user2_client, 'POST', '/api/login', {'email': 'user2fa2@example.com', 'password': 'user-passphrase-123'})
+        self.assertEqual(status, 200)
+        self.assertTrue(res['requires2FA'])
+        self.assertTrue(res['hasTotp'])
+        self.assertTrue(res['hasPasskey'])
+        temp_token = res['tempToken']
+        totp_code = server.compute_totp_code(secret)
+        status, login_res = self.request(user2_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': totp_code})
+        self.assertEqual(status, 200)
+        self.assertEqual(login_res['user']['email'], 'user2fa2@example.com')
+
 
 class FirstRunSetupTests(unittest.TestCase):
     def setUp(self):
@@ -884,6 +936,38 @@ class FirstRunSetupTests(unittest.TestCase):
         })
         self.assertEqual(status, 200)
         self.assertTrue(login['user']['isAdmin'])
+
+    def test_snapshot_import_with_subpath_or_mac_metadata(self):
+        created_at = server.iso_time()
+        snapshot = {
+            'format': 'notki-server-snapshot', 'version': 1, 'createdAt': created_at,
+            'users': [{
+                'id': 1, 'email': 'mac-admin@example.com',
+                'passwordHash': server.hash_password('mac-admin-password'),
+                'role': 'admin', 'createdAt': created_at,
+            }],
+            'notes': [], 'invites': [],
+        }
+        snapshot_bytes = json.dumps(snapshot).encode('utf-8')
+        archive_bytes = io.BytesIO()
+        with tarfile.open(fileobj=archive_bytes, mode='w:gz') as archive:
+            # Add macOS hidden file
+            mac_meta = tarfile.TarInfo('._snapshot.json')
+            mac_meta.size = 10
+            archive.addfile(mac_meta, io.BytesIO(b'apple-meta'))
+            # Add snapshot file with leading ./
+            member = tarfile.TarInfo('./snapshot.json')
+            member.size = len(snapshot_bytes)
+            archive.addfile(member, io.BytesIO(snapshot_bytes))
+
+        status, result = self.request_raw('POST', '/api/setup/import-backup', archive_bytes.getvalue())
+        self.assertEqual(status, 201)
+        self.assertTrue(result['imported'])
+
+    def test_invalid_backup_archive_returns_bad_request(self):
+        status, error = self.request_raw('POST', '/api/setup/import-backup', b'not a valid tarball')
+        self.assertEqual(status, 400)
+        self.assertIn('error', error)
 
 if __name__ == '__main__':
     unittest.main()
