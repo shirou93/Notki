@@ -500,22 +500,13 @@
 
   async function restoreBackup(backupTarget) {
     const filename = typeof backupTarget === 'string' ? backupTarget : backupTarget.filename;
-    const isEncrypted = typeof backupTarget === 'object' && backupTarget !== null ? !!backupTarget.isEncrypted : false;
 
     const confirmed = window.confirm(t('admin.backups.confirmRestore', { filename }));
     if (!confirmed) return;
 
-    let password = '';
-    if (isEncrypted) {
-      const promptedPassword = window.prompt(t('admin.backups.promptPassword'));
-      if (promptedPassword === null) return; // User cancelled prompt
-      password = promptedPassword;
-    }
-
     try {
       await apiRequest(`/api/admin/backups/${encodeURIComponent(filename)}/restore`, {
-        method: 'POST',
-        body: JSON.stringify({ password })
+        method: 'POST'
       });
       window.location.replace('/');
     } catch (error) {
@@ -2627,14 +2618,6 @@
     }
   });
 
-  document.querySelector('#backup-unencrypted-toggle')?.addEventListener('change', event => {
-    const pwdInput = document.querySelector('#backup-password');
-    if (pwdInput) {
-      pwdInput.disabled = event.target.checked;
-      if (event.target.checked) pwdInput.value = '';
-    }
-  });
-
   initializeApp();
 
   let currentTarballUrl = null;
@@ -2733,22 +2716,13 @@
   const handleCreateBackup = async event => {
     if (event) event.preventDefault();
     const button = document.querySelector('#create-backup');
-    const isUnencrypted = document.querySelector('#backup-unencrypted-toggle')?.checked;
-    const password = document.querySelector('#backup-password')?.value || '';
-    if (!isUnencrypted && !password) {
-      setBackupMessage(t('admin.backups.passwordRequired'), true);
-      return;
-    }
     if (button) button.disabled = true;
     setBackupMessage(t('admin.backups.creating'));
     try {
       const backup = await apiRequest('/api/admin/backups', {
-        method: 'POST',
-        body: JSON.stringify({ password: isUnencrypted ? null : password })
+        method: 'POST'
       });
       setBackupMessage(t('admin.backups.created', { filename: backup.filename }));
-      const pwdInput = document.querySelector('#backup-password');
-      if (pwdInput) pwdInput.value = '';
       await refreshAdmin();
     } catch (error) {
       setBackupMessage(error.message, true);
@@ -2769,14 +2743,10 @@
     const confirmed = window.confirm(t('admin.backups.confirmRestoreFile'));
     if (!confirmed) return;
 
-    const password = document.querySelector('#restore-file-password')?.value || '';
     setBackupMessage(t('admin.backups.restoring'));
 
     const formData = new FormData();
     formData.append('archive', file);
-    if (password) {
-      formData.append('password', password);
-    }
 
     try {
       const response = await fetch('/api/admin/backups/upload-restore', {

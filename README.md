@@ -19,7 +19,7 @@ Private notes app with per-user SQLite storage, invitation-only registration, an
 - Docker Compose setup that runs the stock Alpine image with a persistent data volume
 - Invitation-only registration — each link works once and expires after 7 days
 - Admin panel with server statistics, user list, and invitations
-- Security hardening with HTTP response headers (`X-Frame-Options`, `Content-Security-Policy`, `X-Content-Type-Options`, `Referrer-Policy`) and encrypted backups
+- Security hardening with HTTP response headers (`X-Frame-Options`, `Content-Security-Policy`, `X-Content-Type-Options`, `Referrer-Policy`)
 - Server-wide `.tgz` backups: create, download, restore, delete
 - Polish and English interface, light and dark theme
 - Profile panel for changing the language, avatar, and password
