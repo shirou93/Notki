@@ -296,9 +296,15 @@
         delBtn.addEventListener('click', () => deleteUser(user.id));
         actions.append(delBtn);
       }
+      const roleCell = document.createElement('td');
+      const roleBadge = document.createElement('span');
+      roleBadge.className = `admin-badge ${user.role === 'admin' ? 'admin-badge-role-admin' : 'admin-badge-role-user'}`;
+      roleBadge.textContent = t(user.role === 'admin' ? 'admin.role.admin' : 'admin.role.user');
+      roleCell.append(roleBadge);
+
       row.append(
         tableCell(user.email),
-        tableCell(t(user.role === 'admin' ? 'admin.role.admin' : 'admin.role.user')),
+        roleCell,
         tableCell(formatDate(user.createdAt)),
         tableCell(String(user.notes)),
         actions
@@ -322,6 +328,8 @@
     const rows = invites.map(invite => {
       const row = document.createElement('tr');
       const expired = new Date(invite.expiresAt) <= new Date();
+      const statusKey = invite.usedAt ? 'used' : expired ? 'expired' : 'pending';
+      const statusClass = invite.usedAt ? 'status-used' : expired ? 'status-expired' : 'status-pending';
       const actions = document.createElement('td');
       actions.className = 'admin-table-actions';
       if (invite.tokenHash) {
@@ -334,10 +342,16 @@
         delBtn.addEventListener('click', () => deleteInvite(invite.tokenHash));
         actions.append(delBtn);
       }
+      const statusCell = document.createElement('td');
+      const statusBadge = document.createElement('span');
+      statusBadge.className = `admin-badge admin-badge-${statusClass}`;
+      statusBadge.textContent = t(`admin.invites.${statusKey}`);
+      statusCell.append(statusBadge);
+
       row.append(
         tableCell(formatDate(invite.createdAt)),
         tableCell(formatDate(invite.expiresAt)),
-        tableCell(t(invite.usedAt ? 'admin.invites.used' : expired ? 'admin.invites.expired' : 'admin.invites.pending')),
+        statusCell,
         actions
       );
       return row;

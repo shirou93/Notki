@@ -95,7 +95,7 @@
           </div>
         </details>
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.11</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.12</span>
       </div>
     </aside>
 
@@ -160,13 +160,13 @@
       <header class="admin-section-header">
         <div><h2 data-i18n="admin.security.title">Security & Logging</h2><p data-i18n="admin.security.description">Configure server security and view live logs.</p></div>
       </header>
-      <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px;">
-        <label class="field-label" style="display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer;">
+      <div class="admin-security-controls">
+        <label class="admin-toggle-label">
           <input type="checkbox" id="admin-require-2fa"> <span data-i18n="admin.security.require2fa">Require 2FA for all users</span>
         </label>
-        <div style="display: flex; align-items: center; gap: 8px;">
+        <div class="admin-loglevel-wrap">
           <label class="field-label" for="admin-log-level" style="margin: 0;" data-i18n="admin.security.logLevel">LOG LEVEL:</label>
-          <select class="auth-input profile-select" id="admin-log-level" style="width: auto; padding: 4px 8px;">
+          <select class="auth-input profile-select admin-select" id="admin-log-level">
             <option value="INFO">INFO</option>
             <option value="WARNING">WARNING</option>
             <option value="ERROR">ERROR</option>
@@ -174,8 +174,14 @@
           </select>
         </div>
       </div>
-      <div class="admin-table-wrap" style="max-height: 300px; overflow-y: auto; background: var(--bg-color); border-radius: var(--radius); border: 1px solid var(--border-color); padding: 8px;">
-        <pre id="admin-live-logs" style="margin: 0; font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; color: var(--text-color);"></pre>
+      <div class="admin-logs-terminal">
+        <div class="admin-logs-header">
+          <span class="terminal-dot red"></span>
+          <span class="terminal-dot yellow"></span>
+          <span class="terminal-dot green"></span>
+          <span class="terminal-title">live_server_logs.log</span>
+        </div>
+        <pre id="admin-live-logs" class="admin-logs-body"></pre>
       </div>
     </section>
 
@@ -184,9 +190,9 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p style="margin-top: -10px; margin-bottom: 15px; color: #81988a; font-size: 13px;"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.11</strong></p>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.12</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
-      <div id="update-result" hidden>
+      <div id="update-result" class="admin-update-box" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
         <button class="button-primary" id="perform-update" type="button" data-i18n="admin.update.perform">Update now</button>
       </div>
@@ -196,9 +202,9 @@
       <header class="admin-section-header">
         <div><h2 data-i18n="admin.backups.title">Server-wide backups</h2><p data-i18n="admin.backups.description">Archives contain accounts, notes, and invitations. Sessions are not saved.</p></div>
       </header>
-      <form id="backup-form" class="backup-form-wrap" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 15px;">
-        <label class="field-label" style="display: flex; align-items: center; gap: 8px; margin: 0;"><input type="checkbox" id="backup-unencrypted-toggle"> <span data-i18n="admin.backups.allowUnencrypted">Allow unencrypted backup</span></label>
-        <input class="auth-input" id="backup-password" type="password" placeholder="Backup password" data-i18n-placeholder="admin.backups.passwordPlaceholder" style="max-width: 250px;" autocomplete="new-password">
+      <form id="backup-form" class="backup-form-wrap">
+        <label class="admin-toggle-label"><input type="checkbox" id="backup-unencrypted-toggle"> <span data-i18n="admin.backups.allowUnencrypted">Allow unencrypted backup</span></label>
+        <input class="auth-input" id="backup-password" type="password" placeholder="Backup password" data-i18n-placeholder="admin.backups.passwordPlaceholder" autocomplete="new-password">
         <button class="button-primary" id="create-backup" type="submit" data-i18n="admin.backups.create">+ Create .tgz backup</button>
       </form>
       <p class="admin-message" id="backup-message" role="status" hidden></p>
@@ -225,8 +231,8 @@
     <section class="admin-section">
       <header class="admin-section-header">
         <div><h2 data-i18n="admin.invites.title">Invitations</h2><p data-i18n="admin.invites.description">A registration link works once and expires after seven days.</p></div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <input type="number" id="invite-days" value="7" min="1" max="365" style="width: 60px;" class="auth-input" aria-label="Days valid" title="Days valid">
+        <div class="admin-invite-controls">
+          <input type="number" id="invite-days" value="7" min="1" max="365" class="auth-input invite-days-input" aria-label="Days valid" title="Days valid">
           <button class="button-primary" id="create-invite" type="button" data-i18n="admin.invites.create">+ Create invitation</button>
         </div>
       </header>

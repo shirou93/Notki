@@ -1,6 +1,9 @@
+import base64
+import hashlib
 import http.cookiejar
 import io
 import json
+import subprocess
 import tarfile
 import tempfile
 import threading
@@ -438,7 +441,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.11', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.11'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.12', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.12'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -462,7 +465,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.11'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.12'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
@@ -554,6 +557,108 @@ class ServerFlowTests(unittest.TestCase):
         status, backups = self.request(restored_admin, 'GET', '/api/admin/backups')
         self.assertEqual(status, 200)
         self.assertEqual(backups['backups'], [])
+
+    def test_totp_and_passkey_2fa_flow(self):
+        user_client = self.register_user('user2fa@example.com', 'user-passphrase-123')
+
+        # 1. Get 2FA status
+        status, res = self.request(user_client, 'GET', '/api/account/2fa')
+        self.assertEqual(status, 200)
+        self.assertFalse(res['hasTotp'])
+        self.assertEqual(res['passkeys'], [])
+
+        # 2. Setup TOTP
+        status, res = self.request(user_client, 'POST', '/api/account/totp', {})
+        self.assertEqual(status, 200)
+        secret = res['secret']
+        self.assertTrue(len(secret) >= 16)
+
+        # Verify invalid TOTP code
+        status, error = self.request(user_client, 'POST', '/api/account/totp/verify', {'code': '000000'})
+        self.assertEqual(status, 400)
+
+        # Verify valid TOTP code
+        code = server.compute_totp_code(secret)
+        status, res = self.request(user_client, 'POST', '/api/account/totp/verify', {'code': code})
+        self.assertEqual(status, 200)
+        self.assertTrue(res['verified'])
+
+        # 2FA status should now be active
+        status, res = self.request(user_client, 'GET', '/api/account/2fa')
+        self.assertTrue(res['hasTotp'])
+
+        # 3. Test 2FA login with TOTP
+        unauth_client = self.new_client()
+        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa@example.com', 'password': 'user-passphrase-123'})
+        self.assertEqual(status, 200)
+        self.assertTrue(res['requires2FA'])
+        self.assertTrue(res['hasTotp'])
+        temp_token = res['tempToken']
+
+        # Login 2FA with invalid code
+        status, error = self.request(unauth_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': '000000'})
+        self.assertEqual(status, 401)
+
+        # Re-login to get fresh tempToken
+        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa@example.com', 'password': 'user-passphrase-123'})
+        temp_token = res['tempToken']
+        valid_code = server.compute_totp_code(secret)
+        status, res = self.request(unauth_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': valid_code})
+        self.assertEqual(status, 200)
+        self.assertEqual(res['user']['email'], 'user2fa@example.com')
+
+        # 4. Passkey Registration
+        ec_key = subprocess.run(['openssl', 'ecparam', '-name', 'prime256v1', '-genkey'], capture_output=True, check=True).stdout
+        spki_der = subprocess.run(['openssl', 'ec', '-pubout', '-outform', 'DER'], input=ec_key, capture_output=True, check=True).stdout
+        spki_b64 = base64.b64encode(spki_der).decode('utf-8')
+
+        passkey_id = 'test-passkey-id-123'
+        status, res = self.request(user_client, 'POST', '/api/account/passkey', {
+            'id': passkey_id, 'name': 'My Laptop', 'publicKey': spki_b64
+        })
+        self.assertEqual(status, 201)
+
+        status, res = self.request(user_client, 'GET', '/api/account/2fa')
+        self.assertEqual(len(res['passkeys']), 1)
+        self.assertEqual(res['passkeys'][0]['id'], passkey_id)
+
+        # 5. Passkey Login Simulation
+        auth_data = b'authenticator_data_32_bytes_test'
+        client_data_json = b'{"type":"webauthn.get","challenge":"123"}'
+        client_hash = hashlib.sha256(client_data_json).digest()
+        signed_data = auth_data + client_hash
+
+        with tempfile.NamedTemporaryFile('wb') as key_file, tempfile.NamedTemporaryFile('wb') as data_file:
+            key_file.write(ec_key)
+            key_file.flush()
+            data_file.write(signed_data)
+            data_file.flush()
+            sig_bytes = subprocess.run(['openssl', 'dgst', '-sha256', '-sign', key_file.name, data_file.name], capture_output=True, check=True).stdout
+
+        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa@example.com', 'password': 'user-passphrase-123'})
+        temp_token = res['tempToken']
+        self.assertTrue(res['hasPasskey'])
+
+        status, res = self.request(unauth_client, 'POST', '/api/login/passkey', {
+            'tempToken': temp_token,
+            'id': passkey_id,
+            'authenticatorData': base64.b64encode(auth_data).decode('utf-8'),
+            'clientDataJSON': base64.b64encode(client_data_json).decode('utf-8'),
+            'signature': base64.b64encode(sig_bytes).decode('utf-8')
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(res['user']['email'], 'user2fa@example.com')
+
+        # 6. Delete Passkey and Remove TOTP
+        status, res = self.request(user_client, 'DELETE', f'/api/account/passkey/{passkey_id}')
+        self.assertEqual(status, 200)
+
+        status, res = self.request(user_client, 'DELETE', '/api/account/totp')
+        self.assertEqual(status, 200)
+
+        status, res = self.request(user_client, 'GET', '/api/account/2fa')
+        self.assertFalse(res['hasTotp'])
+        self.assertEqual(res['passkeys'], [])
 
 
 class FirstRunSetupTests(unittest.TestCase):

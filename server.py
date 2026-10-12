@@ -1,4 +1,5 @@
 import argparse
+import base64
 import hashlib
 import hmac
 import ipaddress
@@ -10,9 +11,13 @@ import os
 import re
 import secrets
 import sqlite3
+import struct
+import subprocess
 import sys
 import tarfile
+import tempfile
 import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from http import cookies
@@ -23,7 +28,7 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.11'
+VERSION = '0.1.5.12'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -128,7 +133,89 @@ ENGLISH_MESSAGES = {
     'Wystąpił błąd podczas pobierania archiwum.': 'An error occurred while downloading the archive.',
     'Nie udało się wyodrębnić plików.': 'Could not extract files.',
     'Nieprawidłowy adres pobierania.': 'Invalid download URL.',
+    'Sesja 2FA wygasła lub jest nieprawidłowa.': '2FA session expired or invalid.',
+    'Nieprawidłowy kod dwuskładnikowy.': 'Invalid two-factor code.',
+    'Nie znaleziono klucza zabezpieczeń.': 'Passkey not found.',
+    'Nieprawidłowy podpis klucza zabezpieczeń.': 'Invalid passkey signature.',
+    'Nieprawidłowe dane klucza.': 'Invalid key data.',
 }
+
+
+TEMP_2FA_TOKENS = {}
+TEMP_2FA_LOCK = threading.Lock()
+
+def create_temp_2fa_token(user_id):
+    token = secrets.token_urlsafe(32)
+    expires_at = utc_now() + timedelta(minutes=5)
+    with TEMP_2FA_LOCK:
+        now = utc_now()
+        expired = [k for k, v in TEMP_2FA_TOKENS.items() if v['expiresAt'] < now]
+        for k in expired:
+            del TEMP_2FA_TOKENS[k]
+        TEMP_2FA_TOKENS[token] = {'userId': user_id, 'expiresAt': expires_at}
+    return token
+
+def consume_temp_2fa_token(token):
+    if not token:
+        return None
+    with TEMP_2FA_LOCK:
+        data = TEMP_2FA_TOKENS.pop(token, None)
+        if not data:
+            return None
+        if data['expiresAt'] < utc_now():
+            return None
+        return data['userId']
+
+def generate_totp_secret():
+    alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+    return ''.join(secrets.choice(alphabet) for _ in range(16))
+
+def compute_totp_code(secret_b32, time_step=30, counter=None):
+    if counter is None:
+        counter = int(time.time() // time_step)
+    secret_b32 = str(secret_b32 or '').strip().upper()
+    missing_padding = len(secret_b32) % 8
+    if missing_padding:
+        secret_b32 += '=' * (8 - missing_padding)
+    key = base64.b32decode(secret_b32, casefold=True)
+    msg = struct.pack('>Q', counter)
+    hmac_hash = hmac.new(key, msg, hashlib.sha1).digest()
+    offset = hmac_hash[-1] & 0x0f
+    binary = struct.unpack('>I', hmac_hash[offset:offset+4])[0] & 0x7fffffff
+    code = binary % 1_000_000
+    return f'{code:06d}'
+
+def verify_totp_code(secret_b32, code, time_step=30, window=1):
+    code = str(code or '').strip()
+    if not code.isdigit() or len(code) != 6:
+        return False
+    current_counter = int(time.time() // time_step)
+    for i in range(-window, window + 1):
+        try:
+            if hmac.compare_digest(compute_totp_code(secret_b32, time_step, current_counter + i), code):
+                return True
+        except Exception:
+            pass
+    return False
+
+def verify_passkey_signature(public_key_pem, sig_bytes, signed_data):
+    try:
+        with tempfile.NamedTemporaryFile('wb') as pub_file, \
+             tempfile.NamedTemporaryFile('wb') as sig_file, \
+             tempfile.NamedTemporaryFile('wb') as data_file:
+            pub_file.write(public_key_pem.encode('utf-8'))
+            pub_file.flush()
+            sig_file.write(sig_bytes)
+            sig_file.flush()
+            data_file.write(signed_data)
+            data_file.flush()
+            proc = subprocess.run(
+                ['openssl', 'dgst', '-sha256', '-verify', pub_file.name, '-signature', sig_file.name, data_file.name],
+                capture_output=True
+            )
+            return proc.returncode == 0
+    except Exception:
+        return False
 
 
 def parse_version(version_str):
@@ -488,6 +575,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     self.serve_static('setup.html')
             elif path == '/api/session':
                 self.send_json({'user': self.current_user()})
+            elif path == '/api/account/2fa':
+                user = self.require_user()
+                with database() as connection:
+                    row = connection.execute('SELECT totp_secret FROM users WHERE id = ?', (user['id'],)).fetchone()
+                    pk_rows = connection.execute('SELECT id, name, created_at FROM passkeys WHERE user_id = ? ORDER BY created_at DESC', (user['id'],)).fetchall()
+                has_totp = bool(row and row['totp_secret'] and not row['totp_secret'].startswith('pending:'))
+                passkeys = [{'id': r['id'], 'name': r['name'], 'createdAt': r['created_at']} for r in pk_rows]
+                self.send_json({'hasTotp': has_totp, 'passkeys': passkeys})
             elif path == '/api/notes':
                 user = self.require_user()
                 with database() as connection:
@@ -588,6 +683,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
             payload = self.read_json(MAX_SNAPSHOT_BYTES if path == '/api/setup/import' else MAX_REQUEST_BYTES)
             if path == '/api/login':
                 self.login(payload)
+            elif path == '/api/login/2fa':
+                self.login_2fa(payload)
+            elif path == '/api/login/passkey':
+                self.login_passkey(payload)
             elif path == '/api/setup/admin':
                 self.create_first_admin(payload)
             elif path == '/api/setup/import':
@@ -602,6 +701,12 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 self.change_avatar(payload)
             elif path == '/api/account/labels':
                 self.change_labels(payload)
+            elif path == '/api/account/totp':
+                self.setup_totp()
+            elif path == '/api/account/totp/verify':
+                self.verify_totp(payload)
+            elif path == '/api/account/passkey':
+                self.add_passkey(payload)
             elif path.startswith('/api/notes/') and path.endswith('/shares'):
                 user = self.require_user()
                 note_id = path[len('/api/notes/'):-len('/shares')]
@@ -631,6 +736,19 @@ class NotkiHandler(BaseHTTPRequestHandler):
         try:
             self.check_origin()
             path = unquote(urlsplit(self.path).path)
+            if path == '/api/account/totp':
+                self.remove_totp()
+                return
+            passkey_match = re.fullmatch(r'/api/account/passkey/([^/]+)', path)
+            if passkey_match:
+                user = self.require_user()
+                key_id = unquote(passkey_match.group(1))
+                with database() as connection:
+                    cursor = connection.execute('DELETE FROM passkeys WHERE id = ? AND user_id = ?', (key_id, user['id']))
+                    if not cursor.rowcount:
+                        raise APIError('Nie znaleziono klucza zabezpieczeń.', 404)
+                self.send_json({'deleted': True})
+                return
             share_match = re.fullmatch(r'/api/notes/([^/]+)/shares/(\d+)', path)
             if share_match:
                 user = self.require_user()
@@ -1144,11 +1262,115 @@ class NotkiHandler(BaseHTTPRequestHandler):
             return
         with database() as connection:
             row = connection.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
-        if not row or not verify_password(password, row['password_hash']):
-            self.send_error_json('Nieprawidłowy e-mail lub hasło.', 401)
+            if not row or not verify_password(password, row['password_hash']):
+                self.send_error_json('Nieprawidłowy e-mail lub hasło.', 401)
+                return
+            totp_secret = row['totp_secret'] if 'totp_secret' in row.keys() else None
+            has_totp = bool(totp_secret and not totp_secret.startswith('pending:'))
+            pk_count = connection.execute('SELECT COUNT(*) FROM passkeys WHERE user_id = ?', (row['id'],)).fetchone()[0]
+            has_passkey = pk_count > 0
+            req_row = connection.execute("SELECT value FROM settings WHERE key = 'require2FA'").fetchone()
+            require_2fa = req_row and req_row['value'] == 'true'
+
+        if has_totp or has_passkey or require_2fa:
+            temp_token = create_temp_2fa_token(row['id'])
+            self.send_json({'requires2FA': True, 'tempToken': temp_token, 'hasTotp': has_totp, 'hasPasskey': has_passkey})
             return
+
         token = self.new_session(row['id'])
         self.send_json({'user': public_user(row)}, extra_headers=self.session_headers(token))
+
+    def login_2fa(self, payload):
+        user_id = consume_temp_2fa_token(payload.get('tempToken'))
+        if not user_id:
+            raise APIError('Sesja 2FA wygasła lub jest nieprawidłowa.', 401)
+        totp_code = payload.get('totpCode')
+        with database() as connection:
+            row = connection.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+            if not row:
+                raise APIError('Nie znaleziono użytkownika.', 404)
+            secret = row['totp_secret'] if 'totp_secret' in row.keys() else None
+            if not secret or secret.startswith('pending:') or not verify_totp_code(secret, totp_code):
+                raise APIError('Nieprawidłowy kod dwuskładnikowy.', 401)
+        token = self.new_session(user_id)
+        self.send_json({'user': public_user(row)}, extra_headers=self.session_headers(token))
+
+    def login_passkey(self, payload):
+        user_id = consume_temp_2fa_token(payload.get('tempToken'))
+        if not user_id:
+            raise APIError('Sesja 2FA wygasła lub jest nieprawidłowa.', 401)
+        key_id = payload.get('id')
+        auth_data_b64 = payload.get('authenticatorData')
+        client_data_b64 = payload.get('clientDataJSON')
+        sig_b64 = payload.get('signature')
+        if not key_id or not auth_data_b64 or not client_data_b64 or not sig_b64:
+            raise APIError('Nieprawidłowe dane klucza.', 400)
+        with database() as connection:
+            row = connection.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+            pk_row = connection.execute('SELECT public_key_pem FROM passkeys WHERE id = ? AND user_id = ?', (key_id, user_id)).fetchone()
+            if not pk_row or not row:
+                raise APIError('Nie znaleziono klucza zabezpieczeń.', 401)
+        try:
+            auth_bytes = base64.b64decode(auth_data_b64)
+            client_bytes = base64.b64decode(client_data_b64)
+            sig_bytes = base64.b64decode(sig_b64)
+            client_hash = hashlib.sha256(client_bytes).digest()
+            signed_data = auth_bytes + client_hash
+        except Exception as err:
+            raise APIError('Nieprawidłowe dane klucza.', 400) from err
+
+        if not verify_passkey_signature(pk_row['public_key_pem'], sig_bytes, signed_data):
+            raise APIError('Nieprawidłowy podpis klucza zabezpieczeń.', 401)
+
+        token = self.new_session(user_id)
+        self.send_json({'user': public_user(row)}, extra_headers=self.session_headers(token))
+
+    def setup_totp(self):
+        user = self.require_user()
+        secret = generate_totp_secret()
+        with database() as connection:
+            connection.execute('UPDATE users SET totp_secret = ? WHERE id = ?', (f'pending:{secret}', user['id']))
+        self.send_json({'secret': secret})
+
+    def verify_totp(self, payload):
+        user = self.require_user()
+        code = payload.get('code')
+        with database() as connection:
+            row = connection.execute('SELECT totp_secret FROM users WHERE id = ?', (user['id'],)).fetchone()
+            if not row or not row['totp_secret']:
+                raise APIError('Nieprawidłowy kod dwuskładnikowy.', 400)
+            totp_secret = row['totp_secret']
+            secret = totp_secret.removeprefix('pending:') if totp_secret.startswith('pending:') else totp_secret
+            if not verify_totp_code(secret, code):
+                raise APIError('Nieprawidłowy kod dwuskładnikowy.', 400)
+            connection.execute('UPDATE users SET totp_secret = ? WHERE id = ?', (secret, user['id']))
+        self.send_json({'verified': True})
+
+    def remove_totp(self):
+        user = self.require_user()
+        with database() as connection:
+            connection.execute('UPDATE users SET totp_secret = NULL WHERE id = ?', (user['id'],))
+        self.send_json({'removed': True})
+
+    def add_passkey(self, payload):
+        user = self.require_user()
+        key_id = payload.get('id')
+        name = str(payload.get('name') or 'Passkey')[:80]
+        pub_b64 = payload.get('publicKey')
+        if not key_id or not pub_b64:
+            raise APIError('Nieprawidłowe dane klucza.', 400)
+        try:
+            spki_bytes = base64.b64decode(pub_b64)
+            pem = f"-----BEGIN PUBLIC KEY-----\n{base64.b64encode(spki_bytes).decode('utf-8')}\n-----END PUBLIC KEY-----\n"
+        except Exception as err:
+            raise APIError('Nieprawidłowe dane klucza.', 400) from err
+        with database() as connection:
+            connection.execute(
+                'INSERT INTO passkeys (id, user_id, public_key_pem, name, created_at) VALUES (?, ?, ?, ?, ?) '
+                'ON CONFLICT(id) DO UPDATE SET public_key_pem = excluded.public_key_pem, name = excluded.name',
+                (key_id, user['id'], pem, name, iso_time())
+            )
+        self.send_json({'added': True}, 201)
 
     def register(self, payload):
         email = normalize_email(payload.get('email'))
