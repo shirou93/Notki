@@ -13,7 +13,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlsplit
-from urllib.request import HTTPCookieProcessor, Request, build_opener
+from urllib.request import HTTPCookieProcessor, Request, build_opener, urlopen
 
 import server
 
@@ -423,6 +423,14 @@ class ServerFlowTests(unittest.TestCase):
             self.assertIn('theme.js', html, path)
             self.assertIn('data-theme-select', html, path)
 
+    def test_security_headers(self):
+        req = Request(f'{self.base_url}/')
+        with urlopen(req) as response:
+            self.assertEqual(response.headers.get('X-Frame-Options'), 'DENY')
+            self.assertEqual(response.headers.get('X-Content-Type-Options'), 'nosniff')
+            self.assertEqual(response.headers.get('Referrer-Policy'), 'strict-origin-when-cross-origin')
+            self.assertIn("frame-ancestors 'none'", response.headers.get('Content-Security-Policy', ''))
+
     def test_api_errors_follow_accept_language(self):
         status, error = self.request(
             self.new_client(), 'GET', '/api/notes', headers={'Accept-Language': 'en-US,en;q=0.9'},
@@ -466,7 +474,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.19', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.19'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.21', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.21'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -490,7 +498,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.19'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.21'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
