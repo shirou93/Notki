@@ -404,7 +404,6 @@
     body.replaceChildren(...rows);
   }
 
-  let liveLogsInterval = null;
 
   async function refreshAdmin() {
     const [summary, backupList, settings] = await Promise.all([
@@ -419,34 +418,12 @@
 
     if (settings) {
       $('#admin-require-2fa').checked = settings.require2FA;
-      $('#admin-log-level').value = settings.logLevel || 'INFO';
     }
-
-    if (liveLogsInterval) clearInterval(liveLogsInterval);
-    liveLogsInterval = setInterval(async () => {
-      if (view !== 'admin') return clearInterval(liveLogsInterval);
-      try {
-        const { logs } = await apiRequest('/api/admin/logs');
-        const logsText = logs.map(l => `[${l.time}] [${l.level}] ${l.message}`).join('\n');
-        const pre = $('#admin-live-logs');
-        const autoScroll = pre.parentElement.scrollTop + pre.parentElement.clientHeight >= pre.parentElement.scrollHeight - 10;
-        pre.textContent = logsText;
-        if (autoScroll) pre.parentElement.scrollTop = pre.parentElement.scrollHeight;
-      } catch (e) {}
-    }, 2000);
   }
 
   $('#admin-require-2fa')?.addEventListener('change', async event => {
     try {
-      await apiRequest('/api/admin/settings', { method: 'POST', body: JSON.stringify({ require2FA: event.target.checked, logLevel: $('#admin-log-level').value }) });
-    } catch (e) {
-      alert(e.message);
-    }
-  });
-
-  $('#admin-log-level')?.addEventListener('change', async event => {
-    try {
-      await apiRequest('/api/admin/settings', { method: 'POST', body: JSON.stringify({ require2FA: $('#admin-require-2fa').checked, logLevel: event.target.value }) });
+      await apiRequest('/api/admin/settings', { method: 'POST', body: JSON.stringify({ require2FA: event.target.checked }) });
     } catch (e) {
       alert(e.message);
     }
@@ -873,7 +850,7 @@
   });
 
   $('#remove-totp-btn').addEventListener('click', async () => {
-    if (!confirm('Are you sure you want to remove your Authenticator App?')) return;
+    if (!confirm(t('topbar.2fa.confirmRemoveTotp'))) return;
     try {
       await apiRequest('/api/account/totp', { method: 'DELETE' });
       await refresh2faStatus();
@@ -904,11 +881,12 @@
         throw new Error("Browser did not return a public key.");
       }
 
+      const passkeyName = prompt(t('topbar.2fa.passkeyPromptName'), t('topbar.2fa.passkeyDefaultName'));
       await apiRequest('/api/account/passkey', {
         method: 'POST',
         body: JSON.stringify({
           id: creation.id,
-          name: 'Passkey',
+          name: (passkeyName && passkeyName.trim()) || t('topbar.2fa.passkeyDefaultName'),
           publicKey: btoa(String.fromCharCode(...new Uint8Array(spki)))
         })
       });
@@ -937,11 +915,11 @@
         nameSpan.textContent = pk.name + ' (' + new Date(pk.createdAt).toLocaleDateString() + ')';
 
         const delBtn = document.createElement('button');
-        delBtn.textContent = 'Remove';
+        delBtn.textContent = t('topbar.2fa.removePasskey');
         delBtn.className = 'button-secondary';
         delBtn.style.padding = '2px 8px';
         delBtn.addEventListener('click', async () => {
-          if (!confirm('Remove this Passkey?')) return;
+          if (!confirm(t('topbar.2fa.confirmRemovePasskey'))) return;
           await apiRequest(`/api/account/passkey/${encodeURIComponent(pk.id)}`, { method: 'DELETE' });
           refresh2faStatus();
         });
