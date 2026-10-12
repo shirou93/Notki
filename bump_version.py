@@ -1,11 +1,13 @@
 import re
-files_to_update = ["server.py", "index.html", "README.md", "tests/test_server.py"]
-for filepath in files_to_update:
+
+files = ["server.py", "README.md", "index.html", "tests/test_server.py"]
+
+for file in files:
     try:
-        with open(filepath, "r") as f_in:
-            content = f_in.read()
-        content = content.replace("0.1.5.9", "0.1.5.10")
-        with open(filepath, "w") as f_out:
-            f_out.write(content)
+        with open(file, "r") as f:
+            content = f.read()
+        content = content.replace("0.1.5.10", "0.1.5.11")
+        with open(file, "w") as f:
+            f.write(content)
     except FileNotFoundError:
         pass

@@ -438,7 +438,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.10', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.10'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.11', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.11'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -462,10 +462,44 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.10'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.11'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
+
+    def test_admin_settings_and_logs(self):
+        # Non-admin / unauthenticated cannot access settings or logs
+        user = self.new_client()
+        status, _ = self.request(user, 'GET', '/api/admin/settings')
+        self.assertEqual(status, 401)
+        status, _ = self.request(user, 'GET', '/api/admin/logs')
+        self.assertEqual(status, 401)
+
+        # Admin GET settings default
+        status, settings = self.request(self.admin, 'GET', '/api/admin/settings')
+        self.assertEqual(status, 200)
+        self.assertFalse(settings['require2FA'])
+        self.assertEqual(settings['logLevel'], 'INFO')
+
+        # Admin POST settings
+        status, updated = self.request(self.admin, 'POST', '/api/admin/settings', {
+            'require2FA': True, 'logLevel': 'DEBUG'
+        })
+        self.assertEqual(status, 200)
+        self.assertTrue(updated['require2FA'])
+        self.assertEqual(updated['logLevel'], 'DEBUG')
+
+        # Verify GET settings updated
+        status, settings = self.request(self.admin, 'GET', '/api/admin/settings')
+        self.assertEqual(status, 200)
+        self.assertTrue(settings['require2FA'])
+        self.assertEqual(settings['logLevel'], 'DEBUG')
+
+        # Admin GET logs
+        status, logs_resp = self.request(self.admin, 'GET', '/api/admin/logs')
+        self.assertEqual(status, 200)
+        self.assertIn('logs', logs_resp)
+        self.assertIsInstance(logs_resp['logs'], list)
 
     def test_aes_encrypt_decrypt_helpers(self):
         plain_text = b'Sensitive backup data test string'
@@ -679,7 +713,6 @@ class FirstRunSetupTests(unittest.TestCase):
         })
         self.assertEqual(status, 200)
         self.assertTrue(login['user']['isAdmin'])
-
 
 if __name__ == '__main__':
     unittest.main()
