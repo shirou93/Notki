@@ -73,17 +73,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .admin-toggle-label { display: flex; align-items: center; gap: 10px; margin: 0; cursor: pointer; font-size: 13px; font-weight: 500; }
 .admin-toggle-label input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--brand-accent, #52734c); cursor: pointer; }
 
-.admin-loglevel-wrap { display: flex; align-items: center; gap: 10px; }
-.admin-select { width: auto; padding: 6px 12px; font-size: 12px; border-radius: 6px; }
-
-.admin-logs-terminal { border-radius: 8px; overflow: hidden; border: 1px solid #2a342d; background: #141c17; color: #e2ece5; margin-top: 12px; }
-.admin-logs-header { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: #1b251f; border-bottom: 1px solid #2a342d; }
-.terminal-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.terminal-dot.red { background: #ff5f56; }
-.terminal-dot.yellow { background: #ffbd2e; }
-.terminal-dot.green { background: #27c93f; }
-.terminal-title { font-family: monospace; font-size: 11px; color: #81988a; margin-left: 6px; }
-.admin-logs-body { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; max-height: 280px; overflow-y: auto; padding: 12px; color: #b8d98c; }
 
 .admin-version-info { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
 .admin-version-info strong { color: var(--ink); }
