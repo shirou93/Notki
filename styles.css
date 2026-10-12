@@ -434,7 +434,7 @@ body.is-dragging-task-active, body.is-dragging-task-active * { cursor: var(--dra
 
 @media (min-width: 1500px) { .main-content { max-width: 1280px; margin-right: auto; margin-left: auto; padding-right: 40px; padding-left: 40px; } }
 @media (max-width: 1050px) { .main-content { padding-right: 4vw; padding-left: 4vw; } .notes-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); } .notes-grid.is-list-view { grid-template-columns: 1fr; } }
-@media (max-width: 700px) {
+@media (max-width: 700px), (max-height: 500px) {
   .card-body .task-list li { grid-template-columns: 20px 20px minmax(0, 1fr); gap: 10px; min-height: 26px; }
   .card-body .task-checkbox { width: 20px; height: 20px; flex: 0 0 20px; }
   .card-body .task-list li > .task-text { font-size: 14px; }
@@ -621,4 +621,4 @@ body.is-dragging-task-active, body.is-dragging-task-active * { cursor: var(--dra
 .fab-add-note { position: fixed; bottom: max(30px, calc(20px + env(safe-area-inset-bottom))); right: max(30px, calc(20px + env(safe-area-inset-right))); z-index: 3; width: 56px; height: 56px; border-radius: 50%; background: var(--forest); color: #fff; font-size: 32px; border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.2); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, background 0.2s, opacity 0.2s; opacity: 1; transform: scale(1); }
 .fab-add-note[hidden] { opacity: 0; transform: scale(0.5); pointer-events: none; display: flex !important; }
 .fab-add-note:hover { background: #275544; transform: scale(1.05); }
-@media (max-width: 700px) { .fab-add-note { bottom: calc(20px + env(safe-area-inset-bottom)); right: calc(20px + env(safe-area-inset-right)); } }
+@media (max-width: 700px), (max-height: 500px) { .fab-add-note { bottom: calc(20px + env(safe-area-inset-bottom)); right: calc(20px + env(safe-area-inset-right)); } }
