@@ -92,7 +92,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .setup-import { display: grid; gap: 10px; margin-top: 25px; padding-top: 18px; border-top: 1px solid var(--line); text-align: center; }
 .setup-import .field-label { margin: 0; }
 .setup-import .setup-hint { line-height: 1.6; }
-.setup-import .auth-input[type="file"] { height: auto; min-height: 42px; padding: 8px; font-size: 11px; text-align-last: center; }
+.setup-import .auth-input[type="file"] { height: auto; min-height: 42px; padding: 8px; font-size: 11px; text-align: left; text-align-last: left; }
 .setup-import .button-secondary { justify-self: center; }
 .setup-divider { margin: 22px 0 0; color: var(--muted); font-size: 10px; text-align: center; }
 
