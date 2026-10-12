@@ -2742,6 +2742,42 @@
 
   document.querySelector('#backup-form')?.addEventListener('submit', handleCreateBackup);
 
+  document.querySelector('#restore-file-btn')?.addEventListener('click', async () => {
+    const fileInput = document.querySelector('#restore-file-input');
+    const file = fileInput?.files?.[0];
+    if (!file) {
+      setBackupMessage(t('admin.backups.noFileSelected'), true);
+      return;
+    }
+    const confirmed = window.confirm(t('admin.backups.confirmRestoreFile'));
+    if (!confirmed) return;
+
+    const password = document.querySelector('#restore-file-password')?.value || '';
+    setBackupMessage(t('admin.backups.restoring'));
+
+    const formData = new FormData();
+    formData.append('archive', file);
+    if (password) {
+      formData.append('password', password);
+    }
+
+    try {
+      const response = await fetch('/api/admin/backups/upload-restore', {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Restore failed');
+      }
+      setBackupMessage(t('admin.backups.restored'));
+      setTimeout(() => window.location.reload(), 1200);
+    } catch (err) {
+      setBackupMessage(err.message, true);
+    }
+  });
+
   window.i18n.onChange(() => {
     applyTheme(document.documentElement.dataset.theme);
     if (!elements.authView.hidden) showAuth(elements.registerForm.hidden ? 'login' : 'register', elements.authMessage.hidden ? '' : elements.authMessage.textContent);

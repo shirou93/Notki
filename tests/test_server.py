@@ -49,6 +49,22 @@ class ServerFlowTests(unittest.TestCase):
     def new_client():
         return build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
+    def request_raw_client(self, client, method, path, body, content_type='application/gzip'):
+        request = Request(
+            self.base_url + path,
+            data=body,
+            headers={'Content-Type': content_type},
+            method=method,
+        )
+        try:
+            with client.open(request) as response:
+                return response.status, json.loads(response.read().decode('utf-8'))
+        except HTTPError as error:
+            status = error.code
+            payload = json.loads(error.read().decode('utf-8'))
+            error.close()
+            return status, payload
+
     def request(self, client, method, path, payload=None, headers=None):
         data = json.dumps(payload).encode('utf-8') if payload is not None else None
         request = Request(
@@ -441,7 +457,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.14', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.14'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.15', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.15'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -465,7 +481,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.14'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.15'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
@@ -511,6 +527,44 @@ class ServerFlowTests(unittest.TestCase):
         self.assertNotEqual(encrypted, plain_text)
         decrypted = server.aes_decrypt(encrypted, password)
         self.assertEqual(decrypted, plain_text)
+
+    def test_upload_restore_server_backup(self):
+        created_at = server.iso_time()
+        snapshot = {
+            'format': 'notki-server-snapshot', 'version': 1, 'createdAt': created_at,
+            'users': [{
+                'id': 1, 'email': 'uploaded-admin@example.com',
+                'passwordHash': server.hash_password('uploaded-admin-password'),
+                'role': 'admin', 'createdAt': created_at,
+            }],
+            'notes': [{
+                'id': 'uploaded-note', 'userId': 1, 'title': 'Uploaded Note',
+                'body': 'Uploaded Body', 'bodyFormat': 0, 'color': 'mint', 'tags': ['uploaded'],
+                'pinned': False, 'archived': False, 'deleted': False,
+                'createdAt': created_at, 'updatedAt': created_at, 'order': 1,
+            }], 'invites': [], 'shares': [],
+        }
+        snapshot_bytes = json.dumps(snapshot).encode('utf-8')
+        archive_buf = io.BytesIO()
+        with tarfile.open(fileobj=archive_buf, mode='w:gz') as archive:
+            member = tarfile.TarInfo('snapshot.json')
+            member.size = len(snapshot_bytes)
+            archive.addfile(member, io.BytesIO(snapshot_bytes))
+
+        # Admin restores from uploaded file
+        status, result = self.request_raw_client(self.admin, 'POST', '/api/admin/backups/upload-restore', archive_buf.getvalue())
+        self.assertEqual(status, 200)
+        self.assertTrue(result['restored'])
+
+        # Sign in with restored credentials
+        client = self.new_client()
+        status, login = self.request(client, 'POST', '/api/login', {
+            'email': 'uploaded-admin@example.com', 'password': 'uploaded-admin-password',
+        })
+        self.assertEqual(status, 200)
+        status, notes = self.request(client, 'GET', '/api/notes')
+        self.assertEqual(status, 200)
+        self.assertEqual(notes['notes'][0]['title'], 'Uploaded Note')
 
     def test_backup_restore_replaces_server_and_delete_removes_archive(self):
         original_note = {

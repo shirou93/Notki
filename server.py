@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.14'
+VERSION = '0.1.5.15'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -686,6 +686,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
                         raise APIError('Oczekiwano archiwum .tgz lub multipart/form-data.', 415)
                     self.import_snapshot_archive(self.read_body(MAX_SNAPSHOT_BYTES))
                 return
+            if path == '/api/admin/backups/upload-restore':
+                self.upload_restore_server_backup()
+                return
             payload = self.read_json(MAX_SNAPSHOT_BYTES if path == '/api/setup/import' else MAX_REQUEST_BYTES)
             if path == '/api/login':
                 self.login(payload)
@@ -955,6 +958,31 @@ class NotkiHandler(BaseHTTPRequestHandler):
             if not cursor.rowcount:
                 raise APIError('Nie znaleziono zaproszenia.', 404)
         self.send_json({'deleted': token_hash})
+
+    def upload_restore_server_backup(self):
+        self.require_user(admin=True)
+        import cgi
+        ctype, pdict = cgi.parse_header(self.headers.get('Content-Type', ''))
+        if ctype == 'multipart/form-data':
+            pdict['boundary'] = bytes(pdict['boundary'], 'utf-8')
+            pdict['CONTENT-LENGTH'] = int(self.headers.get('Content-Length', 0))
+            fields = cgi.parse_multipart(self.rfile, pdict)
+            archive_bytes = fields.get('archive', [b''])[0]
+            password_field = fields.get('password', [b''])[0]
+            password = password_field.decode('utf-8') if isinstance(password_field, bytes) else str(password_field)
+            if not archive_bytes:
+                raise APIError('Brak archiwum w żądaniu.', 400)
+            if len(archive_bytes) > MAX_SNAPSHOT_BYTES:
+                raise APIError('Plik backupu przekracza limit rozmiaru.', 413)
+            if password:
+                archive_bytes = aes_decrypt(archive_bytes, password)
+            snapshot = self.snapshot_from_archive(archive_bytes)
+        elif ctype in ('application/gzip', 'application/x-gzip', 'application/octet-stream', 'application/x-tgz', ''):
+            archive_bytes = self.read_body(MAX_SNAPSHOT_BYTES)
+            snapshot = self.snapshot_from_archive(archive_bytes)
+        else:
+            raise APIError('Oczekiwano archiwum .tgz lub multipart/form-data.', 415)
+        self.restore_snapshot(snapshot, replace_existing=True)
 
     def restore_server_backup(self, filename, payload=None):
         payload = payload or {}
