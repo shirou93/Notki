@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.26'
+VERSION = '0.1.5.27'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -695,7 +695,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     pdict['CONTENT-LENGTH'] = int(self.headers.get('Content-Length', 0))
                     fields = cgi.parse_multipart(self.rfile, pdict)
                     archive_bytes = fields.get('archive', [b''])[0]
-                    password = fields.get('password', [b''])[0].decode('utf-8')
+                    password_field = fields.get('password', [b''])[0]
+                    password = password_field.decode('utf-8') if isinstance(password_field, bytes) else str(password_field)
                     if not archive_bytes:
                         raise APIError('Brak archiwum w żądaniu.', 400)
                     if len(archive_bytes) > MAX_SNAPSHOT_BYTES:
