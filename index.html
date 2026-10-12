@@ -95,7 +95,7 @@
           </div>
         </details>
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.14</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.15</span>
       </div>
     </aside>
 
@@ -172,7 +172,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.14</strong></p>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.15</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" class="admin-update-box" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
@@ -189,6 +189,11 @@
         <input class="auth-input" id="backup-password" type="password" placeholder="Backup password" data-i18n-placeholder="admin.backups.passwordPlaceholder" autocomplete="new-password">
         <button class="button-primary" id="create-backup" type="submit" data-i18n="admin.backups.create">+ Create .tgz backup</button>
       </form>
+      <div id="backup-restore-file-wrap" class="backup-form-wrap" style="margin-top: 12px;">
+        <input class="auth-input" id="restore-file-input" type="file" accept=".tgz,application/gzip,application/x-gzip" style="height: auto; min-height: 42px; padding: 8px; font-size: 11px; text-align: left; text-align-last: left;">
+        <input class="auth-input" id="restore-file-password" type="password" placeholder="Backup password (if encrypted)" data-i18n-placeholder="admin.backups.passwordPlaceholder" autocomplete="new-password">
+        <button class="button-secondary" id="restore-file-btn" type="button" data-i18n="admin.backups.restoreFromFile">Restore from .tgz file</button>
+      </div>
       <p class="admin-message" id="backup-message" role="status" hidden></p>
       <div class="admin-table-wrap">
         <table class="admin-table">
