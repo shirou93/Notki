@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.29'
+VERSION = '0.1.5.30'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -645,30 +645,43 @@ class NotkiHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self.send_error_json(str(error), 400)
 
+    def read_archive_from_request(self):
+        import cgi
+        ctype, pdict = cgi.parse_header(self.headers.get('Content-Type', ''))
+        if ctype == 'multipart/form-data':
+            boundary = pdict.get('boundary')
+            if not boundary:
+                raise APIError('Nieprawidłowe dane żądania.', 400)
+            try:
+                pdict['boundary'] = boundary.encode('utf-8') if isinstance(boundary, str) else boundary
+                pdict['CONTENT-LENGTH'] = int(self.headers.get('Content-Length', 0))
+                fields = cgi.parse_multipart(self.rfile, pdict)
+            except Exception as error:
+                raise APIError('Nie można odczytać archiwum backupu.', 400) from error
+            archive_list = fields.get('archive') or [b'']
+            archive_bytes = archive_list[0] if archive_list else b''
+            if isinstance(archive_bytes, str):
+                archive_bytes = archive_bytes.encode('iso-8859-1')
+            if not archive_bytes:
+                raise APIError('Brak archiwum w żądaniu.', 400)
+            if len(archive_bytes) > MAX_SNAPSHOT_BYTES:
+                raise APIError('Plik backupu przekracza limit rozmiaru.', 413)
+            return archive_bytes
+        elif ctype in ('application/gzip', 'application/x-gzip', 'application/octet-stream', 'application/x-tgz', ''):
+            archive_bytes = self.read_body(MAX_SNAPSHOT_BYTES)
+            if not archive_bytes:
+                raise APIError('Brak archiwum w żądaniu.', 400)
+            return archive_bytes
+        else:
+            raise APIError('Oczekiwano archiwum .tgz lub multipart/form-data.', 415)
+
     def do_POST(self):
         try:
             self.check_origin()
             path = urlsplit(self.path).path
             if path == '/api/setup/import-backup':
-                # Since setup.js sends FormData, we must read the multipart request
-                import cgi
-                ctype, pdict = cgi.parse_header(self.headers.get('Content-Type'))
-                if ctype == 'multipart/form-data':
-                    pdict['boundary'] = bytes(pdict['boundary'], 'utf-8')
-                    pdict['CONTENT-LENGTH'] = int(self.headers.get('Content-Length', 0))
-                    fields = cgi.parse_multipart(self.rfile, pdict)
-                    archive_bytes = fields.get('archive', [b''])[0]
-                    if isinstance(archive_bytes, str):
-                        archive_bytes = archive_bytes.encode('iso-8859-1')
-                    if not archive_bytes:
-                        raise APIError('Brak archiwum w żądaniu.', 400)
-                    if len(archive_bytes) > MAX_SNAPSHOT_BYTES:
-                        raise APIError('Plik backupu przekracza limit rozmiaru.', 413)
-                    self.import_snapshot_archive(archive_bytes)
-                else:
-                    if ctype not in ('application/gzip', 'application/x-gzip'):
-                        raise APIError('Oczekiwano archiwum .tgz lub multipart/form-data.', 415)
-                    self.import_snapshot_archive(self.read_body(MAX_SNAPSHOT_BYTES))
+                archive_bytes = self.read_archive_from_request()
+                self.import_snapshot_archive(archive_bytes)
                 return
             if path == '/api/admin/backups/upload-restore':
                 self.upload_restore_server_backup()
@@ -797,10 +810,12 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def build_snapshot(self):
         with database() as connection:
             connection.execute('BEGIN')
-            users = connection.execute('SELECT id, email, password_hash, role, created_at, avatar, labels_json FROM users ORDER BY id').fetchall()
+            users = connection.execute('SELECT id, email, password_hash, role, created_at, avatar, labels_json, totp_secret FROM users ORDER BY id').fetchall()
             notes = connection.execute('SELECT * FROM notes ORDER BY user_id, sort_order DESC').fetchall()
             invites = connection.execute('SELECT * FROM invites ORDER BY created_at').fetchall()
             shares = connection.execute('SELECT * FROM note_shares ORDER BY note_id, user_id').fetchall()
+            passkeys = connection.execute('SELECT id, user_id, public_key_pem, name, created_at FROM passkeys ORDER BY user_id, created_at').fetchall()
+            settings = connection.execute('SELECT key, value FROM settings ORDER BY key').fetchall()
         snapshot = {
             'format': 'notki-server-snapshot',
             'version': 1,
@@ -808,7 +823,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             'users': [
                 {'id': row['id'], 'email': row['email'], 'passwordHash': row['password_hash'], 'role': row['role'],
                  'createdAt': row['created_at'], 'avatar': row['avatar'],
-                 'labels': json.loads(row['labels_json']) if 'labels_json' in row.keys() and row['labels_json'] else []}
+                 'labels': json.loads(row['labels_json']) if 'labels_json' in row.keys() and row['labels_json'] else [],
+                 'totpSecret': row['totp_secret'] if 'totp_secret' in row.keys() else None}
                 for row in users
             ],
             'notes': [
@@ -827,6 +843,15 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 {'noteId': row['note_id'], 'userId': row['user_id'], 'permission': row['permission'],
                  'createdAt': row['created_at']}
                 for row in shares
+            ],
+            'passkeys': [
+                {'id': row['id'], 'userId': row['user_id'], 'publicKeyPem': row['public_key_pem'],
+                 'name': row['name'], 'createdAt': row['created_at']}
+                for row in passkeys
+            ],
+            'settings': [
+                {'key': row['key'], 'value': row['value']}
+                for row in settings
             ],
         }
         return snapshot
@@ -871,12 +896,15 @@ class NotkiHandler(BaseHTTPRequestHandler):
         for path in backup_dir.iterdir():
             if not BACKUP_FILENAME_PATTERN.fullmatch(path.name) or path.is_symlink() or not path.is_file():
                 continue
-            stat = path.stat()
-            backups.append({
-                'filename': path.name,
-                'createdAt': datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
-                'sizeBytes': stat.st_size,
-            })
+            try:
+                stat = path.stat()
+                backups.append({
+                    'filename': path.name,
+                    'createdAt': datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+                    'sizeBytes': stat.st_size,
+                })
+            except OSError:
+                continue
         backups.sort(key=lambda backup: backup['createdAt'], reverse=True)
         self.send_json({'backups': backups})
 
@@ -891,10 +919,13 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def download_server_backup(self, filename):
         self.require_user(admin=True)
         path = self.find_server_backup(filename)
-        size = path.stat().st_size
-        if size > MAX_SNAPSHOT_BYTES:
-            raise APIError('Plik backupu przekracza limit rozmiaru.', 413)
-        data = path.read_bytes()
+        try:
+            size = path.stat().st_size
+            if size > MAX_SNAPSHOT_BYTES:
+                raise APIError('Plik backupu przekracza limit rozmiaru.', 413)
+            data = path.read_bytes()
+        except OSError as error:
+            raise APIError('Nie można odczytać archiwum backupu.', 500) from error
         self.send_response(200)
         self.send_header('Content-Type', 'application/gzip')
         self.send_header('Content-Length', str(len(data)))
@@ -906,7 +937,12 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def delete_server_backup(self, filename):
         self.require_user(admin=True)
         path = self.find_server_backup(filename)
-        path.unlink()
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            raise APIError('Nie znaleziono backupu.', 404)
+        except OSError as error:
+            raise APIError('Nie udało się usunąć backupu.', 500) from error
         self.send_json({'deleted': filename})
 
     def delete_user(self, user_id):
@@ -940,25 +976,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def upload_restore_server_backup(self):
         self.require_user(admin=True)
-        import cgi
-        ctype, pdict = cgi.parse_header(self.headers.get('Content-Type', ''))
-        if ctype == 'multipart/form-data':
-            pdict['boundary'] = bytes(pdict['boundary'], 'utf-8')
-            pdict['CONTENT-LENGTH'] = int(self.headers.get('Content-Length', 0))
-            fields = cgi.parse_multipart(self.rfile, pdict)
-            archive_bytes = fields.get('archive', [b''])[0]
-            if isinstance(archive_bytes, str):
-                archive_bytes = archive_bytes.encode('iso-8859-1')
-            if not archive_bytes:
-                raise APIError('Brak archiwum w żądaniu.', 400)
-            if len(archive_bytes) > MAX_SNAPSHOT_BYTES:
-                raise APIError('Plik backupu przekracza limit rozmiaru.', 413)
-            snapshot = self.snapshot_from_archive(archive_bytes)
-        elif ctype in ('application/gzip', 'application/x-gzip', 'application/octet-stream', 'application/x-tgz', ''):
-            archive_bytes = self.read_body(MAX_SNAPSHOT_BYTES)
-            snapshot = self.snapshot_from_archive(archive_bytes)
-        else:
-            raise APIError('Oczekiwano archiwum .tgz lub multipart/form-data.', 415)
+        archive_bytes = self.read_archive_from_request()
+        snapshot = self.snapshot_from_archive(archive_bytes)
         self.restore_snapshot(snapshot, replace_existing=True)
 
     def restore_server_backup(self, filename, payload=None):
@@ -1068,11 +1087,16 @@ class NotkiHandler(BaseHTTPRequestHandler):
         try:
             with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode='r:gz') as archive:
                 members = archive.getmembers()
-                if len(members) != 1 or members[0].name != 'snapshot.json' or not members[0].isfile():
+                valid_members = [
+                    m for m in members
+                    if m.isfile() and Path(m.name).name == 'snapshot.json' and not Path(m.name).name.startswith('._')
+                ]
+                if len(valid_members) != 1:
                     raise APIError('Archiwum backupu ma nieprawidłową zawartość.')
-                if members[0].size > MAX_SNAPSHOT_BYTES:
+                snapshot_member = valid_members[0]
+                if snapshot_member.size > MAX_SNAPSHOT_BYTES:
                     raise APIError('Snapshot przekracza limit 100 MB.', 413)
-                snapshot_file = archive.extractfile(members[0])
+                snapshot_file = archive.extractfile(snapshot_member)
                 if snapshot_file is None:
                     raise APIError('Nie można odczytać snapshotu z archiwum.')
                 return json.loads(snapshot_file.read(MAX_SNAPSHOT_BYTES + 1).decode('utf-8'))
@@ -1118,11 +1142,16 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 avatar = str(avatar)
                 if len(avatar) > MAX_AVATAR_CHARS or not AVATAR_PATTERN.fullmatch(avatar):
                     raise APIError('Snapshot zawiera nieprawidłowy avatar.')
+            totp_secret = user.get('totpSecret')
+            if totp_secret is not None:
+                totp_secret = str(totp_secret)
+                if len(totp_secret) > 256:
+                    totp_secret = None
             user_ids.add(user_id)
             emails.add(email)
             labels = user.get('labels')
             labels_json = json.dumps(labels if isinstance(labels, list) else [])
-            prepared_users.append((user_id, email, password_hash, role, self.snapshot_date(user.get('createdAt')), avatar, labels_json))
+            prepared_users.append((user_id, email, password_hash, role, self.snapshot_date(user.get('createdAt')), avatar, labels_json, totp_secret))
         if not any(user[3] == 'admin' for user in prepared_users):
             raise APIError('Snapshot musi zawierać konto administratora.')
 
@@ -1191,11 +1220,37 @@ class NotkiHandler(BaseHTTPRequestHandler):
             share_keys.add((note_id, user_id))
             prepared_shares.append((note_id, user_id, permission, self.snapshot_date(share.get('createdAt'))))
 
+        prepared_passkeys = []
+        passkey_ids = set()
+        for pk in snapshot.get('passkeys') or []:
+            if not isinstance(pk, dict):
+                raise APIError('Nieprawidłowy klucz zabezpieczeń w snapshocie.')
+            pk_id = str(pk.get('id') or '')
+            user_id = pk.get('userId')
+            pub_pem = str(pk.get('publicKeyPem') or '')
+            name = str(pk.get('name') or 'Passkey')[:80]
+            if not pk_id or len(pk_id) > 500 or pk_id in passkey_ids or isinstance(user_id, bool) or not isinstance(user_id, int) or user_id not in user_ids or not pub_pem:
+                raise APIError('Nieprawidłowy klucz zabezpieczeń w snapshocie.')
+            passkey_ids.add(pk_id)
+            prepared_passkeys.append((pk_id, user_id, pub_pem, name, self.snapshot_date(pk.get('createdAt'))))
+
+        prepared_settings = []
+        setting_keys = set()
+        for st in snapshot.get('settings') or []:
+            if not isinstance(st, dict):
+                raise APIError('Nieprawidłowe ustawienie w snapshocie.')
+            key = str(st.get('key') or '')
+            value = str(st.get('value') or '')
+            if not key or len(key) > 100 or key in setting_keys:
+                raise APIError('Nieprawidłowe ustawienie w snapshocie.')
+            setting_keys.add(key)
+            prepared_settings.append((key, value))
+
         with database() as connection:
             connection.execute('BEGIN IMMEDIATE')
             has_existing_data = any(
                 connection.execute(f'SELECT 1 FROM {table} LIMIT 1').fetchone()
-                for table in ('users', 'notes', 'invites', 'sessions')
+                for table in ('users', 'notes', 'invites', 'sessions', 'passkeys', 'settings')
             )
             if has_existing_data and not replace_existing:
                 raise APIError('Import jest możliwy tylko do całkowicie pustej bazy danych.', 409)
@@ -1204,9 +1259,12 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 connection.execute('DELETE FROM note_shares')
                 connection.execute('DELETE FROM notes')
                 connection.execute('DELETE FROM invites')
+                connection.execute('DELETE FROM passkeys')
+                connection.execute('DELETE FROM settings')
                 connection.execute('DELETE FROM users')
             connection.executemany(
-                'INSERT INTO users (id, email, password_hash, role, created_at, avatar, labels_json) VALUES (?, ?, ?, ?, ?, ?, ?)', prepared_users,
+                'INSERT INTO users (id, email, password_hash, role, created_at, avatar, labels_json, totp_secret) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                prepared_users,
             )
             connection.executemany('''
                 INSERT INTO notes (id, user_id, title, body, body_format, color, tags_json, pinned, archived,
@@ -1221,12 +1279,26 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 'INSERT INTO note_shares (note_id, user_id, permission, created_at) VALUES (?, ?, ?, ?)',
                 prepared_shares,
             )
+            if prepared_passkeys:
+                connection.executemany(
+                    'INSERT INTO passkeys (id, user_id, public_key_pem, name, created_at) VALUES (?, ?, ?, ?, ?)',
+                    prepared_passkeys,
+                )
+            if prepared_settings:
+                connection.executemany(
+                    'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+                    prepared_settings,
+                )
         result = {
             'users': len(prepared_users),
             'notes': len(prepared_notes),
             'invites': len(prepared_invites),
             'shares': len(prepared_shares),
         }
+        if 'passkeys' in snapshot:
+            result['passkeys'] = len(prepared_passkeys)
+        if 'settings' in snapshot:
+            result['settings'] = len(prepared_settings)
         result['restored' if replace_existing else 'imported'] = True
         self.send_json(result, 200 if replace_existing else 201)
 

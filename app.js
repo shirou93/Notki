@@ -205,9 +205,9 @@
     renderAvatar(user);
     userLabels = user.labels || [];
     document.body.classList.remove('is-auth');
+    applyHashIntent();
     render();
     readSharedNote();
-    applyHashIntent();
   }
 
     function applyHashIntent() {
@@ -2753,12 +2753,16 @@
         method: 'POST',
         body: formData,
         credentials: 'same-origin',
+        headers: {
+          'Accept-Language': window.i18n.getLanguage(),
+        },
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data.error || 'Restore failed');
+        throw new Error(data.error || t('admin.backups.restoreFailed'));
       }
       setBackupMessage(t('admin.backups.restored'));
+      fileInput.value = '';
       setTimeout(() => window.location.reload(), 1200);
     } catch (err) {
       setBackupMessage(err.message, true);
