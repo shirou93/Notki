@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.24'
+VERSION = '0.1.5.25'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -433,15 +433,20 @@ class APIError(Exception):
 import subprocess
 
 def aes_encrypt(data, password_str):
+    if not password_str:
+        raise APIError('Hasło jest wymagane do zaszyfrowania backupu.', 400)
     env = dict(os.environ, NOTKI_ENC_PASS=password_str)
-    proc = subprocess.run(
-        ['openssl', 'enc', '-aes-256-cbc', '-pbkdf2', '-pass', 'env:NOTKI_ENC_PASS'],
-        input=data,
-        env=env,
-        capture_output=True,
-        check=True
-    )
-    return proc.stdout
+    try:
+        proc = subprocess.run(
+            ['openssl', 'enc', '-aes-256-cbc', '-pbkdf2', '-pass', 'env:NOTKI_ENC_PASS'],
+            input=data,
+            env=env,
+            capture_output=True,
+            check=True
+        )
+        return proc.stdout
+    except (subprocess.CalledProcessError, OSError) as error:
+        raise APIError('Nie udało się zaszyfrować backupu.', 500) from error
 
 def aes_decrypt(data, password_str):
     if not password_str:
@@ -456,8 +461,8 @@ def aes_decrypt(data, password_str):
             check=True
         )
         return proc.stdout
-    except subprocess.CalledProcessError as error:
-        raise APIError('Nieprawidłowe hasło backupu.', 400) from error
+    except (subprocess.CalledProcessError, OSError) as error:
+        raise APIError('Nieprawidłowe hasło backupu lub uszkodzony plik.', 400) from error
 
 
 class NotkiHandler(BaseHTTPRequestHandler):
@@ -997,11 +1002,15 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 raise APIError('Brak archiwum w żądaniu.', 400)
             if len(archive_bytes) > MAX_SNAPSHOT_BYTES:
                 raise APIError('Plik backupu przekracza limit rozmiaru.', 413)
-            if password:
+            if archive_bytes.startswith(b'Salted__'):
+                if not password:
+                    raise APIError('Backup jest zaszyfrowany. Podaj hasło.', 400)
                 archive_bytes = aes_decrypt(archive_bytes, password)
             snapshot = self.snapshot_from_archive(archive_bytes)
         elif ctype in ('application/gzip', 'application/x-gzip', 'application/octet-stream', 'application/x-tgz', ''):
             archive_bytes = self.read_body(MAX_SNAPSHOT_BYTES)
+            if archive_bytes.startswith(b'Salted__'):
+                raise APIError('Backup jest zaszyfrowany. Podaj hasło.', 400)
             snapshot = self.snapshot_from_archive(archive_bytes)
         else:
             raise APIError('Oczekiwano archiwum .tgz lub multipart/form-data.', 415)
@@ -1016,7 +1025,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
         try:
             archive_bytes = path.read_bytes()
             password = payload.get('password')
-            if password:
+            if archive_bytes.startswith(b'Salted__'):
+                if not password:
+                    raise APIError('Backup jest zaszyfrowany. Podaj hasło.', 400)
                 archive_bytes = aes_decrypt(archive_bytes, password)
             snapshot = self.snapshot_from_archive(archive_bytes)
         except OSError as error:
@@ -1111,7 +1122,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def import_snapshot_archive(self, archive_bytes, password=None):
         if not self.is_local_setup_request():
             raise APIError('Import snapshotu jest dostępny tylko lokalnie.', 403)
-        if password:
+        if archive_bytes.startswith(b'Salted__'):
+            if not password:
+                raise APIError('Backup jest zaszyfrowany. Podaj hasło.', 400)
             archive_bytes = aes_decrypt(archive_bytes, password)
         self.restore_snapshot(self.snapshot_from_archive(archive_bytes), replace_existing=False)
 
