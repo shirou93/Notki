@@ -1704,9 +1704,22 @@
     }
     const tags = $('.card-tags', card);
     (note.tags || []).slice(0, 3).forEach(tag => {
-      const label = document.createElement('span');
+      const label = document.createElement('button');
+      label.type = 'button';
       label.className = 'card-tag';
-      label.textContent = tag;
+      const icon = document.createElement('span');
+      icon.className = 'card-tag-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = '🏷';
+      const text = document.createElement('span');
+      text.textContent = tag;
+      label.append(icon, text);
+      label.title = t('nav.labels');
+      label.setAttribute('aria-label', `${tag} — ${t('nav.labels')}`);
+      label.addEventListener('click', event => {
+        event.stopPropagation();
+        openLabelsModal();
+      });
       tags.append(label);
     });
     card.addEventListener('click', event => {

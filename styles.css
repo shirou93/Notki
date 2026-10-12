@@ -22,9 +22,9 @@
 }
 
 * { box-sizing: border-box; }
-html { background: var(--canvas); height: 100%; min-height: 100%; min-height: 100lvh; overflow-x: hidden; }
-body { margin: 0; min-height: 100%; min-height: 100vh; min-height: 100lvh; background: var(--canvas); color: var(--ink); font-family: var(--sans); font-size: 14px; -webkit-font-smoothing: antialiased; width: 100%; overflow-x: hidden; }
-button, input, textarea { font: inherit; }
+html { background: var(--canvas); height: 100%; min-height: 100%; min-height: 100lvh; overflow-x: hidden; touch-action: manipulation; }
+body { margin: 0; min-height: 100%; min-height: 100vh; min-height: 100lvh; background: var(--canvas); color: var(--ink); font-family: var(--sans); font-size: 14px; -webkit-font-smoothing: antialiased; width: 100%; overflow-x: hidden; touch-action: manipulation; }
+button, input, textarea { font: inherit; touch-action: manipulation; }
 button { color: inherit; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible { outline: 3px solid #a8ca69; outline-offset: 3px; }
 [hidden] { display: none !important; }
@@ -281,7 +281,9 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .card-body .task-checkbox { width: 18px; height: 18px; flex: 0 0 18px; margin: 0; accent-color: #52754e; vertical-align: middle; cursor: pointer; }
 .card-bottom { display: flex; align-items: end; justify-content: space-between; gap: 5px; margin-top: auto; }
 .card-tags { display: flex; flex-wrap: wrap; gap: 5px; }
-.card-tag { padding: 3px 7px; border-radius: 3px; background: #ffffff9c; color: #63746a; font-size: 9px; }
+.card-tag { display: inline-flex; align-items: center; gap: 3px; padding: 3px 7px; border-radius: 3px; background: #ffffff9c; color: #63746a; font-size: 9px; cursor: pointer; transition: background .15s, color .15s; user-select: none; touch-action: manipulation; }
+.card-tag:hover { background: #eaf1e5; color: #244635; }
+.card-tag-icon { font-size: 10px; line-height: 1; }
 .card-owner { padding: 3px 7px; border-radius: 3px; background: #e8f0e0; color: #4f6b45; font-size: 9px; font-weight: 700; }
 .card-owner.is-read-only { background: #eef0ee; color: #6d7a70; }
 .note-card.is-shared { border-style: dashed; }
@@ -542,6 +544,7 @@ body.is-dragging-task-active, body.is-dragging-task-active * { cursor: var(--dra
   .card-body .task-group-label { color: #a5b2a9; }
   .card-body .task-list-completed .task-text { color: #a5b2a9; }
   .card-tag { background: #ffffff18; color: #c4d0c6; }
+  .card-tag:hover { background: #2a3b30; color: #d4e8bd; }
   .card-owner { background: #2f4632; color: #b9d99e; }
   .card-owner.is-read-only { background: #2c3a30; color: #a5b2a9; }
   .share-item { border-color: var(--line); background: #22322a; }
@@ -609,6 +612,8 @@ body.is-dragging-task-active, body.is-dragging-task-active * { cursor: var(--dra
   .admin-security-controls { flex-direction: column; align-items: flex-start; padding: 10px 12px; }
   .admin-table th, .admin-table td { padding: 10px 12px; font-size: 12px; }
 }
+#labels-backdrop { z-index: 218; }
+.labels-panel { z-index: 220; }
 .labels-label-row { display: flex; align-items: center; justify-content: space-between; margin: 0 0 9px; }
 .labels-edit-button { font-size: 14px; width: 24px; height: 24px; }
 .labels-container { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 23px; }
