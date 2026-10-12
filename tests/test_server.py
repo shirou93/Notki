@@ -441,7 +441,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.13', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.13'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.14', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.14'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -465,7 +465,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.13'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.14'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
@@ -572,6 +572,7 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         secret = res['secret']
         self.assertTrue(len(secret) >= 16)
+        self.assertIn('<svg', res['qrSvg'])
 
         # Verify invalid TOTP code
         status, error = self.request(user_client, 'POST', '/api/account/totp/verify', {'code': '000000'})
@@ -649,12 +650,19 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(res['user']['email'], 'user2fa@example.com')
 
-        # 6. Delete Passkey and Remove TOTP
-        status, res = self.request(user_client, 'DELETE', f'/api/account/passkey/{passkey_id}')
+        # 6. Verify Admin Summary and Admin Reset 2FA
+        status, summary = self.request(self.admin, 'GET', '/api/admin/summary')
         self.assertEqual(status, 200)
+        target_user = next(u for u in summary['users'] if u['email'] == 'user2fa@example.com')
+        self.assertTrue(target_user['has2FA'])
 
-        status, res = self.request(user_client, 'DELETE', '/api/account/totp')
+        status, res = self.request(self.admin, 'DELETE', f"/api/admin/users/{target_user['id']}/2fa")
         self.assertEqual(status, 200)
+        self.assertEqual(res['reset'], target_user['id'])
+
+        status, summary = self.request(self.admin, 'GET', '/api/admin/summary')
+        target_user = next(u for u in summary['users'] if u['email'] == 'user2fa@example.com')
+        self.assertFalse(target_user['has2FA'])
 
         status, res = self.request(user_client, 'GET', '/api/account/2fa')
         self.assertFalse(res['hasTotp'])

@@ -23,12 +23,13 @@ from datetime import datetime, timedelta, timezone
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 import urllib.request
+import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.13'
+VERSION = '0.1.5.14'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -615,7 +616,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
                         FROM notes
                     ''').fetchone()
                     users = connection.execute('''
-                        SELECT users.id, users.email, users.role, users.created_at, COUNT(notes.id) AS note_count
+                        SELECT users.id, users.email, users.role, users.created_at, users.totp_secret,
+                               COUNT(DISTINCT notes.id) AS note_count,
+                               (SELECT COUNT(*) FROM passkeys WHERE passkeys.user_id = users.id) AS passkey_count
                         FROM users LEFT JOIN notes ON notes.user_id = users.id
                         GROUP BY users.id ORDER BY users.created_at DESC
                     ''').fetchall()
@@ -628,7 +631,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 self.send_json({
                     'stats': {key: stats[key] or 0 for key in ('users', 'notes', 'active', 'archived', 'trash')}
                               | {'pendingInvites': pending},
-                    'users': [{'id': row['id'], 'email': row['email'], 'role': row['role'], 'createdAt': row['created_at'], 'notes': row['note_count']} for row in users],
+                    'users': [{
+                        'id': row['id'], 'email': row['email'], 'role': row['role'], 'createdAt': row['created_at'], 'notes': row['note_count'],
+                        'has2FA': bool((row['totp_secret'] and not row['totp_secret'].startswith('pending:')) or row['passkey_count'] > 0)
+                    } for row in users],
                     'invites': [{'tokenHash': row['token_hash'], 'createdAt': row['created_at'], 'expiresAt': row['expires_at'], 'usedAt': row['used_at']} for row in invites],
                 })
             elif path == '/api/admin/backups':
@@ -761,6 +767,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
             invite_match = re.fullmatch(r'/api/admin/invites/([^/]+)', path)
             if invite_match:
                 self.delete_invite(invite_match.group(1))
+                return
+            user_2fa_match = re.fullmatch(r'/api/admin/users/(\d+)/2fa', path)
+            if user_2fa_match:
+                self.reset_user_2fa(int(user_2fa_match.group(1)))
                 return
             user_match = re.fullmatch(r'/api/admin/users/(\d+)', path)
             if user_match:
@@ -927,6 +937,16 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 raise APIError('Nie znaleziono użytkownika.', 404)
             connection.execute('DELETE FROM users WHERE id = ?', (user_id,))
         self.send_json({'deleted': user_id})
+
+    def reset_user_2fa(self, user_id):
+        self.require_user(admin=True)
+        with database() as connection:
+            row = connection.execute('SELECT id FROM users WHERE id = ?', (user_id,)).fetchone()
+            if not row:
+                raise APIError('Nie znaleziono użytkownika.', 404)
+            connection.execute('UPDATE users SET totp_secret = NULL WHERE id = ?', (user_id,))
+            connection.execute('DELETE FROM passkeys WHERE user_id = ?', (user_id,))
+        self.send_json({'reset': user_id})
 
     def delete_invite(self, token_hash):
         self.require_user(admin=True)
@@ -1330,7 +1350,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
         secret = generate_totp_secret()
         with database() as connection:
             connection.execute('UPDATE users SET totp_secret = ? WHERE id = ?', (f'pending:{secret}', user['id']))
-        self.send_json({'secret': secret})
+        otpauth_url = f"otpauth://totp/Notki:{quote(user['email'])}?secret={secret}&issuer=Notki"
+        qr_svg = qr.generate_qr_svg(otpauth_url)
+        self.send_json({'secret': secret, 'qrSvg': qr_svg, 'otpauthUrl': otpauth_url})
 
     def verify_totp(self, payload):
         user = self.require_user()
