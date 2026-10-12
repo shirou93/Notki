@@ -2441,6 +2441,7 @@
   function closeSidebar() {
     elements.sidebar?.classList.remove('is-open');
     if (elements.sidebarBackdrop) elements.sidebarBackdrop.hidden = true;
+    if (elements.hamburgerToggle) elements.hamburgerToggle.setAttribute('aria-expanded', 'false');
   }
 
   function toggleSidebar() {
@@ -2449,6 +2450,7 @@
     } else {
       elements.sidebar?.classList.add('is-open');
       if (elements.sidebarBackdrop) elements.sidebarBackdrop.hidden = false;
+      if (elements.hamburgerToggle) elements.hamburgerToggle.setAttribute('aria-expanded', 'true');
     }
   }
 
@@ -2578,6 +2580,11 @@
     }
     if (event.key === 'Escape' && !elements.profilePanel.hidden && elements.profilePanel.classList.contains('is-open')) {
       closeProfile();
+      return;
+    }
+    const labelsPanel = $('#labels-panel');
+    if (event.key === 'Escape' && labelsPanel && !labelsPanel.hidden && labelsPanel.classList.contains('is-open')) {
+      closeLabelsModal();
       return;
     }
     if (event.key === 'Escape' && $('#sidebar-user-menu')?.open) {
