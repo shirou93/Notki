@@ -474,7 +474,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.27', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.27'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.28', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.28'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -498,7 +498,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.27'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.28'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
@@ -698,6 +698,45 @@ class ServerFlowTests(unittest.TestCase):
         status, backups = self.request(restored_admin, 'GET', '/api/admin/backups')
         self.assertEqual(status, 200)
         self.assertEqual(backups['backups'], [])
+
+    def test_encrypted_backup_creation_and_restore_flow(self):
+        note = {
+            'id': 'enc-note-1', 'title': 'Zaszyfrowana notatka', 'body': 'Tajne dane',
+            'bodyFormat': 0, 'color': 'default', 'tags': [], 'pinned': False,
+            'archived': False, 'deleted': False, 'createdAt': server.iso_time(),
+            'updatedAt': server.iso_time(), 'order': 1,
+        }
+        status, _ = self.request(self.admin, 'PUT', '/api/notes', {'notes': [note]})
+        self.assertEqual(status, 200)
+
+        pwd = 'MySecretEncPassword123!'
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {'password': pwd})
+        self.assertEqual(status, 201)
+        self.assertTrue(backup['filename'].startswith('notki-server-'))
+
+        status, backups = self.request(self.admin, 'GET', '/api/admin/backups')
+        self.assertEqual(status, 200)
+        enc_backup = next(b for b in backups['backups'] if b['filename'] == backup['filename'])
+        self.assertTrue(enc_backup['isEncrypted'])
+
+        # Restore without password -> 400
+        status, err = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {})
+        self.assertEqual(status, 400)
+
+        # Restore with wrong password -> 400
+        status, err = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {'password': 'wrong-pass'})
+        self.assertEqual(status, 400)
+
+        # Restore with correct password -> 200
+        status, restored = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {'password': pwd})
+        self.assertEqual(status, 200)
+        self.assertTrue(restored['restored'])
+
+    def test_encrypted_backup_missing_openssl_error(self):
+        with unittest.mock.patch('subprocess.run', side_effect=FileNotFoundError('openssl not found')):
+            status, err = self.request(self.admin, 'POST', '/api/admin/backups', {'password': 'some-password'})
+            self.assertEqual(status, 500)
+            self.assertIn('OpenSSL', err['error'])
 
     def test_totp_and_passkey_2fa_flow(self):
         user_client = self.register_user('user2fa@example.com', 'user-passphrase-123')
