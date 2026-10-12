@@ -17,7 +17,7 @@
     noteTitle: $('#note-title'), noteBody: $('#note-body'), labelsContainer: $('#note-labels'), saveState: $('#save-state'), date: $('#editor-date'),
     words: $('#editor-words'), pin: $('#pin-note'), archive: $('#archive-note'), delete: $('#delete-note'), toast: $('#toast'), themeToggle: $('#theme-toggle'),
     appShell: $('#app-shell'), authView: $('#auth-view'), authHeading: $('#auth-heading'), authDescription: $('#auth-description'), authMessage: $('#auth-message'),
-    loginForm: $('#login-form'), registerForm: $('#register-form'), authSwitch: $('#auth-switch'), adminLink: $('#admin-link'), navAdmin: $('#nav-admin'), adminArea: $('#admin-area'), pageHeading: $('.page-heading'), captureWrap: $('.capture-wrap'), notesArea: $('.notes-area'), topbarSearch: $('.search-box'),
+    topbar: $('header.topbar'), loginForm: $('#login-form'), registerForm: $('#register-form'), authSwitch: $('#auth-switch'), adminLink: $('#admin-link'), navAdmin: $('#nav-admin'), adminArea: $('#admin-area'), pageHeading: $('.page-heading'), captureWrap: $('.capture-wrap'), notesArea: $('.notes-area'), topbarSearch: $('.search-box'),
     sharedBanner: $('#shared-banner'), sharedTitle: $('#shared-title'), sharedPreview: $('#shared-preview'),
     avatar: $('#avatar'), profilePanel: $('#profile-panel'), profileBackdrop: $('#profile-backdrop'), profileAccount: $('#profile-account'),
     profileMessage: $('#profile-message'), passwordForm: $('#password-form'),
@@ -1591,6 +1591,7 @@
     elements.navAdmin.classList.toggle('is-active', view === 'admin');
 
     if (view === 'admin') {
+      if (elements.topbar) elements.topbar.hidden = true;
       elements.pageHeading.hidden = true;
       elements.captureWrap.hidden = true;
       elements.notesArea.hidden = true;
@@ -1601,6 +1602,7 @@
       refreshAdmin().catch(() => {});
       window.history.pushState(null, '', '/admin');
     } else {
+      if (elements.topbar) elements.topbar.hidden = false;
       elements.pageHeading.hidden = false;
       elements.captureWrap.hidden = false;
       elements.notesArea.hidden = false;
@@ -2439,7 +2441,6 @@
   function closeSidebar() {
     elements.sidebar?.classList.remove('is-open');
     if (elements.sidebarBackdrop) elements.sidebarBackdrop.hidden = true;
-    document.body.style.overflow = '';
   }
 
   function toggleSidebar() {
@@ -2448,7 +2449,6 @@
     } else {
       elements.sidebar?.classList.add('is-open');
       if (elements.sidebarBackdrop) elements.sidebarBackdrop.hidden = false;
-      document.body.style.overflow = 'hidden';
     }
   }
 
