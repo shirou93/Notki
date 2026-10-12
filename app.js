@@ -162,6 +162,7 @@
     elements.appShell.hidden = true;
     elements.panel.hidden = true;
     elements.backdrop.hidden = true;
+    if ($('#login-2fa-form')) $('#login-2fa-form').hidden = true;
     elements.loginForm.hidden = mode !== 'login';
     elements.registerForm.hidden = mode !== 'register';
     elements.authHeading.firstChild.dataset.i18n = mode === 'register' ? 'auth.heading.register' : 'auth.heading.login';
@@ -386,16 +387,53 @@
     body.replaceChildren(...rows);
   }
 
+  let liveLogsInterval = null;
+
   async function refreshAdmin() {
-    const [summary, backupList] = await Promise.all([
+    const [summary, backupList, settings] = await Promise.all([
       apiRequest('/api/admin/summary'),
       apiRequest('/api/admin/backups'),
+      apiRequest('/api/admin/settings').catch(() => ({}))
     ]);
     renderStats(summary.stats);
     renderUsers(summary.users);
     renderInvites(summary.invites);
     renderBackups(backupList.backups);
+
+    if (settings) {
+      $('#admin-require-2fa').checked = settings.require2FA;
+      $('#admin-log-level').value = settings.logLevel || 'INFO';
+    }
+
+    if (liveLogsInterval) clearInterval(liveLogsInterval);
+    liveLogsInterval = setInterval(async () => {
+      if (view !== 'admin') return clearInterval(liveLogsInterval);
+      try {
+        const { logs } = await apiRequest('/api/admin/logs');
+        const logsText = logs.map(l => `[${l.time}] [${l.level}] ${l.message}`).join('\n');
+        const pre = $('#admin-live-logs');
+        const autoScroll = pre.parentElement.scrollTop + pre.parentElement.clientHeight >= pre.parentElement.scrollHeight - 10;
+        pre.textContent = logsText;
+        if (autoScroll) pre.parentElement.scrollTop = pre.parentElement.scrollHeight;
+      } catch (e) {}
+    }, 2000);
   }
+
+  $('#admin-require-2fa')?.addEventListener('change', async event => {
+    try {
+      await apiRequest('/api/admin/settings', { method: 'POST', body: JSON.stringify({ require2FA: event.target.checked, logLevel: $('#admin-log-level').value }) });
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+
+  $('#admin-log-level')?.addEventListener('change', async event => {
+    try {
+      await apiRequest('/api/admin/settings', { method: 'POST', body: JSON.stringify({ require2FA: $('#admin-require-2fa').checked, logLevel: event.target.value }) });
+    } catch (e) {
+      alert(e.message);
+    }
+  });
 
   function setBackupMessage(message, isError = false) {
     const element = document.querySelector('#backup-message');
@@ -471,17 +509,71 @@
   elements.authSwitch.addEventListener('click', () => {
     showAuth(elements.registerForm.hidden ? 'register' : 'login');
   });
+  let loginTempToken = '';
+
   elements.loginForm.addEventListener('submit', async event => {
     event.preventDefault();
     try {
-      const { user } = await apiRequest('/api/login', {
+      const response = await apiRequest('/api/login', {
         method: 'POST',
         body: JSON.stringify({ email: $('#login-email').value, password: $('#login-password').value }),
       });
-      await showApp(user);
+      if (response.requires2FA) {
+        loginTempToken = response.tempToken;
+        elements.loginForm.hidden = true;
+        $('#login-2fa-form').hidden = false;
+        $('#login-totp').hidden = !response.hasTotp;
+        $('#login-totp').previousElementSibling.hidden = !response.hasTotp;
+        $('#login-2fa-form').querySelector('button[type="submit"]').hidden = !response.hasTotp;
+        $('#login-passkey-btn').hidden = !response.hasPasskey;
+        if (response.hasTotp) $('#login-totp').focus();
+        return;
+      }
+      await showApp(response.user);
     } catch (error) {
       $('#login-password').value = '';
       showAuth('login', error.message);
+    }
+  });
+
+  $('#login-2fa-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    try {
+      const { user } = await apiRequest('/api/login/2fa', {
+        method: 'POST',
+        body: JSON.stringify({ tempToken: loginTempToken, totpCode: $('#login-totp').value }),
+      });
+      await showApp(user);
+    } catch (error) {
+      $('#login-totp').value = '';
+      elements.authMessage.textContent = error.message;
+      elements.authMessage.hidden = false;
+    }
+  });
+
+  $('#login-passkey-btn').addEventListener('click', async () => {
+    try {
+      const assertion = await navigator.credentials.get({
+        publicKey: {
+          challenge: new Uint8Array(32), // dummy challenge since server uses short-lived tokens and we verify against the token session
+          rpId: window.location.hostname,
+          userVerification: "preferred"
+        }
+      });
+      const { user } = await apiRequest('/api/login/passkey', {
+        method: 'POST',
+        body: JSON.stringify({
+          tempToken: loginTempToken,
+          id: assertion.id,
+          authenticatorData: btoa(String.fromCharCode(...new Uint8Array(assertion.response.authenticatorData))),
+          clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(assertion.response.clientDataJSON))),
+          signature: btoa(String.fromCharCode(...new Uint8Array(assertion.response.signature)))
+        }),
+      });
+      await showApp(user);
+    } catch (error) {
+      elements.authMessage.textContent = error.message;
+      elements.authMessage.hidden = false;
     }
   });
   elements.registerForm.addEventListener('submit', async event => {
@@ -528,6 +620,7 @@
     elements.avatarMessage.hidden = true;
     elements.avatarMessage.classList.remove('is-error');
     elements.passwordForm.reset();
+    refresh2faStatus();
     elements.profilePanel.hidden = false;
     elements.profilePanel.classList.add('is-open');
     elements.profilePanel.setAttribute('aria-hidden', 'false');
@@ -738,6 +831,111 @@
   }
 
   $('#avatar-upload').addEventListener('click', () => elements.avatarInput.click());
+
+  $('#setup-totp-btn').addEventListener('click', async () => {
+    try {
+      const response = await apiRequest('/api/account/totp', { method: 'POST', body: '{}' });
+      $('#totp-secret-code').textContent = response.secret;
+      $('#totp-verify-area').hidden = false;
+      $('#setup-totp-btn').hidden = true;
+    } catch (error) {
+      alert(error.message);
+    }
+  });
+
+  $('#totp-verify-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    try {
+      await apiRequest('/api/account/totp/verify', { method: 'POST', body: JSON.stringify({ code: $('#totp-verify-code').value }) });
+      $('#totp-verify-area').hidden = true;
+      $('#totp-verify-code').value = '';
+      await refresh2faStatus();
+    } catch (error) {
+      alert(error.message);
+    }
+  });
+
+  $('#remove-totp-btn').addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to remove your Authenticator App?')) return;
+    try {
+      await apiRequest('/api/account/totp', { method: 'DELETE' });
+      await refresh2faStatus();
+    } catch (error) {
+      alert(error.message);
+    }
+  });
+
+  $('#add-passkey-btn').addEventListener('click', async () => {
+    try {
+      const creation = await navigator.credentials.create({
+        publicKey: {
+          challenge: new Uint8Array(32),
+          rp: { name: "Notki" },
+          user: {
+            id: new Uint8Array(16), // dummy user id for webauthn client side
+            name: currentUser.email,
+            displayName: currentUser.email
+          },
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+          attestation: "none",
+          authenticatorSelection: { userVerification: "preferred" }
+        }
+      });
+
+      const spki = creation.response.getPublicKey ? creation.response.getPublicKey() : null;
+      if (!spki) {
+        throw new Error("Browser did not return a public key.");
+      }
+
+      await apiRequest('/api/account/passkey', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: creation.id,
+          name: 'Passkey',
+          publicKey: btoa(String.fromCharCode(...new Uint8Array(spki)))
+        })
+      });
+      await refresh2faStatus();
+    } catch (error) {
+      alert(error.message);
+    }
+  });
+
+  async function refresh2faStatus() {
+    try {
+      const status = await apiRequest('/api/account/2fa');
+      $('#totp-active-area').hidden = !status.hasTotp;
+      $('#totp-setup-area').hidden = status.hasTotp;
+      $('#setup-totp-btn').hidden = status.hasTotp;
+      const list = $('#passkey-list');
+      list.innerHTML = '';
+      status.passkeys.forEach(pk => {
+        const li = document.createElement('li');
+        li.style.display = 'flex';
+        li.style.justifyContent = 'space-between';
+        li.style.alignItems = 'center';
+        li.style.padding = '4px 0';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = pk.name + ' (' + new Date(pk.createdAt).toLocaleDateString() + ')';
+
+        const delBtn = document.createElement('button');
+        delBtn.textContent = 'Remove';
+        delBtn.className = 'button-secondary';
+        delBtn.style.padding = '2px 8px';
+        delBtn.addEventListener('click', async () => {
+          if (!confirm('Remove this Passkey?')) return;
+          await apiRequest(`/api/account/passkey/${encodeURIComponent(pk.id)}`, { method: 'DELETE' });
+          refresh2faStatus();
+        });
+
+        li.append(nameSpan, delBtn);
+        list.append(li);
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  }
 
   elements.avatarInput.addEventListener('change', () => {
     const file = elements.avatarInput.files[0];

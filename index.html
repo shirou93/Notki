@@ -89,7 +89,7 @@
           </div>
         </details>
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.7</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.8</span>
       </div>
     </aside>
 
@@ -152,10 +152,33 @@
 
     <section class="admin-section">
       <header class="admin-section-header">
+        <div><h2 data-i18n="admin.security.title">Security & Logging</h2><p data-i18n="admin.security.description">Configure server security and view live logs.</p></div>
+      </header>
+      <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px;">
+        <label class="field-label" style="display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer;">
+          <input type="checkbox" id="admin-require-2fa"> <span data-i18n="admin.security.require2fa">Require 2FA for all users</span>
+        </label>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <label class="field-label" for="admin-log-level" style="margin: 0;" data-i18n="admin.security.logLevel">LOG LEVEL:</label>
+          <select class="auth-input profile-select" id="admin-log-level" style="width: auto; padding: 4px 8px;">
+            <option value="INFO">INFO</option>
+            <option value="WARNING">WARNING</option>
+            <option value="ERROR">ERROR</option>
+            <option value="DEBUG">DEBUG</option>
+          </select>
+        </div>
+      </div>
+      <div class="admin-table-wrap" style="max-height: 300px; overflow-y: auto; background: var(--bg-color); border-radius: var(--radius); border: 1px solid var(--border-color); padding: 8px;">
+        <pre id="admin-live-logs" style="margin: 0; font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; color: var(--text-color);"></pre>
+      </div>
+    </section>
+
+    <section class="admin-section">
+      <header class="admin-section-header">
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p style="margin-top: -10px; margin-bottom: 15px; color: #81988a; font-size: 13px;"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.7</strong></p>
+      <p style="margin-top: -10px; margin-bottom: 15px; color: #81988a; font-size: 13px;"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.8</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
@@ -274,6 +297,31 @@
         <p class="auth-message" id="profile-message" role="alert" hidden></p>
         <button class="button-primary" type="submit" data-i18n="topbar.changePassword">CHANGE PASSWORD</button>
       </form>
+      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+        <p class="field-label" data-i18n="topbar.2fa.title">TWO-FACTOR AUTHENTICATION</p>
+        <p class="profile-description" data-i18n="topbar.2fa.description">Secure your account with an Authenticator App (TOTP) or a Passkey (e.g. Touch ID, Face ID).</p>
+
+        <div id="totp-setup-area">
+          <button class="button-secondary" id="setup-totp-btn" type="button" data-i18n="topbar.2fa.setupTotp">Setup Authenticator App</button>
+          <div id="totp-verify-area" hidden style="margin-top: 8px;">
+            <p class="setup-hint" data-i18n="topbar.2fa.totpSecret">Your secret code: <strong id="totp-secret-code" style="letter-spacing: 1px; color: var(--text-color);"></strong></p>
+            <form id="totp-verify-form" style="display: flex; gap: 8px; margin-top: 8px;">
+              <input class="auth-input" id="totp-verify-code" type="text" placeholder="6-digit code" autocomplete="off" inputmode="numeric" pattern="[0-9]*" style="flex: 1;" required>
+              <button class="button-primary" type="submit" data-i18n="topbar.2fa.verifyTotp">Verify</button>
+            </form>
+          </div>
+        </div>
+        <div id="totp-active-area" hidden>
+          <p class="setup-hint" style="color: var(--accent-color);" data-i18n="topbar.2fa.totpActive">Authenticator App is active.</p>
+          <button class="button-secondary" id="remove-totp-btn" type="button" data-i18n="topbar.2fa.removeTotp">Remove</button>
+        </div>
+
+        <div style="margin-top: 16px;">
+          <p class="field-label" data-i18n="topbar.2fa.passkeys">PASSKEYS</p>
+          <ul id="passkey-list" style="list-style: none; padding: 0; margin: 0 0 8px 0; font-size: 14px;"></ul>
+          <button class="button-secondary" id="add-passkey-btn" type="button" data-i18n="topbar.2fa.addPasskey">Add Passkey</button>
+        </div>
+      </div>
     </div>
   </section>
 

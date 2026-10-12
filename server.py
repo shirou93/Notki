@@ -23,7 +23,7 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.7'
+VERSION = '0.1.5.8'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -230,12 +230,25 @@ def initialize_database():
                 PRIMARY KEY (note_id, user_id)
             );
             CREATE INDEX IF NOT EXISTS note_shares_user_idx ON note_shares(user_id);
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS passkeys (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                public_key_pem TEXT NOT NULL,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
         ''')
         columns = {row['name'] for row in connection.execute('PRAGMA table_info(users)')}
         if 'avatar' not in columns:
             connection.execute('ALTER TABLE users ADD COLUMN avatar TEXT')
         if 'labels_json' not in columns:
             connection.execute("ALTER TABLE users ADD COLUMN labels_json TEXT NOT NULL DEFAULT '[]'")
+        if 'totp_secret' not in columns:
+            connection.execute("ALTER TABLE users ADD COLUMN totp_secret TEXT")
 
 
 def hash_password(password):
