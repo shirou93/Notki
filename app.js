@@ -143,7 +143,10 @@
 
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
-    elements.themeToggle.querySelector('span').textContent = theme === 'dark' ? '☀' : '☾';
+    if (elements.themeToggle) {
+      const span = elements.themeToggle.querySelector('span');
+      if (span) span.textContent = theme === 'dark' ? '☀' : '☾';
+    }
     window.notkiTheme.sync();
   }
 
@@ -536,22 +539,22 @@
     }
   });
 
-  $('#login-2fa-form').addEventListener('submit', async event => {
+  $('#login-2fa-form')?.addEventListener('submit', async event => {
     event.preventDefault();
     try {
       const { user } = await apiRequest('/api/login/2fa', {
         method: 'POST',
-        body: JSON.stringify({ tempToken: loginTempToken, totpCode: $('#login-totp').value }),
+        body: JSON.stringify({ tempToken: loginTempToken, totpCode: $('#login-totp')?.value || '' }),
       });
       await showApp(user);
     } catch (error) {
-      $('#login-totp').value = '';
+      if ($('#login-totp')) $('#login-totp').value = '';
       elements.authMessage.textContent = error.message;
       elements.authMessage.hidden = false;
     }
   });
 
-  $('#login-passkey-btn').addEventListener('click', async () => {
+  $('#login-passkey-btn')?.addEventListener('click', async () => {
     try {
       const assertion = await navigator.credentials.get({
         publicKey: {
@@ -2576,7 +2579,7 @@
 
   let currentTarballUrl = null;
 
-  document.querySelector('#check-update').addEventListener('click', async event => {
+  document.querySelector('#check-update')?.addEventListener('click', async event => {
     const button = event.currentTarget;
     const message = document.querySelector('#update-message');
     const resultDiv = document.querySelector('#update-result');
@@ -2627,7 +2630,7 @@
     window.location.reload();
   }
 
-  document.querySelector('#perform-update').addEventListener('click', async event => {
+  document.querySelector('#perform-update')?.addEventListener('click', async event => {
     const button = event.currentTarget;
     const message = document.querySelector('#update-message');
 
@@ -2654,7 +2657,7 @@
     }
   });
 
-  document.querySelector('#copy-invite').addEventListener('click', async event => {
+  document.querySelector('#copy-invite')?.addEventListener('click', async event => {
     const button = event.currentTarget;
     try {
       await navigator.clipboard.writeText(document.querySelector('#invite-url').value);
