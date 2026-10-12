@@ -281,11 +281,46 @@
     return svg;
   }
 
+  function createShieldOffIconSvg() {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '1em');
+    svg.setAttribute('height', '1em');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.7');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.innerHTML = '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M4.5 4.5l15 15"/>';
+    return svg;
+  }
+
+  async function resetUser2FA(userId, email) {
+    if (!confirm(t('admin.users.confirmReset2FA', { email }))) return;
+    try {
+      await apiRequest(`/api/admin/users/${userId}/2fa`, { method: 'DELETE' });
+      await refreshAdmin();
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
   function renderUsers(users) {
     const rows = users.map(user => {
       const row = document.createElement('tr');
       const actions = document.createElement('td');
       actions.className = 'admin-table-actions';
+      if (user.has2FA) {
+        const reset2faBtn = document.createElement('button');
+        reset2faBtn.type = 'button';
+        reset2faBtn.className = 'action-icon admin-reset-2fa-btn';
+        reset2faBtn.append(createShieldOffIconSvg());
+        reset2faBtn.title = t('admin.users.reset2FA');
+        reset2faBtn.setAttribute('aria-label', t('admin.users.reset2FA'));
+        reset2faBtn.addEventListener('click', () => resetUser2FA(user.id, user.email));
+        actions.append(reset2faBtn);
+      }
       if (user.role !== 'admin') {
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
@@ -301,6 +336,13 @@
       roleBadge.className = `admin-badge ${user.role === 'admin' ? 'admin-badge-role-admin' : 'admin-badge-role-user'}`;
       roleBadge.textContent = t(user.role === 'admin' ? 'admin.role.admin' : 'admin.role.user');
       roleCell.append(roleBadge);
+      if (user.has2FA) {
+        const badge2fa = document.createElement('span');
+        badge2fa.className = 'admin-badge admin-badge-status-pending';
+        badge2fa.textContent = '2FA';
+        badge2fa.style.marginLeft = '6px';
+        roleCell.append(badge2fa);
+      }
 
       row.append(
         tableCell(user.email),
@@ -547,6 +589,9 @@
 
   $('#login-passkey-btn')?.addEventListener('click', async () => {
     try {
+      if (!window.isSecureContext || !navigator?.credentials?.get) {
+        throw new Error(t('topbar.2fa.passkeyNotSupported'));
+      }
       const assertion = await navigator.credentials.get({
         publicKey: {
           challenge: new Uint8Array(32), // dummy challenge since server uses short-lived tokens and we verify against the token session
@@ -830,6 +875,9 @@
     try {
       const response = await apiRequest('/api/account/totp', { method: 'POST', body: '{}' });
       $('#totp-secret-code').textContent = response.secret;
+      if ($('#totp-qr-container') && response.qrSvg) {
+        $('#totp-qr-container').innerHTML = response.qrSvg;
+      }
       $('#totp-verify-area').hidden = false;
       $('#setup-totp-btn').hidden = true;
     } catch (error) {
@@ -861,6 +909,9 @@
 
   $('#add-passkey-btn').addEventListener('click', async () => {
     try {
+      if (!window.isSecureContext || !navigator?.credentials?.create) {
+        throw new Error(t('topbar.2fa.passkeyNotSupported'));
+      }
       const creation = await navigator.credentials.create({
         publicKey: {
           challenge: new Uint8Array(32),
