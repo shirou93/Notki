@@ -1,3 +1,8 @@
+## 2026-10-13 - Path Traversal in Backup Filename Regex
+**Vulnerability:** Loose backup filename regex `r'^notki-.*\.json$'` allowed `..` and `/` characters in filename parameters, enabling potential directory traversal attacks in admin backup file download, restore, and deletion endpoints.
+**Learning:** Overly broad regex patterns (`.*`) in file name validation permit directory traversal sequences (`/`, `..`).
+**Prevention:** Constrain filename regex validation strictly to safe characters (e.g., `[A-Za-z0-9_-]`) and enforce filesystem containment checks using `Path.resolve().is_relative_to(base_directory)`.
+
 ## 2026-10-12 - Centralized Security Response Headers in BaseHTTPRequestHandler
 **Vulnerability:** Lack of `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Content-Security-Policy` headers allowed potential Clickjacking and MIME-sniffing attacks.
 **Learning:** Custom HTTP handlers inheriting from `BaseHTTPRequestHandler` can apply defense-in-depth security headers across all responses by overriding `end_headers(self)`.
