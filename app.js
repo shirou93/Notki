@@ -54,6 +54,73 @@
   let shareNoteId = null;
   let shareReturnFocus = null;
 
+  function getTaskStatsFromElement(rootElement) {
+    if (!rootElement) return { total: 0, completed: 0, percent: 0 };
+    const checkboxes = [...rootElement.querySelectorAll('input[type="checkbox"]')];
+    const total = checkboxes.length;
+    if (!total) return { total: 0, completed: 0, percent: 0 };
+    const completed = checkboxes.filter(cb => cb.checked || cb.hasAttribute('checked')).length;
+    const percent = Math.round((completed / total) * 100);
+    return { total, completed, percent };
+  }
+
+  function getTaskStatsFromHtml(html) {
+    if (!html) return { total: 0, completed: 0, percent: 0 };
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    return getTaskStatsFromElement(temp);
+  }
+
+  function getTaskStats(note) {
+    if (!note || !note.body) return { total: 0, completed: 0, percent: 0 };
+    const html = note.bodyFormat === 1 ? sanitizeRichHtml(note.body) : plainTextToHtml(note.body);
+    return getTaskStatsFromHtml(html);
+  }
+
+  let dynamicIslandTimeout;
+  function showDynamicIslandProgress(completed, total, noteTitle) {
+    const hud = $('#dynamic-island-hud');
+    const titleEl = $('#dynamic-island-title');
+    const statusEl = $('#dynamic-island-status');
+    const fillEl = $('#dynamic-island-bar-fill');
+    if (!hud || !total) return;
+
+    const percent = Math.round((completed / total) * 100);
+    if (titleEl) titleEl.textContent = noteTitle ? String(noteTitle).trim().slice(0, 24) : t('editor.taskGroup');
+    if (statusEl) statusEl.textContent = `${completed} / ${total} (${percent}%)`;
+    if (fillEl) fillEl.style.width = `${percent}%`;
+
+    hud.hidden = false;
+    hud.offsetWidth; // force reflow
+    hud.classList.add('is-active', 'is-expanded');
+
+    window.clearTimeout(dynamicIslandTimeout);
+    dynamicIslandTimeout = window.setTimeout(() => {
+      hud.classList.remove('is-active', 'is-expanded');
+      window.setTimeout(() => {
+        if (!hud.classList.contains('is-active')) hud.hidden = true;
+      }, 350);
+    }, 2500);
+  }
+
+  function updateEditorProgress() {
+    const container = $('#editor-progress');
+    if (!container) return;
+    const stats = getTaskStatsFromElement(elements.noteBody);
+    if (stats.total === 0) {
+      container.hidden = true;
+      return;
+    }
+    container.hidden = false;
+    const textEl = $('#editor-progress-text');
+    const fillEl = $('#editor-progress-fill');
+    if (textEl) textEl.textContent = `${stats.completed}/${stats.total} (${stats.percent}%)`;
+    if (fillEl) {
+      fillEl.style.width = `${stats.percent}%`;
+      fillEl.classList.toggle('is-complete', stats.percent === 100);
+    }
+  }
+
   function cleanupAllTaskDrags() {
     $$('.task-drag-preview').forEach(preview => preview.remove());
     $$('.is-dragging-task').forEach(item => item.classList.remove('is-dragging-task'));
@@ -1195,6 +1262,10 @@
 
   function normalizeChecklistGroups(root = elements.noteBody) {
     normalizeChecklistItemMarkup(root);
+    root.querySelectorAll('input.task-checkbox').forEach(cb => {
+      if (cb.checked) cb.setAttribute('checked', '');
+      else cb.removeAttribute('checked');
+    });
     root.querySelectorAll('ul.task-list:not(.task-list-completed)').forEach(activeList => {
       const oldLabel = activeList.nextElementSibling?.matches('p.task-group-label') ? activeList.nextElementSibling : null;
       const oldCompletedList = oldLabel?.nextElementSibling?.matches('ul.task-list.task-list-completed')
@@ -1653,7 +1724,22 @@
     if (shared) card.classList.add('is-shared');
     if (readOnly) card.classList.add('is-read-only');
     $('.card-date', card).textContent = window.i18n.formatDate(note.updatedAt);
-    $('.card-title', card).textContent = note.title || t('editor.untitled');
+    const cardTitle = $('.card-title', card);
+    cardTitle.textContent = note.title || t('editor.untitled');
+
+    const taskStats = getTaskStats(note);
+    if (taskStats.total > 0) {
+      const progressEl = document.createElement('div');
+      progressEl.className = 'card-progress';
+      progressEl.innerHTML = `
+        <div class="card-progress-track">
+          <div class="card-progress-fill${taskStats.percent === 100 ? ' is-complete' : ''}" style="width: ${taskStats.percent}%"></div>
+        </div>
+        <span class="card-progress-text">${taskStats.completed}/${taskStats.total} (${taskStats.percent}%)</span>
+      `;
+      cardTitle.after(progressEl);
+    }
+
     const cardBody = $('.card-body', card);
     if (note.bodyFormat === 1 && note.body) {
       cardBody.innerHTML = sanitizeRichHtml(note.body);
@@ -1829,9 +1915,8 @@
           } else {
             persist();
           }
-          // Do not re-render immediately to avoid losing focus/layout jumps while clicking,
-          // except if we want the group to re-order instantly on the card.
-          // For now, re-render to reflect the completed state visually exactly.
+          const updatedStats = getTaskStats(note);
+          showDynamicIslandProgress(updatedStats.completed, updatedStats.total, note.title);
           render();
         }
       }
@@ -1862,6 +1947,7 @@
     editorRange = null;
     elements.noteBody.innerHTML = note.bodyFormat === 1 ? sanitizeRichHtml(note.body) : plainTextToHtml(note.body);
     normalizeChecklistGroups();
+    updateEditorProgress();
     $('#task-restore-suggestions').replaceChildren();
     $('#task-restore-suggestions').hidden = true;
     renderLabels(note.tags || []);
@@ -2261,6 +2347,9 @@
     if (event.target.matches('input[type="checkbox"]')) {
       normalizeChecklistGroups();
       $('#task-restore-suggestions').hidden = true;
+      updateEditorProgress();
+      const stats = getTaskStatsFromHtml(elements.noteBody.innerHTML);
+      showDynamicIslandProgress(stats.completed, stats.total, elements.noteTitle.value);
       scheduleSave();
     }
   });
@@ -2494,6 +2583,7 @@
     if (input === elements.noteBody) {
       normalizeChecklistItemMarkup();
       updateWordCount();
+      updateEditorProgress();
       updateCompletedTaskSuggestions(taskTextAtSelection());
     }
     scheduleSave();

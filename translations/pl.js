@@ -201,6 +201,7 @@ window.notkiTranslations.pl = {
   'editor.checklist': 'Dodaj checkbox',
   'editor.clearFormat': 'Wyczyść formatowanie',
   'editor.bodyPlaceholder': 'Zacznij pisać...',
+  'editor.progressLabel': 'POSTĘP ZADAŃ',
   'editor.tags': 'ETYKIETY',
   'editor.tagsPlaceholder': 'np. praca, pomysły',
   'editor.color': 'KOLOR NOTATKI',
