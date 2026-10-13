@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.42'
+VERSION = '0.1.5.43'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -37,7 +37,7 @@ INVITE_DAYS = 7
 PASSWORD_ITERATIONS = 310_000
 MAX_REQUEST_BYTES = 3 * 1024 * 1024
 MAX_SNAPSHOT_BYTES = 100 * 1024 * 1024
-BACKUP_FILENAME_PATTERN = re.compile(r'^notki-.*\.json$')
+BACKUP_FILENAME_PATTERN = re.compile(r'^notki-[A-Za-z0-9_-]+\.json$')
 NOTE_COLORS = {'default', 'mint', 'lemon', 'peach', 'lilac', 'sky'}
 AVATAR_PATTERN = re.compile(r'^data:image/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$')
 MAX_AVATAR_CHARS = 2_900_000
@@ -908,8 +908,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def find_server_backup(self, filename):
         if not BACKUP_FILENAME_PATTERN.fullmatch(filename):
             raise APIError('Nie znaleziono backupu.', 404)
-        path = backup_directory() / filename
-        if path.is_symlink() or not path.is_file():
+        backup_dir = backup_directory().resolve()
+        path = (backup_dir / filename).resolve()
+        if not path.is_relative_to(backup_dir) or path.is_symlink() or not path.is_file():
             raise APIError('Nie znaleziono backupu.', 404)
         return path
 
