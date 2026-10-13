@@ -513,7 +513,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.57', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.57'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.58', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.58'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -537,7 +537,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.57'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.58'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
@@ -853,6 +853,21 @@ class ServerFlowTests(unittest.TestCase):
             set_cookie = response.headers.get('Set-Cookie', '')
             self.assertIn('Secure', set_cookie)
             self.assertIn('SameSite=Strict', set_cookie)
+
+        # Test alternative HTTPS proxy headers (X-Forwarded-Ssl, multi-proxy X-Forwarded-Proto)
+        status, invite = self.request(
+            self.admin, 'POST', '/api/admin/invites', {},
+            headers={'X-Forwarded-Host': 'notki.local', 'X-Forwarded-Ssl': 'on'}
+        )
+        self.assertEqual(status, 201)
+        self.assertTrue(invite['url'].startswith('https://notki.local/?invite='))
+
+        status, invite = self.request(
+            self.admin, 'POST', '/api/admin/invites', {},
+            headers={'X-Forwarded-Host': 'notki.multi.proxy', 'X-Forwarded-Proto': 'https, http'}
+        )
+        self.assertEqual(status, 201)
+        self.assertTrue(invite['url'].startswith('https://notki.multi.proxy/?invite='))
 
 
 class FirstRunSetupTests(unittest.TestCase):
