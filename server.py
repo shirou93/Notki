@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.57'
+VERSION = '0.1.5.58'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -498,17 +498,39 @@ class NotkiHandler(BaseHTTPRequestHandler):
         return self.headers.get('Host')
 
     def get_forwarded_proto(self):
-        forwarded = self.headers.get('X-Forwarded-Proto')
-        if forwarded:
-            return forwarded.split(',')[0].strip().lower()
-        return ''
+        proto = self.headers.get('X-Forwarded-Proto')
+        if not proto:
+            proto = self.headers.get('X-Forwarded-Scheme') or self.headers.get('X-Url-Scheme')
+        if not proto:
+            front_end = self.headers.get('Front-End-Https') or self.headers.get('X-Forwarded-Ssl')
+            if front_end and front_end.lower() in ('on', '1', 'true'):
+                return 'https'
+        if proto:
+            first_proto = proto.split(',')[0].strip().lower()
+            if first_proto in ('https', 'http'):
+                return first_proto
+        return 'http' if self.headers.get('Host') else ''
 
     def check_origin(self):
         origin = self.headers.get('Origin')
         if origin:
             expected_host = self.get_forwarded_host()
-            if expected_host and urlsplit(origin).netloc.lower() != expected_host.lower():
-                raise APIError('Żądanie z innej domeny zostało zablokowane.', 403)
+            if expected_host:
+                origin_parsed = urlsplit(origin)
+                origin_hostname = (origin_parsed.hostname or '').lower()
+
+                expected_parsed = urlsplit(f"//{expected_host}")
+                expected_hostname = (expected_parsed.hostname or '').lower()
+
+                if origin_hostname != expected_hostname:
+                    raise APIError('Żądanie z innej domeny zostało zablokowane.', 403)
+
+                if expected_parsed.port is not None:
+                    origin_port = origin_parsed.port
+                    if origin_port is None:
+                        origin_port = 443 if origin_parsed.scheme == 'https' else (80 if origin_parsed.scheme == 'http' else None)
+                    if origin_port != expected_parsed.port:
+                        raise APIError('Żądanie z innej domeny zostało zablokowane.', 403)
 
     def has_admin(self):
         with database() as connection:
@@ -1039,14 +1061,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def perform_update(self, payload):
         self.require_user(admin=True)
         tarball_url = payload.get('tarballUrl')
-        if not tarball_url:
-            raise APIError('Brak adresu tarball w odpowiedzi.', 400)
-        if not tarball_url.startswith('https://api.github.com/repos/shirou93/Notki/tarball/'):
-            raise APIError('Nieprawidłowy URL aktualizacji.', 400)
-
-
-        # Verify it's a valid Github API tarball URL for the project
-        if not tarball_url.startswith('https://api.github.com/repos/shirou93/Notki/tarball/'):
+        if not tarball_url or not tarball_url.startswith('https://api.github.com/repos/shirou93/Notki/tarball/'):
             raise APIError('Nieprawidłowy adres pobierania.', 400)
 
         req = urllib.request.Request(tarball_url)
@@ -1085,9 +1100,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     parts = member.name.split('/', 1)
                     if len(parts) > 1:
                         member.name = parts[1]
+                        if not member.name or member.name.startswith('/') or '..' in member.name:
+                            continue
                         target_path = (ROOT / member.name).resolve()
                         if target_path.is_relative_to(ROOT):
-                            archive.extract(member, path=ROOT)
+                            if hasattr(tarfile, 'data_filter'):
+                                archive.extract(member, path=ROOT, filter='data')
+                            else:
+                                archive.extract(member, path=ROOT)
         except APIError:
             raise
         except Exception:

@@ -91,12 +91,10 @@ In the Admin Panel under **Full Server Backups**, you can generate full server b
 | `NOTKI_PORT` / `NOTKI_HTTP_PORT` | HTTP server port | `8000` |
 | `NOTKI_DB_PATH` | Path to the SQLite database file | `./data/notki.sqlite3` |
 | `NOTKI_BACKUP_DIR` | Path to the directory for JSON backups | `./data/backups` |
-| `NOTKI_COOKIE_SECURE` | Set `Secure` flag on cookies (requires HTTPS via reverse proxy) | `0` |
-| `NOTKI_PUBLIC_HTTPS` | Generate invitation links with `https://` prefix | `0` |
 | `NOTKI_ALLOW_REMOTE_SETUP` | Allow initial setup from non-localhost IP addresses | `0` (`1` in Docker) |
 
-> **Note on Reverse Proxies & HTTPS (Cloudflare, Nginx, Caddy):**
-> Notki runs as a plain HTTP server and does not terminate SSL/TLS directly. HTTPS must be terminated by a reverse proxy or Cloudflare (e.g., Cloudflare SSL/TLS set to **Flexible** mode or Cloudflare Tunnel pointing to `http://`). When running behind an HTTPS reverse proxy, set `NOTKI_COOKIE_SECURE=1` and `NOTKI_PUBLIC_HTTPS=1`.
+> **Reverse Proxies & HTTPS (Cloudflare, Nginx, Caddy, Traefik, NPM):**
+> Notki runs natively as an HTTP server and automatically detects HTTPS requests forwarding headers (`X-Forwarded-Proto`, `X-Forwarded-Host`) from your reverse proxy or Cloudflare Tunnel. No extra HTTPS configuration is required.
 
 ---
 
