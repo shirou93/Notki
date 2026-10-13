@@ -2185,7 +2185,6 @@
         }
         const cardDate = $('.card-date', card);
         if (cardDate) cardDate.textContent = window.i18n.formatDate(note.updatedAt);
-        const cardBody = $('.card-body', card);
         if (cardBody) {
           if (note.bodyFormat === 1 && note.body) {
             cardBody.innerHTML = sanitizeRichHtml(note.body);
