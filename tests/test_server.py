@@ -513,7 +513,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.56', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.56'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.57', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.57'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -537,7 +537,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.56'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.57'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
