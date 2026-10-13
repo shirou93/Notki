@@ -95,7 +95,7 @@
           </div>
         </details>
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.31</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.32</span>
       </div>
     </aside>
 
@@ -172,7 +172,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.31</strong></p>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.32</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" class="admin-update-box" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
@@ -185,11 +185,11 @@
         <div><h2 data-i18n="admin.backups.title">Server-wide backups</h2><p data-i18n="admin.backups.description">Archives contain accounts, notes, and invitations. Sessions are not saved.</p></div>
       </header>
       <form id="backup-form" class="backup-form-wrap">
-        <button class="button-primary" id="create-backup" type="submit" data-i18n="admin.backups.create">+ Create .tgz backup</button>
+        <button class="button-primary" id="create-backup" type="submit" data-i18n="admin.backups.create">+ Create backup (.json)</button>
       </form>
       <div id="backup-restore-file-wrap" class="backup-form-wrap" style="margin-top: 12px;">
-        <input class="auth-input" id="restore-file-input" type="file" accept=".tgz,application/gzip,application/x-gzip" style="height: auto; min-height: 42px; padding: 8px; font-size: 11px; text-align: left; text-align-last: left;">
-        <button class="button-secondary" id="restore-file-btn" type="button" data-i18n="admin.backups.restoreFromFile">Restore from .tgz file</button>
+        <input class="auth-input" id="restore-file-input" type="file" accept=".json,.tgz,application/json,application/gzip" style="height: auto; min-height: 42px; padding: 8px; font-size: 11px; text-align: left; text-align-last: left;">
+        <button class="button-secondary" id="restore-file-btn" type="button" data-i18n="admin.backups.restoreFromFile">Restore from file (.json)</button>
       </div>
       <p class="admin-message" id="backup-message" role="status" hidden></p>
       <div class="admin-table-wrap">
@@ -214,7 +214,7 @@
 
     <section class="admin-section">
       <header class="admin-section-header">
-        <div><h2 data-i18n="admin.invites.title">Invitations</h2><p data-i18n="admin.invites.description">A registration link works once and expires after seven days.</p></div>
+        <div><h2 data-i18n="admin.invites.title">Invitations</h2><p data-i18n="admin.invites.description">A registration link works once. You can specify the number of validity days.</p></div>
         <div class="admin-invite-controls">
           <input type="number" id="invite-days" value="7" min="1" max="365" class="auth-input invite-days-input" aria-label="Days valid" title="Days valid">
           <button class="button-primary" id="create-invite" type="button" data-i18n="admin.invites.create">+ Create invitation</button>

@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.31'
+VERSION = '0.1.5.32'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -37,7 +37,7 @@ INVITE_DAYS = 7
 PASSWORD_ITERATIONS = 310_000
 MAX_REQUEST_BYTES = 3 * 1024 * 1024
 MAX_SNAPSHOT_BYTES = 100 * 1024 * 1024
-BACKUP_FILENAME_PATTERN = re.compile(r'^notki-server-\d{8}-\d{6}Z-[a-f0-9]{8}\.tgz$')
+BACKUP_FILENAME_PATTERN = re.compile(r'^notki-.*\.json$')
 NOTE_COLORS = {'default', 'mint', 'lemon', 'peach', 'lilac', 'sky'}
 AVATAR_PATTERN = re.compile(r'^data:image/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$')
 MAX_AVATAR_CHARS = 2_900_000
@@ -71,7 +71,7 @@ ENGLISH_MESSAGES = {
     'Nieprawidłowy rozmiar żądania.': 'Invalid request size.',
     'Żądanie jest zbyt duże.': 'The request is too large.',
     'Oczekiwano danych JSON.': 'JSON data was expected.',
-    'Oczekiwano archiwum .tgz.': 'A .tgz archive was expected.',
+    'Oczekiwano archiwum .tgz lub .json.': 'A .tgz or .json archive was expected.',
     'Nieprawidłowy format JSON.': 'Invalid JSON format.',
     'Nieprawidłowe dane żądania.': 'Invalid request data.',
     'Żądanie z innej domeny zostało zablokowane.': 'A cross-origin request was blocked.',
@@ -667,13 +667,13 @@ class NotkiHandler(BaseHTTPRequestHandler):
             if len(archive_bytes) > MAX_SNAPSHOT_BYTES:
                 raise APIError('Plik backupu przekracza limit rozmiaru.', 413)
             return archive_bytes
-        elif ctype in ('application/gzip', 'application/x-gzip', 'application/octet-stream', 'application/x-tgz', ''):
+        elif ctype in ('application/json', 'application/gzip', 'application/x-gzip', 'application/octet-stream', 'application/x-tgz', 'text/plain', ''):
             archive_bytes = self.read_body(MAX_SNAPSHOT_BYTES)
             if not archive_bytes:
                 raise APIError('Brak archiwum w żądaniu.', 400)
             return archive_bytes
         else:
-            raise APIError('Oczekiwano archiwum .tgz lub multipart/form-data.', 415)
+            raise APIError('Oczekiwano pliku .json, .tgz lub multipart/form-data.', 415)
 
     def do_POST(self):
         try:
@@ -859,22 +859,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def create_server_backup(self, payload=None):
         self.require_user(admin=True)
         created_at = utc_now()
-        snapshot_bytes = json.dumps(self.build_snapshot(), ensure_ascii=False, separators=(',', ':')).encode('utf-8')
-        if len(snapshot_bytes) > MAX_SNAPSHOT_BYTES:
+        snapshot = self.build_snapshot()
+        backup_bytes = json.dumps(snapshot, ensure_ascii=False, indent=2).encode('utf-8')
+        if len(backup_bytes) > MAX_SNAPSHOT_BYTES:
             raise APIError('Snapshot przekracza limit 100 MB.', 413)
-        archive_buffer = io.BytesIO()
-        with tarfile.open(fileobj=archive_buffer, mode='w:gz') as archive:
-            member = tarfile.TarInfo('snapshot.json')
-            member.size = len(snapshot_bytes)
-            member.mtime = int(created_at.timestamp())
-            member.mode = 0o600
-            archive.addfile(member, io.BytesIO(snapshot_bytes))
-
-        backup_bytes = archive_buffer.getvalue()
 
         backup_dir = backup_directory()
         backup_dir.mkdir(parents=True, exist_ok=True)
-        filename = f"notki-server-{created_at.strftime('%Y%m%d-%H%M%SZ')}-{secrets.token_hex(4)}.tgz"
+        filename = f"notki-backup-{created_at.strftime('%Y%m%d-%H%M%SZ')}-{secrets.token_hex(4)}.json"
         backup_path = backup_dir / filename
         temporary_path = backup_dir / f'.{secrets.token_hex(16)}.tmp'
         try:
@@ -927,7 +919,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         except OSError as error:
             raise APIError('Nie można odczytać archiwum backupu.', 500) from error
         self.send_response(200)
-        self.send_header('Content-Type', 'application/gzip')
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', str(len(data)))
         self.send_header('Content-Disposition', f'attachment; filename="{path.name}"')
         self.send_header('Cache-Control', 'no-store')
@@ -976,8 +968,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def upload_restore_server_backup(self):
         self.require_user(admin=True)
-        archive_bytes = self.read_archive_from_request()
-        snapshot = self.snapshot_from_archive(archive_bytes)
+        raw_bytes = self.read_archive_from_request()
+        snapshot = self.snapshot_from_bytes(raw_bytes)
         self.restore_snapshot(snapshot, replace_existing=True)
 
     def restore_server_backup(self, filename, payload=None):
@@ -986,8 +978,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
         if path.stat().st_size > MAX_SNAPSHOT_BYTES:
             raise APIError('Plik backupu przekracza limit rozmiaru.', 413)
         try:
-            archive_bytes = path.read_bytes()
-            snapshot = self.snapshot_from_archive(archive_bytes)
+            raw_bytes = path.read_bytes()
+            snapshot = self.snapshot_from_bytes(raw_bytes)
         except OSError as error:
             raise APIError('Nie można odczytać archiwum backupu.') from error
         self.restore_snapshot(snapshot, replace_existing=True)
@@ -1080,30 +1072,30 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def import_snapshot_archive(self, archive_bytes):
         if not self.is_local_setup_request():
             raise APIError('Import snapshotu jest dostępny tylko lokalnie.', 403)
-        self.restore_snapshot(self.snapshot_from_archive(archive_bytes), replace_existing=False)
+        self.restore_snapshot(self.snapshot_from_bytes(archive_bytes), replace_existing=False)
 
     @staticmethod
-    def snapshot_from_archive(archive_bytes):
+    def snapshot_from_bytes(raw_bytes):
+        if len(raw_bytes) > MAX_SNAPSHOT_BYTES:
+            raise APIError('Snapshot przekracza limit 100 MB.', 413)
         try:
-            with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode='r:gz') as archive:
-                members = archive.getmembers()
-                valid_members = [
-                    m for m in members
-                    if m.isfile() and Path(m.name).name == 'snapshot.json' and not Path(m.name).name.startswith('._')
-                ]
-                if len(valid_members) != 1:
-                    raise APIError('Archiwum backupu ma nieprawidłową zawartość.')
-                snapshot_member = valid_members[0]
-                if snapshot_member.size > MAX_SNAPSHOT_BYTES:
-                    raise APIError('Snapshot przekracza limit 100 MB.', 413)
-                snapshot_file = archive.extractfile(snapshot_member)
-                if snapshot_file is None:
-                    raise APIError('Nie można odczytać snapshotu z archiwum.')
-                return json.loads(snapshot_file.read(MAX_SNAPSHOT_BYTES + 1).decode('utf-8'))
-        except APIError:
-            raise
-        except (OSError, tarfile.TarError, json.JSONDecodeError, UnicodeDecodeError) as error:
-            raise APIError('Nie można odczytać archiwum backupu.') from error
+            return json.loads(raw_bytes.decode('utf-8'))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            try:
+                with tarfile.open(fileobj=io.BytesIO(raw_bytes), mode='r:*') as archive:
+                    members = archive.getmembers()
+                    valid_members = [
+                        m for m in members
+                        if m.isfile() and Path(m.name).name == 'snapshot.json' and not Path(m.name).name.startswith('._')
+                    ]
+                    if len(valid_members) == 1:
+                        snapshot_member = valid_members[0]
+                        snapshot_file = archive.extractfile(snapshot_member)
+                        if snapshot_file:
+                            return json.loads(snapshot_file.read(MAX_SNAPSHOT_BYTES + 1).decode('utf-8'))
+            except Exception:
+                pass
+            raise APIError('Nie można odczytać archiwum backupu.')
 
     def import_snapshot(self, payload):
         if not self.is_local_setup_request():
