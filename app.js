@@ -24,7 +24,7 @@
     avatarPreview: $('#profile-avatar-preview'), avatarInput: $('#avatar-input'), avatarMessage: $('#avatar-message'),
     sidebarAvatar: $('#sidebar-avatar'), sidebarUserEmail: $('#sidebar-user-email'), sidebarProfileButton: $('#sidebar-profile-button'),
     sidebar: $('#sidebar'), sidebarBackdrop: $('#sidebar-backdrop'), hamburgerToggle: $('#hamburger-toggle'),
-    topbarSyncBtn: $('#topbar-sync-button'), sidebarSyncBtn: $('#sidebar-sync-button'),
+    topbarSyncBtn: $('#topbar-sync-button'),
     sharedCount: $('#count-shared'), sharePanel: $('#share-panel'), shareBackdrop: $('#share-backdrop'),
     shareForm: $('#share-form'), shareEmail: $('#share-email'), sharePermission: $('#share-permission'),
     shareMessage: $('#share-message'), shareList: $('#share-list'), shareEmpty: $('#share-empty'),
@@ -117,15 +117,10 @@
 
     const showSync = isOffline;
     const topbarSync = elements.topbarSyncBtn || $('#topbar-sync-button');
-    const sidebarSync = elements.sidebarSyncBtn || $('#sidebar-sync-button');
 
     if (topbarSync) {
       topbarSync.hidden = !showSync;
       topbarSync.disabled = isSyncing;
-    }
-    if (sidebarSync) {
-      sidebarSync.hidden = !showSync;
-      sidebarSync.disabled = isSyncing;
     }
 
     if (isSyncing) {
@@ -2911,7 +2906,6 @@
 
   const handleManualSync = () => syncPendingChanges(true);
   elements.topbarSyncBtn?.addEventListener('click', handleManualSync);
-  elements.sidebarSyncBtn?.addEventListener('click', handleManualSync);
 
   elements.hamburgerToggle?.addEventListener('click', toggleSidebar);
   elements.sidebarBackdrop?.addEventListener('click', closeSidebar);
