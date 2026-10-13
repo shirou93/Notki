@@ -115,7 +115,7 @@
     const dot = container.querySelector('.storage-dot');
     const label = container.querySelector('span:not(.storage-dot)');
 
-    const showSync = isOffline || (currentUser && (hasPendingSync(currentUser.id) || pendingSync));
+    const showSync = isOffline;
     const topbarSync = elements.topbarSyncBtn || $('#topbar-sync-button');
     const sidebarSync = elements.sidebarSyncBtn || $('#sidebar-sync-button');
 
