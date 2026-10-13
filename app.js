@@ -2606,8 +2606,10 @@
   document.querySelector('#create-invite')?.addEventListener('click', async () => {
     const message = document.querySelector('#invite-message');
     message.hidden = true;
+    const daysInput = document.querySelector('#invite-days');
+    const days = daysInput ? parseInt(daysInput.value, 10) || 7 : 7;
     try {
-      const invite = await apiRequest('/api/admin/invites', { method: 'POST', body: '{}' });
+      const invite = await apiRequest('/api/admin/invites', { method: 'POST', body: JSON.stringify({ days }) });
       document.querySelector('#invite-url').value = invite.url;
       document.querySelector('#invite-expiry').textContent = t('admin.invites.expiry', { date: window.i18n.formatDateTime(invite.expiresAt) });
       document.querySelector('#invite-result').hidden = false;

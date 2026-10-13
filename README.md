@@ -1,128 +1,100 @@
 # Notki
 
-Private notes app with per-user SQLite storage, invitation-only registration, and an administrator dashboard.
+Szybki, lekki i prywatny notatnik w przeglądarce stworzony w czystym Pythonie (Python 3.9+) bez jakichkolwiek zewnętrznych zależności z pypiego.
 
-## Desktop
+![Widok główny notatek](docs/desktop_notes.png)
 
-![Desktop Notes](docs/desktop_notes.png)
-![Desktop Admin](docs/desktop_admin.png)
+---
 
-## Mobile
+## 🚀 Główne funkcje
 
-![Mobile Notes](docs/mobile_notes.png)
-![Mobile Admin](docs/mobile_admin.png)
+- 📝 **Tworzenie i edycja notatek**: Formatowanie tekstu, listy punktowane, numerowane oraz interaktywne checklisty (zadania).
+- 📌 **Organizacja**: Przypinanie ważnych notatek, archiwizacja, etykiety oraz kolory dla łatwej kategoryzacji.
+- 🤝 **Udostępnianie**: Bezpieczne udostępnianie notatek innym użytkownikom serwera z uprawnieniami do odczytu lub edycji.
+- 🔐 **Bezpieczeństwo**:
+  - Dwuetapowa weryfikacja 2FA (Aplikacje TOTP oraz Klucze zabezpieczeń Passkeys / WebAuthn).
+  - Wymuszanie 2FA dla wszystkich użytkowników przez administratora.
+- 💾 **Kopie zapasowe JSON**: Tworzenie, pobieranie, przywracanie i import pełnych kopii zapasowych w formacie `.json`.
+- ⚙️ **Panel administracyjny**: Zarządzanie użytkownikami, zaproszeniami (z możliwością określenia liczby dni ważności linku), statystykami serwera oraz automatycznymi aktualizacjami z GitHub.
+- 🎨 **Motywy i Języki**: Obsługa motywu jasnego, ciemnego i systemowego oraz obsługa języka polskiego i angielskiego.
 
-## Features
+---
 
-- Notes with rich text, tags, colors, pinning, archive, and trash
-- Per-user SQLite storage on your own server
-- Docker Compose setup that runs the stock Alpine image with a persistent data volume
-- Invitation-only registration — each link works once and expires after 7 days
-- Admin panel with server statistics, user list, and invitations
-- Security hardening with HTTP response headers (`X-Frame-Options`, `Content-Security-Policy`, `X-Content-Type-Options`, `Referrer-Policy`)
-- Server-wide `.tgz` backups: create, download, restore, delete
-- Polish and English interface, light and dark theme
-- Profile panel for changing the language, avatar, and password
-- Note sharing between accounts with read-only or edit permission
+## 📱 Zrzuty ekranu
 
-## Run with Docker (Recommended)
+| Widok | Desktop | Mobile |
+|---|---|---|
+| **Notatki** | ![Desktop Notatki](docs/desktop_notes.png) | ![Mobile Notatki](docs/mobile_notes.png) |
+| **Panel Administratora** | ![Desktop Admin](docs/desktop_admin.png) | ![Mobile Admin](docs/mobile_admin.png) |
 
-The easiest and recommended way to run Notki is using Docker Compose. The compose file uses the stock `alpine` image directly — nothing is built. On start, the container installs `python3` with `apk` and runs the server, so the image itself is never modified.
+---
 
-```sh
-docker compose up -d
+## 🛠️ Zalecana instalacja (Docker Compose)
+
+Najprostszym i zalecanym sposobem uruchomienia Notek jest **Docker Compose**.
+
+1. Utwórz katalog i pobierz plik `docker-compose.yml`:
+   ```bash
+   mkdir notki && cd notki
+   curl -O https://raw.githubusercontent.com/shirou93/Notki/main/docker-compose.yml
+   ```
+
+2. Uruchom kontener:
+   ```bash
+   docker compose up -d
+   ```
+
+3. Otwórz przeglądarkę pod adresem: `http://localhost:8000/setup` i utwórz pierwsze konto administratora.
+
+---
+
+## 💻 Alternatywne metody instalacji
+
+### 1. Uruchomienie bezpośrednie (Python 3.9+)
+
+Aplikacja wykorzystuje wyłącznie bibliotekę standardową Pythona, dzięki czemu nie wymaga instalowania zewnętrznych pakietów pip.
+
+```bash
+git clone https://github.com/shirou93/Notki.git
+cd Notki
+python3 server.py
 ```
+Otwórz przeglądarkę pod adresem: `http://localhost:8000`
 
-Notki will be available at <http://127.0.0.1:8000>. Because the database starts empty, the first visit redirects to `/setup` to create the administrator account.
+### 2. Instalacja bare-metal (Linux Systemd)
 
-The application code is bind-mounted from the current directory, and the database and backup archives live in the `notki-data` named volume:
+Na serwerze Linux (Debian, Ubuntu, Arch, Fedora, Alpine) możesz skorzystać z gotowego skryptu instalacyjnego:
 
+```bash
+sudo ./install.sh
 ```
-/app/data/notki.sqlite3
-/app/data/backups/*.tgz
-```
+Skrypt utworzy użytkownika systemowego `notki`, zainstaluje aplikację w `/opt/notki` oraz skonfiguruje i uruchomi usługę Systemd.
 
-The volume survives `docker compose down` and restarts. To wipe everything and start over, remove it explicitly:
+---
 
-```sh
-docker compose down -v
-```
+## 🛡️ Kopie zapasowe (JSON)
 
-### Environment Variables for Docker Compose
+W panelu administracyjnym w sekcji **Backupy całego serwera** możesz wygenerować pełną kopię zapasową serwera.
+- Kopia zawiera konta, notatki, etykiety, zaproszenia i ustawienia.
+- Pliki zapisywane są w formacie `.json` pod nazwą zawierającą datę i czas utworzenia backupu (np. `notki-backup-20261013-120000Z-a1b2c3d4.json`).
+- Kopię zapasową można w dowolnym momencie pobrać, przywrócić z listy serwera, wgrać z pliku na dysku lub zaimportować podczas pierwszej konfiguracji na nowym serwerze.
 
-You can configure Notki by setting these environment variables before starting the container:
+---
 
-- `NOTKI_HTTP_PORT`: Host port to publish to (default: `8000`). Example: `NOTKI_HTTP_PORT=9000 docker compose up -d`.
-- `NOTKI_COOKIE_SECURE`: Set to `1` to mark session cookies as Secure when served through HTTPS. (default: `0`).
-- `NOTKI_PUBLIC_HTTPS`: Set to `1` to generate HTTPS invitation URLs when TLS terminates in a reverse proxy. (default: `0`).
-- `NOTKI_ALLOW_REMOTE_SETUP`: Set to `1` to permit the initial admin setup from a remote host. By default it's `1` in docker-compose.
-- `NOTKI_HOST`: internal bind address (default: `0.0.0.0` in Docker).
-- `NOTKI_PORT`: internal HTTP port (default: `8000` in Docker).
-- `NOTKI_DB_PATH`: SQLite database path inside container.
-- `NOTKI_BACKUP_DIR`: directory for backup archives inside container.
+## ⚙️ Zmienne środowiskowe
 
-## Install on Linux
+| Zmienna | Opis | Domyślna wartość |
+|---|---|---|
+| `NOTKI_HOST` | Adres IP, na którym nasłuchuje serwer | `127.0.0.1` (`0.0.0.0` w Dockerze) |
+| `NOTKI_PORT` / `NOTKI_HTTP_PORT` | Port serwera HTTP | `8000` |
+| `NOTKI_DB_PATH` | Ścieżka do bazy danych SQLite | `./data/notki.sqlite3` |
+| `NOTKI_BACKUP_DIR` | Ścieżka do katalogu z backupami JSON | `./data/backups` |
+| `NOTKI_COOKIE_SECURE` | Ustawienie flagi `Secure` dla ciasteczek (wymagane HTTPS) | `0` |
+| `NOTKI_PUBLIC_HTTPS` | Generowanie linków zaproszeń z przedrostkiem `https://` | `0` |
+| `NOTKI_ALLOW_REMOTE_SETUP` | Zezwolenie na pierwszą konfigurację z obcych adresów IP | `0` (`1` w Dockerze) |
 
-You can quickly install and run Notki directly on Linux using the provided installation script. It clones the repository and sets up a systemd service.
+---
 
-```sh
-curl -sSL https://raw.githubusercontent.com/shirou93/Notki/main/install.sh | sudo bash
-```
+## 📜 Licencja
 
-The script will:
-1. Install Python 3 if not present.
-2. Clone the Notki repository to `/opt/notki`.
-3. Create a dedicated `notki` system user.
-4. Set up a systemd service (`notki.service`) listening locally on port 8000.
-5. Enable and start the service automatically.
-
-## Run locally
-
-Requires Python 3.9 or newer. The server uses only Python's standard library.
-
-```powershell
-python server.py
-```
-
-On a fresh database, open the local address printed by the server. Notki opens the first-run administrator form, which is available only from the local machine and can be used once. The password must be at least 12 characters long.
-
-After setup, sign in and choose **Admin panel** to create registration links. The SQLite database lives at `data/notki.sqlite3`.
-
-The first administrator can also be created from a terminal:
-
-```powershell
-python server.py --create-admin
-```
-
-## Admin panel
-
-From **Server backups** you can create timestamped `.tgz` archives stored in `data/backups`. Each archive contains all accounts, password hashes, notes, and invitations; active sessions are excluded. Keep backups private because they contain password hashes. Restoring replaces the current server data and logs everyone out.
-
-On a fresh server you can import a `.tgz` backup on the first-run setup page instead of creating an administrator.
-
-## Profile
-
-Clicking the avatar in the top-right corner opens a menu with **Profile**, **Admin panel** (administrators only), and **Sign out**. The profile panel lets you upload a custom avatar, change the interface language, and change the account password. Avatars accept PNG, JPEG, WebP, or GIF images up to 2 MB and are stored with your account, so they are included in server backups. Changing the password requires the current password, must be at least 12 characters long, and signs out every other session while keeping the current one active.
-
-## Sharing notes
-
-The share button on a note card (or in the editor) opens a panel where you enter the e-mail address of another account on the same server and pick a permission:
-
-- **Read only** — the recipient can open the note and read it, but the editor is locked: the title, body, tags, and color are not editable, and the formatting toolbar is hidden.
-- **Can edit** — the recipient can change the note's title, body, tags, and color. The change is written to the owner's note, so the owner sees it immediately.
-
-Recipients find shared notes under **Shared with me** in the sidebar, each card labelled with the owner and the granted permission. Only the owner can pin, archive, delete, reorder, or re-share a note; recipients never get those controls. Sharing is limited to accounts that already exist on the server, and the recipient picker only suggests addresses — you can always type one manually. Revoking access removes the note from the recipient's list immediately. Shares are included in server backups.
-
-## Languages and themes
-
-The interface is available in Polish and English. Each dictionary lives in its own file in the `translations/` folder (`translations/en.js`, `translations/pl.js`), which registers itself on `window.notkiTranslations`; `i18n.js` holds only the lookup, pluralisation, date/number formatting, and DOM-translation logic. New strings belong in those dictionaries, not in `i18n.js`.
-
-The initial language follows the browser's `Accept-Language` header and falls back to English; the choice is stored in `localStorage` under `notki.lang.v1`. Server-side messages are translated from the same header, so API errors arrive in the selected language.
-
-All pages share `theme.js`. The theme follows the operating system setting until the toggle is used; the explicit choice is stored in `localStorage` under `notki.theme.v1`.
-
-## Tests
-
-```powershell
-python -m unittest discover -s tests
-```
+Projekt oparty na licencji open-source.

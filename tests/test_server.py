@@ -230,15 +230,15 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
         self.assertEqual(status, 201)
-        self.assertRegex(backup['filename'], r'^notki-server-\d{8}-\d{6}Z-[a-f0-9]{8}\.tgz$')
+        self.assertRegex(backup['filename'], r'^notki-backup-\d{8}-\d{6}Z-[a-f0-9]{8}\.json$')
         status, backups = self.request(self.admin, 'GET', '/api/admin/backups')
         self.assertEqual(status, 200)
         self.assertEqual(backups['backups'][0]['filename'], backup['filename'])
         request = Request(self.base_url + f"/api/admin/backups/{backup['filename']}")
         with self.admin.open(request) as response:
             archive = response.read()
-            self.assertEqual(response.headers.get_content_type(), 'application/gzip')
-        self.assertTrue(archive.startswith(b'\x1f\x8b'))
+            self.assertTrue('application/json' in response.headers.get_content_type())
+        self.assertTrue(archive.startswith(b'{'))
         status, result = self.request(user_client, 'GET', '/api/notes')
         self.assertEqual(status, 200)
         self.assertEqual(result['notes'][0]['title'], 'Pierwsza')
@@ -469,7 +469,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.31', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.31'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.32', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.32'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -493,7 +493,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.31'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.32'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
@@ -549,14 +549,9 @@ class ServerFlowTests(unittest.TestCase):
             }], 'invites': [], 'shares': [],
         }
         snapshot_bytes = json.dumps(snapshot).encode('utf-8')
-        archive_buf = io.BytesIO()
-        with tarfile.open(fileobj=archive_buf, mode='w:gz') as archive:
-            member = tarfile.TarInfo('snapshot.json')
-            member.size = len(snapshot_bytes)
-            archive.addfile(member, io.BytesIO(snapshot_bytes))
 
         # Admin restores from uploaded file
-        status, result = self.request_raw_client(self.admin, 'POST', '/api/admin/backups/upload-restore', archive_buf.getvalue())
+        status, result = self.request_raw_client(self.admin, 'POST', '/api/admin/backups/upload-restore', snapshot_bytes)
         self.assertEqual(status, 200)
         self.assertTrue(result['restored'])
 
@@ -965,7 +960,7 @@ class FirstRunSetupTests(unittest.TestCase):
         self.assertTrue(result['imported'])
 
     def test_invalid_backup_archive_returns_bad_request(self):
-        status, error = self.request_raw('POST', '/api/setup/import-backup', b'not a valid tarball')
+        status, error = self.request_raw('POST', '/api/setup/import-backup', b'not a valid snapshot json')
         self.assertEqual(status, 400)
         self.assertIn('error', error)
 
