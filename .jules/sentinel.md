@@ -1,3 +1,8 @@
+## 2026-10-13 - User Enumeration Timing Attack on Login
+**Vulnerability:** Short-circuiting password verification when a user email is not found in the database caused a significant timing discrepancy between existing (~50-100ms for 310k PBKDF2 iterations) and non-existing (~0ms) accounts.
+**Learning:** Database lookup short-circuits prior to expensive password hashing functions expose an email enumeration timing side-channel.
+**Prevention:** Always perform password verification against a dummy hash when an account email is not found to ensure constant-time response characteristics.
+
 ## 2026-10-13 - Path Traversal in Backup Filename Regex
 **Vulnerability:** Loose backup filename regex `r'^notki-.*\.json$'` allowed `..` and `/` characters in filename parameters, enabling potential directory traversal attacks in admin backup file download, restore, and deletion endpoints.
 **Learning:** Overly broad regex patterns (`.*`) in file name validation permit directory traversal sequences (`/`, `..`).

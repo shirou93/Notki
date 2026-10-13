@@ -29,12 +29,14 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.47'
+VERSION = '0.1.5.48'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
 INVITE_DAYS = 7
 PASSWORD_ITERATIONS = 310_000
+# Dummy hash used to mitigate timing side-channel attacks during login when email is not found
+DUMMY_PASSWORD_HASH = f'pbkdf2_sha256${PASSWORD_ITERATIONS}$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000'
 MAX_REQUEST_BYTES = 3 * 1024 * 1024
 MAX_SNAPSHOT_BYTES = 100 * 1024 * 1024
 BACKUP_FILENAME_PATTERN = re.compile(r'^notki-[A-Za-z0-9_-]+\.json$')
@@ -1355,7 +1357,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
             return
         with database() as connection:
             row = connection.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
-            if not row or not verify_password(password, row['password_hash']):
+            # Verify password using dummy hash if user does not exist to mitigate timing side-channel attacks for email enumeration
+            password_hash = row['password_hash'] if row else DUMMY_PASSWORD_HASH
+            valid_password = verify_password(password, password_hash)
+            if not row or not valid_password:
                 self.send_error_json('Nieprawidłowy e-mail lub hasło.', 401)
                 return
             totp_secret = row['totp_secret'] if 'totp_secret' in row.keys() else None
