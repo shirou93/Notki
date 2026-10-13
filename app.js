@@ -1991,7 +1991,145 @@
       label.textContent = tag;
       tags.append(label);
     });
+    const swipeBgRight = $('.card-swipe-right', card);
+    const swipeBgLeft = $('.card-swipe-left', card);
+    const labelRight = $('.card-swipe-label-right', card);
+    const labelLeft = $('.card-swipe-label-left', card);
+    const iconLeft = $('.card-swipe-icon-left', card);
+
+    if (labelRight) labelRight.textContent = t(note.pinned ? 'editor.unpin' : 'editor.pin');
+    if (labelLeft) {
+      if (view === 'trash') labelLeft.textContent = t('editor.deleteForever');
+      else if (view === 'archive') labelLeft.textContent = t('editor.trashedToast');
+      else labelLeft.textContent = t('editor.archive');
+    }
+    if (iconLeft) {
+      if (view === 'trash') iconLeft.textContent = '🗑';
+      else if (view === 'archive') iconLeft.textContent = '🗑';
+      else iconLeft.textContent = '▣';
+    }
+
+    const cardInner = $('.card-inner', card);
+    let cardSwipeState = null;
+
+    card.addEventListener('pointerdown', event => {
+      if (readOnly) return;
+      if (event.button !== 0) return;
+      if (event.target.closest('button, input, .task-checkbox, .task-drag-handle, .card-drag, .card-pin, .card-tag')) return;
+
+      cardSwipeState = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        deltaX: 0,
+        deltaY: 0,
+        swiping: false,
+        direction: null,
+        disqualified: false,
+      };
+    });
+
+    card.addEventListener('pointermove', event => {
+      if (!cardSwipeState || cardSwipeState.disqualified || event.pointerId !== cardSwipeState.pointerId) return;
+
+      const deltaX = event.clientX - cardSwipeState.startX;
+      const deltaY = event.clientY - cardSwipeState.startY;
+
+      if (!cardSwipeState.swiping) {
+        if (Math.abs(deltaY) > 10 && Math.abs(deltaY) > Math.abs(deltaX)) {
+          cardSwipeState.disqualified = true;
+          return;
+        }
+        if (Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY)) {
+          cardSwipeState.swiping = true;
+          card.classList.add('is-swiping');
+          try { card.setPointerCapture(event.pointerId); } catch {}
+        }
+      }
+
+      if (cardSwipeState.swiping) {
+        event.preventDefault();
+        cardSwipeState.deltaX = deltaX;
+        const width = card.getBoundingClientRect().width || 200;
+        const maxSwipe = width * 0.7;
+        const clampedX = Math.max(-maxSwipe, Math.min(maxSwipe, deltaX));
+        cardInner.style.transform = `translateX(${clampedX}px)`;
+
+        const SWIPE_THRESHOLD = 70;
+        if (clampedX > 0) {
+          swipeBgRight.classList.add('is-visible');
+          swipeBgLeft.classList.remove('is-visible');
+          swipeBgRight.classList.toggle('is-active', clampedX >= SWIPE_THRESHOLD);
+        } else if (clampedX < 0) {
+          swipeBgLeft.classList.add('is-visible');
+          swipeBgRight.classList.remove('is-visible');
+          swipeBgLeft.classList.toggle('is-active', Math.abs(clampedX) >= SWIPE_THRESHOLD);
+        } else {
+          swipeBgRight.classList.remove('is-visible');
+          swipeBgLeft.classList.remove('is-visible');
+        }
+      }
+    });
+
+    let wasSwiping = false;
+
+    const finishSwipe = (event) => {
+      if (!cardSwipeState || event.pointerId !== cardSwipeState.pointerId) return;
+      const { swiping, deltaX } = cardSwipeState;
+      const pointerId = cardSwipeState.pointerId;
+      cardSwipeState = null;
+
+      if (swiping) {
+        wasSwiping = true;
+        window.setTimeout(() => { wasSwiping = false; }, 300);
+
+        card.classList.remove('is-swiping');
+        try { card.releasePointerCapture(pointerId); } catch {}
+        cardInner.style.transform = '';
+        swipeBgRight.classList.remove('is-visible', 'is-active');
+        swipeBgLeft.classList.remove('is-visible', 'is-active');
+
+        const SWIPE_THRESHOLD = 70;
+        if (deltaX >= SWIPE_THRESHOLD) {
+          // Swipe Right: Pin / Unpin
+          note.pinned = !note.pinned;
+          note.updatedAt = new Date().toISOString();
+          moveToFront(note);
+          persist();
+          showToast(t(note.pinned ? 'editor.pin' : 'editor.unpin'));
+          render();
+        } else if (deltaX <= -SWIPE_THRESHOLD) {
+          // Swipe Left: Archive / Trash / Delete
+          if (view === 'trash') {
+            notes = notes.filter(item => item.id !== note.id);
+            showToast(t('editor.deletedToast'));
+          } else if (view === 'archive') {
+            note.deleted = true;
+            note.pinned = false;
+            note.archived = false;
+            note.updatedAt = new Date().toISOString();
+            showToast(t('editor.trashedToast'));
+          } else {
+            note.archived = !note.archived;
+            if (note.archived) note.pinned = false;
+            note.updatedAt = new Date().toISOString();
+            showToast(t(note.archived ? 'editor.archivedToast' : 'editor.unarchivedToast'));
+          }
+          persist();
+          render();
+        }
+      }
+    };
+
+    card.addEventListener('pointerup', finishSwipe);
+    card.addEventListener('pointercancel', finishSwipe);
+
     card.addEventListener('click', event => {
+      if (wasSwiping || (cardSwipeState && cardSwipeState.swiping)) {
+        event.stopPropagation();
+        event.preventDefault();
+        return;
+      }
       if (event.target.closest('input[type="checkbox"], .task-checkbox, .task-drag-handle')) return;
       if (event.target.closest('button')) return;
       if (event.target.closest('.card-drag, .card-pin')) return;

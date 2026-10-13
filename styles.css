@@ -237,8 +237,18 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .section-rule { height: 1px; flex: 1; background: #e8ece7; }
 .notes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 218px), 1fr)); align-items: stretch; gap: 14px; margin: 0 0 27px; }
 .notes-grid.is-list-view { grid-template-columns: 1fr; }
-.note-card { min-width: 0; min-height: 170px; display: flex; flex-direction: column; padding: 15px 15px 12px; border: 1px solid #e8ebe5; border-radius: 7px; background: #fff; cursor: pointer; animation: rise-in .35s both; transition: transform .18s, box-shadow .18s, border-color .18s; }
+.note-card { position: relative; overflow: hidden; min-width: 0; min-height: 170px; border: 1px solid #e8ebe5; border-radius: 7px; background: #fff; cursor: pointer; animation: rise-in .35s both; transition: transform .18s, box-shadow .18s, border-color .18s; touch-action: pan-y; }
 .note-card:hover { transform: translateY(-2px); border-color: #d5ddd4; box-shadow: 0 8px 21px #1e33250b; }
+.card-inner { position: relative; z-index: 2; width: 100%; height: 100%; min-height: inherit; display: flex; flex-direction: column; padding: 15px 15px 12px; background: inherit; border-radius: inherit; transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.3, 1); will-change: transform; }
+.note-card.is-swiping .card-inner { transition: none; }
+.card-swipe-bg { position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; padding: 0 18px; font-size: 12px; font-weight: 600; opacity: 0; transition: opacity 0.15s ease; pointer-events: none; }
+.card-swipe-bg.card-swipe-right { justify-content: flex-start; gap: 8px; background: #e8f3e5; color: #3b6330; }
+.card-swipe-bg.card-swipe-left { justify-content: flex-end; gap: 8px; background: #faecea; color: #9c3b2b; }
+:root[data-theme="dark"] .card-swipe-bg.card-swipe-right { background: #233b28; color: #a8d6a2; }
+:root[data-theme="dark"] .card-swipe-bg.card-swipe-left { background: #3d2323; color: #e59a90; }
+.card-swipe-bg.is-visible { opacity: 1; }
+.card-swipe-bg.is-active { font-weight: 700; transform: scale(1.05); }
+.card-swipe-icon { font-size: 16px; }
 .note-card.is-dragging {
   border: 1px dashed #8fae76;
   background: #eef4e7;
@@ -490,7 +500,8 @@ body.is-dragging-task-active, body.is-dragging-task-active * { cursor: var(--dra
   .capture-box { height: 47px; font-size: 12px; }
   .notes-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .notes-grid.is-list-view { grid-template-columns: 1fr; }
-  .note-card { min-height: 140px; padding: 10px 11px; }
+  .note-card { min-height: 140px; }
+  .card-inner { padding: 10px 11px; }
   .card-drag, .card-pin { opacity: .65; }
   .editor-content { padding: 31px 25px 26px; }
   .editor-topbar { min-height: 58px; padding: 0 15px; }
