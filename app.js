@@ -1940,8 +1940,10 @@
     pin.classList.toggle('is-pinned', note.pinned);
     pin.setAttribute('aria-label', t(note.pinned ? 'editor.unpin' : 'editor.pin'));
     pin.title = t(note.pinned ? 'editor.unpinTitle' : 'editor.pinTitle');
+    pin.hidden = note.archived || note.deleted || shared || view === 'archive' || view === 'trash';
     pin.addEventListener('click', event => {
       event.stopPropagation();
+      if (note.archived || note.deleted || view === 'archive' || view === 'trash') return;
       note.pinned = !note.pinned;
       note.updatedAt = new Date().toISOString();
       moveToFront(note);
@@ -2052,7 +2054,8 @@
         cardSwipeState.deltaX = deltaX;
         const width = card.getBoundingClientRect().width || 200;
         const maxSwipe = width * 0.7;
-        const clampedX = Math.max(-maxSwipe, Math.min(maxSwipe, deltaX));
+        const maxSwipeRight = (note.archived || note.deleted || view === 'archive' || view === 'trash') ? 0 : maxSwipe;
+        const clampedX = Math.max(-maxSwipe, Math.min(maxSwipeRight, deltaX));
         cardInner.style.transform = `translateX(${clampedX}px)`;
 
         const SWIPE_THRESHOLD = 70;
@@ -2091,13 +2094,15 @@
 
         const SWIPE_THRESHOLD = 70;
         if (deltaX >= SWIPE_THRESHOLD) {
-          // Swipe Right: Pin / Unpin
-          note.pinned = !note.pinned;
-          note.updatedAt = new Date().toISOString();
-          moveToFront(note);
-          persist();
-          showToast(t(note.pinned ? 'editor.pin' : 'editor.unpin'));
-          render();
+          // Swipe Right: Pin / Unpin (disabled in Archive and Trash)
+          if (!note.archived && !note.deleted && view !== 'archive' && view !== 'trash') {
+            note.pinned = !note.pinned;
+            note.updatedAt = new Date().toISOString();
+            moveToFront(note);
+            persist();
+            showToast(t(note.pinned ? 'editor.pin' : 'editor.unpin'));
+            render();
+          }
         } else if (deltaX <= -SWIPE_THRESHOLD) {
           // Swipe Left: Archive / Trash / Delete
           if (view === 'trash') {
@@ -2496,7 +2501,8 @@
     elements.delete.setAttribute('aria-label', t(note.deleted ? 'editor.deleteForever' : 'editor.delete'));
     elements.delete.title = t(note.deleted ? 'editor.deleteForever' : 'editor.delete');
     // A recipient never gets the owner's pin, archive, delete or re-share controls.
-    elements.pin.hidden = note.deleted || shared;
+    // Pinning is also disabled in archive and trash.
+    elements.pin.hidden = note.archived || note.deleted || shared || view === 'archive' || view === 'trash';
     elements.archive.hidden = shared;
     elements.delete.hidden = shared;
     $('#share-note').hidden = note.deleted || shared;
@@ -2951,7 +2957,7 @@
   }));
   elements.pin.addEventListener('click', () => {
     const note = notes.find(item => item.id === activeId);
-    if (!note) return;
+    if (!note || note.archived || note.deleted || view === 'archive' || view === 'trash') return;
     note.pinned = !note.pinned;
     saveEditor();
     updateEditorActions(note);

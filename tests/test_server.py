@@ -469,7 +469,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.44', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.44'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.45', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.45'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -493,7 +493,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.44'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.45'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
@@ -786,6 +786,34 @@ class ServerFlowTests(unittest.TestCase):
         status, login_res = self.request(user2_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': totp_code})
         self.assertEqual(status, 200)
         self.assertEqual(login_res['user']['email'], 'user2fa2@example.com')
+
+    def test_archived_or_deleted_notes_cannot_be_pinned(self):
+        user = self.register_user('pin-test@example.com')
+        note_archived_pinned = self.note_payload('note-1', 'Archived & Pinned')
+        note_archived_pinned['pinned'] = True
+        note_archived_pinned['archived'] = True
+
+        note_deleted_pinned = self.note_payload('note-2', 'Deleted & Pinned')
+        note_deleted_pinned['pinned'] = True
+        note_deleted_pinned['deleted'] = True
+
+        note_active_pinned = self.note_payload('note-3', 'Active & Pinned')
+        note_active_pinned['pinned'] = True
+
+        status, _ = self.request(user, 'PUT', '/api/notes', {
+            'notes': [note_archived_pinned, note_deleted_pinned, note_active_pinned]
+        })
+        self.assertEqual(status, 200)
+
+        status, result = self.request(user, 'GET', '/api/notes')
+        self.assertEqual(status, 200)
+
+        notes_by_id = {n['id']: n for n in result['notes']}
+        self.assertFalse(notes_by_id['note-1']['pinned'])
+        self.assertTrue(notes_by_id['note-1']['archived'])
+        self.assertFalse(notes_by_id['note-2']['pinned'])
+        self.assertTrue(notes_by_id['note-2']['deleted'])
+        self.assertTrue(notes_by_id['note-3']['pinned'])
 
 
 class FirstRunSetupTests(unittest.TestCase):
