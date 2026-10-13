@@ -197,6 +197,7 @@ window.notkiTranslations.en = {
   'editor.checklist': 'Add checkbox',
   'editor.clearFormat': 'Clear formatting',
   'editor.bodyPlaceholder': 'Start writing...',
+  'editor.progressLabel': 'CHECKLIST PROGRESS',
   'editor.tags': 'TAGS',
   'editor.tagsPlaceholder': 'e.g. work, ideas',
   'editor.color': 'NOTE COLOR',
