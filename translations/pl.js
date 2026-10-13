@@ -41,6 +41,9 @@ window.notkiTranslations.pl = {
   'nav.storage': 'Zapisane na serwerze',
   'nav.storageOffline': 'Zapisano lokalnie (Tryb offline)',
   'nav.storageSyncing': 'Synchronizowanie...',
+  'nav.syncNow': 'Synchronizuj',
+  'nav.syncSuccess': 'Zsynchronizowano pomyślnie.',
+  'nav.syncFailed': 'Nie udało się zsynchronizować z serwerem: {message}',
 
   'view.all': 'Wszystkie notatki',
   'view.pinned': 'Przypięte',

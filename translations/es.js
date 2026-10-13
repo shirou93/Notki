@@ -41,6 +41,9 @@ window.notkiTranslations.es = {
   'nav.storage': 'Guardado en el servidor',
   'nav.storageOffline': 'Guardado localmente (Sin conexión)',
   'nav.storageSyncing': 'Sincronizando...',
+  'nav.syncNow': 'Sincronizar',
+  'nav.syncSuccess': 'Sincronizado con éxito.',
+  'nav.syncFailed': 'No se pudo sincronizar con el servidor: {message}',
 
   'view.all': 'Todas las notas',
   'view.pinned': 'Fijadas',

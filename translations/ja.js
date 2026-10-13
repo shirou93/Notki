@@ -41,6 +41,9 @@ window.notkiTranslations.ja = {
   'nav.storage': 'サーバーに保存済み',
   'nav.storageOffline': 'ローカルに保存済み (オフライン)',
   'nav.storageSyncing': '同期中...',
+  'nav.syncNow': '同期',
+  'nav.syncSuccess': '正常に同期されました。',
+  'nav.syncFailed': 'サーバーとの同期に失敗しました: {message}',
 
   'view.all': 'すべてのノート',
   'view.pinned': 'ピン留め',

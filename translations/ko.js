@@ -41,6 +41,9 @@ window.notkiTranslations.ko = {
   'nav.storage': '서버에 저장됨',
   'nav.storageOffline': '로컬에 저장됨 (오프라인)',
   'nav.storageSyncing': '동기화 중...',
+  'nav.syncNow': '동기화',
+  'nav.syncSuccess': '성공적으로 동기화되었습니다.',
+  'nav.syncFailed': '서버와 동기화하지 못했습니다: {message}',
 
   'view.all': '모든 노트',
   'view.pinned': '고정됨',
