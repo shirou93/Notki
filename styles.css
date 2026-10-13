@@ -276,16 +276,6 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .editor-progress-fill { height: 100%; background: var(--brand-accent); border-radius: 3px; transition: width 0.3s ease; }
 .editor-progress-fill.is-complete { background: #388e3c; }
 
-.dynamic-island-hud { position: fixed; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%) scale(0.85); z-index: 400; min-width: 180px; max-width: min(340px, calc(100vw - 32px)); height: 38px; padding: 0 14px; border-radius: 20px; background: #000000; color: #ffffff; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.12); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.25s ease, height 0.35s ease, border-radius 0.35s ease; overflow: hidden; font-family: var(--sans); }
-.dynamic-island-hud.is-active { opacity: 1; transform: translateX(-50%) scale(1); pointer-events: auto; }
-.dynamic-island-hud.is-expanded { height: 44px; min-width: 220px; border-radius: 22px; }
-.dynamic-island-content { display: flex; align-items: center; gap: 10px; width: 100%; }
-.dynamic-island-icon { width: 24px; height: 24px; flex: 0 0 24px; border-radius: 50%; background: #27c96d; color: #000; display: grid; place-items: center; }
-.dynamic-island-details { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.dynamic-island-title { font-size: 10px; font-weight: 600; color: #a1a1a6; line-height: 1.1; text-transform: uppercase; letter-spacing: 0.4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dynamic-island-status { font-size: 12px; font-weight: 700; color: #ffffff; line-height: 1.2; }
-.dynamic-island-bar-wrap { width: 48px; height: 6px; flex: 0 0 48px; background: rgba(255, 255, 255, 0.2); border-radius: 3px; overflow: hidden; }
-.dynamic-island-bar-fill { height: 100%; background: #27c96d; border-radius: 3px; transition: width 0.3s ease; }
 .card-body { display: -webkit-box; margin: 0 0 15px; overflow: hidden; color: #59645d; font-size: 12px; line-height: 1.65; white-space: normal; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 5; }
 .card-body p { margin: 0 0 8px; }
 .card-body ul, .card-body ol { margin: 0 0 8px; padding-left: 18px; }

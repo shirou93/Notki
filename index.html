@@ -25,23 +25,6 @@
   <script src="app.js" defer></script>
 </head>
 <body>
-  <div class="dynamic-island-hud" id="dynamic-island-hud" aria-live="polite" hidden>
-    <div class="dynamic-island-content">
-      <div class="dynamic-island-icon">
-        <svg class="dynamic-island-check-svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="20 6 9 17 4 12"></polyline>
-        </svg>
-      </div>
-      <div class="dynamic-island-details">
-        <span class="dynamic-island-title" id="dynamic-island-title">Tasks completed</span>
-        <span class="dynamic-island-status" id="dynamic-island-status">0 / 0</span>
-      </div>
-      <div class="dynamic-island-bar-wrap">
-        <div class="dynamic-island-bar-fill" id="dynamic-island-bar-fill" style="width: 0%"></div>
-      </div>
-    </div>
-  </div>
-
   <section class="auth-view" id="auth-view" hidden>
     <div class="auth-content">
       <a class="brand auth-brand" href="/" aria-label="Notki" data-i18n-aria-label="brand.aria"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span>notki<span class="brand-period">.</span></span></a>
@@ -118,7 +101,7 @@
           </div>
         </details>
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.36</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.37</span>
       </div>
     </aside>
 
@@ -195,7 +178,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.36</strong></p>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.37</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" class="admin-update-box" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>

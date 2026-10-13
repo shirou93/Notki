@@ -77,32 +77,6 @@
     return getTaskStatsFromHtml(html);
   }
 
-  let dynamicIslandTimeout;
-  function showDynamicIslandProgress(completed, total, noteTitle) {
-    const hud = $('#dynamic-island-hud');
-    const titleEl = $('#dynamic-island-title');
-    const statusEl = $('#dynamic-island-status');
-    const fillEl = $('#dynamic-island-bar-fill');
-    if (!hud || !total) return;
-
-    const percent = Math.round((completed / total) * 100);
-    if (titleEl) titleEl.textContent = noteTitle ? String(noteTitle).trim().slice(0, 24) : t('editor.taskGroup');
-    if (statusEl) statusEl.textContent = `${completed} / ${total} (${percent}%)`;
-    if (fillEl) fillEl.style.width = `${percent}%`;
-
-    hud.hidden = false;
-    hud.offsetWidth; // force reflow
-    hud.classList.add('is-active', 'is-expanded');
-
-    window.clearTimeout(dynamicIslandTimeout);
-    dynamicIslandTimeout = window.setTimeout(() => {
-      hud.classList.remove('is-active', 'is-expanded');
-      window.setTimeout(() => {
-        if (!hud.classList.contains('is-active')) hud.hidden = true;
-      }, 350);
-    }, 2500);
-  }
-
   function updateEditorProgress() {
     const container = $('#editor-progress');
     if (!container) return;
@@ -1915,8 +1889,6 @@
           } else {
             persist();
           }
-          const updatedStats = getTaskStats(note);
-          showDynamicIslandProgress(updatedStats.completed, updatedStats.total, note.title);
           render();
         }
       }
@@ -2348,8 +2320,6 @@
       normalizeChecklistGroups();
       $('#task-restore-suggestions').hidden = true;
       updateEditorProgress();
-      const stats = getTaskStatsFromHtml(elements.noteBody.innerHTML);
-      showDynamicIslandProgress(stats.completed, stats.total, elements.noteTitle.value);
       scheduleSave();
     }
   });
