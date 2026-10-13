@@ -100,8 +100,12 @@
             </div>
           </div>
         </details>
-        <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.40</span>
+        <div class="storage-note">
+          <span class="storage-dot"></span>
+          <span data-i18n="nav.storage">Saved on the server</span>
+          <button class="storage-sync-button" id="sidebar-sync-button" type="button" data-i18n="nav.syncNow" hidden>Synchronize</button>
+        </div>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.41</span>
       </div>
     </aside>
 
@@ -109,6 +113,7 @@
       <header class="topbar">
         <div class="breadcrumbs"><span data-i18n="topbar.breadcrumb">YOUR NOTEBOOK</span><span class="breadcrumb-slash">/</span><span id="breadcrumb-view">All</span></div>
         <div class="topbar-actions">
+          <button class="button-secondary sync-button" id="topbar-sync-button" type="button" data-i18n="nav.syncNow" hidden>Synchronize</button>
           <label class="search-box" for="search-input"><span class="search-icon" aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="Search notes" autocomplete="off" data-i18n-placeholder="topbar.search"><kbd>⌘ K</kbd></label>
 
           <button class="icon-button" id="view-toggle" type="button" aria-label="Toggle view" title="Toggle view">▤</button>
@@ -178,7 +183,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.40</strong></p>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.41</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" class="admin-update-box" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>

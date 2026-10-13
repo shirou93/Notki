@@ -41,6 +41,9 @@ window.notkiTranslations.en = {
   'nav.storage': 'Saved on the server',
   'nav.storageOffline': 'Saved locally (Offline)',
   'nav.storageSyncing': 'Syncing...',
+  'nav.syncNow': 'Synchronize',
+  'nav.syncSuccess': 'Synchronized successfully.',
+  'nav.syncFailed': 'Could not synchronize with server: {message}',
 
   'view.all': 'All notes',
   'view.pinned': 'Pinned',

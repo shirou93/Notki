@@ -170,7 +170,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .sidebar-user-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
 .sidebar-user-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; color: #f5f7f1; }
 .sidebar-user-label { font-size: 10px; color: #a2b5a7; }
-.storage-note { display: flex; align-items: center; gap: 9px; padding: 13px 10px; color: #b5c6ba; font-size: 11px; }
+.storage-note { display: flex; align-items: center; gap: 9px; padding: 13px 10px; color: #b5c6ba; font-size: 11px; flex-wrap: wrap; }
+.storage-sync-button { margin-left: auto; padding: 3px 9px; border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 4px; background: rgba(255, 255, 255, 0.12); color: #f5f7f1; font-size: 10px; font-weight: 600; cursor: pointer; transition: background .16s, border-color .16s; }
+.storage-sync-button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.22); border-color: rgba(255, 255, 255, 0.4); }
+.storage-sync-button:disabled, .sync-button:disabled { opacity: 0.6; cursor: not-allowed; }
+.storage-sync-button[hidden], .sync-button[hidden] { display: none !important; }
 .storage-dot, .save-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #a9d377; }
 .sidebar-version { display: block; padding: 13px 10px 0; border-top: 1px solid #ffffff20; color: #81988a; font-size: 9px; letter-spacing: 1.2px; }
 

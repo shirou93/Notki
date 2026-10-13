@@ -24,6 +24,7 @@
     avatarPreview: $('#profile-avatar-preview'), avatarInput: $('#avatar-input'), avatarMessage: $('#avatar-message'),
     sidebarAvatar: $('#sidebar-avatar'), sidebarUserEmail: $('#sidebar-user-email'), sidebarProfileButton: $('#sidebar-profile-button'),
     sidebar: $('#sidebar'), sidebarBackdrop: $('#sidebar-backdrop'), hamburgerToggle: $('#hamburger-toggle'),
+    topbarSyncBtn: $('#topbar-sync-button'), sidebarSyncBtn: $('#sidebar-sync-button'),
     sharedCount: $('#count-shared'), sharePanel: $('#share-panel'), shareBackdrop: $('#share-backdrop'),
     shareForm: $('#share-form'), shareEmail: $('#share-email'), sharePermission: $('#share-permission'),
     shareMessage: $('#share-message'), shareList: $('#share-list'), shareEmpty: $('#share-empty'),
@@ -113,6 +114,19 @@
     if (!container) return;
     const dot = container.querySelector('.storage-dot');
     const label = container.querySelector('span:not(.storage-dot)');
+
+    const showSync = isOffline || (currentUser && (hasPendingSync(currentUser.id) || pendingSync));
+    const topbarSync = elements.topbarSyncBtn || $('#topbar-sync-button');
+    const sidebarSync = elements.sidebarSyncBtn || $('#sidebar-sync-button');
+
+    if (topbarSync) {
+      topbarSync.hidden = !showSync;
+      topbarSync.disabled = isSyncing;
+    }
+    if (sidebarSync) {
+      sidebarSync.hidden = !showSync;
+      sidebarSync.disabled = isSyncing;
+    }
 
     if (isSyncing) {
       if (dot) dot.style.background = '#e6c875'; // Yellow
@@ -1693,9 +1707,12 @@
     }
   }
 
-  async function syncPendingChanges() {
-    if (!currentUser || isOffline || isSyncing) return;
-    if (!hasPendingSync(currentUser.id) && !pendingSync) return;
+  async function syncPendingChanges(force = false) {
+    if (!currentUser || isSyncing) return;
+    if (!force) {
+      if (isOffline) return;
+      if (!hasPendingSync(currentUser.id) && !pendingSync) return;
+    }
 
     isSyncing = true;
     updateStorageIndicator();
@@ -1735,8 +1752,14 @@
       saveLocalCache(currentUser.id, { notes: mergedNotes });
       clearSyncQueue(currentUser.id);
       render();
+      if (force) {
+        showToast(t('nav.syncSuccess'));
+      }
     } catch (err) {
       console.error('Failed syncPendingChanges:', err);
+      if (force) {
+        showToast(t('nav.syncFailed', { message: err.message || '' }));
+      }
     } finally {
       isSyncing = false;
       updateStorageIndicator();
@@ -2737,6 +2760,10 @@
       if (elements.hamburgerToggle) elements.hamburgerToggle.setAttribute('aria-expanded', 'true');
     }
   }
+
+  const handleManualSync = () => syncPendingChanges(true);
+  elements.topbarSyncBtn?.addEventListener('click', handleManualSync);
+  elements.sidebarSyncBtn?.addEventListener('click', handleManualSync);
 
   elements.hamburgerToggle?.addEventListener('click', toggleSidebar);
   elements.sidebarBackdrop?.addEventListener('click', closeSidebar);
