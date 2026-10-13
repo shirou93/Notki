@@ -76,7 +76,7 @@
       <nav class="nav-list" aria-label="Note views" data-i18n-aria-label="nav.viewsAria">
         <button class="nav-item is-active" type="button" data-view="all"><span class="nav-icon" aria-hidden="true">▤</span><span data-i18n="nav.all">All</span><span class="nav-count" id="count-all">0</span></button>
         <button class="nav-item" type="button" data-view="pinned"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6l-3 3v2h10v-2l-3-3V3"/><path d="M12 14v7"/></svg></span><span data-i18n="nav.pinned">Pinned</span><span class="nav-count" id="count-pinned">0</span></button>
-        <button class="nav-item" type="button" data-view="archive"><span class="nav-icon" aria-hidden="true">▣</span><span data-i18n="nav.archive">Archive</span><span class="nav-count" id="count-archive">0</span></button>
+        <button class="nav-item" type="button" data-view="archive"><span class="nav-icon" aria-hidden="true">📦</span><span data-i18n="nav.archive">Archive</span><span class="nav-count" id="count-archive">0</span></button>
         <button class="nav-item" type="button" data-view="shared"><span class="nav-icon" aria-hidden="true">⇄</span><span data-i18n="nav.shared">Shared with me</span><span class="nav-count" id="count-shared">0</span></button>
         <button class="nav-item" type="button" data-view="trash"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></span><span data-i18n="nav.trash">Trash</span><span class="nav-count" id="count-trash">0</span></button>
         <button class="nav-item" type="button" id="nav-labels"><span class="nav-icon" aria-hidden="true">🏷</span><span data-i18n="nav.labels">Labels</span></button>
@@ -105,7 +105,7 @@
           <span data-i18n="nav.storage">Saved on the server</span>
           <button class="storage-sync-button" id="sidebar-sync-button" type="button" data-i18n="nav.syncNow" hidden>Synchronize</button>
         </div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.45</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.46</span>
       </div>
     </aside>
 
@@ -183,7 +183,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.45</strong></p>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.46</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" class="admin-update-box" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
@@ -368,7 +368,7 @@
       <span class="save-state" id="save-state"><span class="save-dot"></span><span data-i18n="editor.saved">Saved</span></span>
       <div class="editor-tools">
         <button class="icon-button" id="pin-note" type="button" aria-label="Pin note" title="Pin" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><path d="M10 3v6l-3 3v2h10v-2l-3-3V3"/><path d="M12 14v7"/></svg></button>
-        <button class="icon-button" id="archive-note" type="button" aria-label="Archive note" title="Archive" data-i18n-aria-label="editor.archive" data-i18n-title="editor.archiveTitle">▣</button>
+        <button class="icon-button" id="archive-note" type="button" aria-label="Archive note" title="Archive" data-i18n-aria-label="editor.archive" data-i18n-title="editor.archiveTitle">📦</button>
         <button class="icon-button" id="share-note" type="button" aria-label="Share note" title="Share link" data-i18n-aria-label="editor.share" data-i18n-title="editor.shareTitle">↗</button>
         <button class="icon-button danger-icon" id="delete-note" type="button" aria-label="Move to trash" title="Move to trash" data-i18n-aria-label="editor.delete" data-i18n-title="editor.delete"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></button>
       </div>
@@ -426,9 +426,9 @@
   <template id="note-template">
     <article class="note-card">
       <div class="card-swipe-bg card-swipe-right"><span class="card-swipe-icon">📌</span><span class="card-swipe-label card-swipe-label-right"></span></div>
-      <div class="card-swipe-bg card-swipe-left"><span class="card-swipe-label card-swipe-label-left"></span><span class="card-swipe-icon card-swipe-icon-left">▣</span></div>
+      <div class="card-swipe-bg card-swipe-left"><span class="card-swipe-label card-swipe-label-left"></span><span class="card-swipe-icon card-swipe-icon-left">📦</span></div>
       <div class="card-inner">
-        <div class="card-topline"><span class="card-date"></span><div class="card-tools"><button class="card-drag" type="button" aria-label="Reorder note" title="Drag to reorder" data-i18n-aria-label="card.drag" data-i18n-title="card.dragTitle">⠿</button><button class="card-pin" type="button" aria-label="Pin note" title="Pin" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><path d="M10 3v6l-3 3v2h10v-2l-3-3V3"/><path d="M12 14v7"/></svg></button></div></div>
+        <div class="card-topline"><span class="card-date"></span><div class="card-tools"><button class="card-drag" type="button" aria-label="Reorder note" title="Drag to reorder" data-i18n-aria-label="card.drag" data-i18n-title="card.dragTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></button><button class="card-pin" type="button" aria-label="Pin note" title="Pin" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><path d="M10 3v6l-3 3v2h10v-2l-3-3V3"/><path d="M12 14v7"/></svg></button></div></div>
         <h2 class="card-title"></h2>
         <p class="card-body"></p>
         <div class="card-bottom"><div class="card-tags"></div></div>
