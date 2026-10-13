@@ -39,6 +39,8 @@ window.notkiTranslations.de = {
   'nav.newNote': 'Neue Notiz',
   'nav.adminPanel': 'Admin-Bereich',
   'nav.storage': 'Auf dem Server gespeichert',
+  'nav.storageOffline': 'Lokal gespeichert (Offline)',
+  'nav.storageSyncing': 'Synchronisierung...',
 
   'view.all': 'Alle Notizen',
   'view.pinned': 'Angeheftet',
