@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.55'
+VERSION = '0.1.5.56'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -738,7 +738,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             elif path == '/api/account/totp/verify':
                 self.verify_totp(payload)
             elif path == '/api/account/passkey':
-                self.add_passkey(payload)
+                raise APIError('Dodawanie kluczy zabezpieczeń zostało wyłączone.', 400)
             elif path.startswith('/api/notes/') and path.endswith('/shares'):
                 user = self.require_user()
                 note_id = path[len('/api/notes/'):-len('/shares')]

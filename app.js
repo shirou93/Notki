@@ -1070,46 +1070,6 @@
     }
   });
 
-  $('#add-passkey-btn').addEventListener('click', async () => {
-    try {
-      if (!window.isSecureContext || !navigator?.credentials?.create) {
-        throw new Error(t('topbar.2fa.passkeyNotSupported'));
-      }
-      const creation = await navigator.credentials.create({
-        publicKey: {
-          challenge: new Uint8Array(32),
-          rp: { name: "Notki" },
-          user: {
-            id: new Uint8Array(16), // dummy user id for webauthn client side
-            name: currentUser.email,
-            displayName: currentUser.email
-          },
-          pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
-          attestation: "none",
-          authenticatorSelection: { userVerification: "preferred" }
-        }
-      });
-
-      const spki = creation.response.getPublicKey ? creation.response.getPublicKey() : null;
-      if (!spki) {
-        throw new Error("Browser did not return a public key.");
-      }
-
-      const passkeyName = prompt(t('topbar.2fa.passkeyPromptName'), t('topbar.2fa.passkeyDefaultName'));
-      await apiRequest('/api/account/passkey', {
-        method: 'POST',
-        body: JSON.stringify({
-          id: creation.id,
-          name: (passkeyName && passkeyName.trim()) || t('topbar.2fa.passkeyDefaultName'),
-          publicKey: btoa(String.fromCharCode(...new Uint8Array(spki)))
-        })
-      });
-      await refresh2faStatus();
-    } catch (error) {
-      alert(error.message);
-    }
-  });
-
   async function refresh2faStatus() {
     try {
       const status = await apiRequest('/api/account/2fa');
@@ -1117,30 +1077,32 @@
       $('#totp-setup-area').hidden = status.hasTotp;
       $('#setup-totp-btn').hidden = status.hasTotp;
       const list = $('#passkey-list');
-      list.innerHTML = '';
-      status.passkeys.forEach(pk => {
-        const li = document.createElement('li');
-        li.style.display = 'flex';
-        li.style.justifyContent = 'space-between';
-        li.style.alignItems = 'center';
-        li.style.padding = '4px 0';
+      if (list) {
+        list.innerHTML = '';
+        status.passkeys.forEach(pk => {
+          const li = document.createElement('li');
+          li.style.display = 'flex';
+          li.style.justifyContent = 'space-between';
+          li.style.alignItems = 'center';
+          li.style.padding = '4px 0';
 
-        const nameSpan = document.createElement('span');
-        nameSpan.textContent = pk.name + ' (' + new Date(pk.createdAt).toLocaleDateString() + ')';
+          const nameSpan = document.createElement('span');
+          nameSpan.textContent = pk.name + ' (' + new Date(pk.createdAt).toLocaleDateString() + ')';
 
-        const delBtn = document.createElement('button');
-        delBtn.textContent = t('topbar.2fa.removePasskey');
-        delBtn.className = 'button-secondary';
-        delBtn.style.padding = '2px 8px';
-        delBtn.addEventListener('click', async () => {
-          if (!confirm(t('topbar.2fa.confirmRemovePasskey'))) return;
-          await apiRequest(`/api/account/passkey/${encodeURIComponent(pk.id)}`, { method: 'DELETE' });
-          refresh2faStatus();
+          const delBtn = document.createElement('button');
+          delBtn.textContent = t('topbar.2fa.removePasskey');
+          delBtn.className = 'button-secondary';
+          delBtn.style.padding = '2px 8px';
+          delBtn.addEventListener('click', async () => {
+            if (!confirm(t('topbar.2fa.confirmRemovePasskey'))) return;
+            await apiRequest(`/api/account/passkey/${encodeURIComponent(pk.id)}`, { method: 'DELETE' });
+            refresh2faStatus();
+          });
+
+          li.append(nameSpan, delBtn);
+          list.append(li);
         });
-
-        li.append(nameSpan, delBtn);
-        list.append(li);
-      });
+      }
     } catch (error) {
       console.error(error);
     }
@@ -2221,7 +2183,16 @@
         } else {
           persist();
         }
-        render();
+        const cardDate = $('.card-date', card);
+        if (cardDate) cardDate.textContent = window.i18n.formatDate(note.updatedAt);
+        const cardBody = $('.card-body', card);
+        if (cardBody) {
+          if (note.bodyFormat === 1 && note.body) {
+            cardBody.innerHTML = sanitizeRichHtml(note.body);
+          } else {
+            cardBody.textContent = noteText(note) || t('editor.emptyNote');
+          }
+        }
       };
 
       window.addEventListener('pointermove', onCardPointerMove);
@@ -2250,7 +2221,36 @@
           } else {
             persist();
           }
-          render();
+          const cardDate = $('.card-date', card);
+          if (cardDate) cardDate.textContent = window.i18n.formatDate(note.updatedAt);
+
+          const taskStats = getTaskStats(note);
+          let progressEl = $('.card-progress', card);
+          if (taskStats.total > 0) {
+            if (!progressEl) {
+              progressEl = document.createElement('div');
+              progressEl.className = 'card-progress';
+              const cardTitle = $('.card-title', card);
+              if (cardTitle) cardTitle.after(progressEl);
+            }
+            progressEl.innerHTML = `
+              <div class="card-progress-track">
+                <div class="card-progress-fill${taskStats.percent === 100 ? ' is-complete' : ''}" style="width: ${taskStats.percent}%"></div>
+              </div>
+              <span class="card-progress-text">${taskStats.completed}/${taskStats.total} (${taskStats.percent}%)</span>
+            `;
+          } else if (progressEl) {
+            progressEl.remove();
+          }
+
+          const cardBody = $('.card-body', card);
+          if (cardBody) {
+            if (note.bodyFormat === 1 && note.body) {
+              cardBody.innerHTML = sanitizeRichHtml(note.body);
+            } else {
+              cardBody.textContent = noteText(note) || t('editor.emptyNote');
+            }
+          }
         }
       }
     });

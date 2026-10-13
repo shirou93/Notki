@@ -92,6 +92,76 @@ def get_version_info(version):
             rem ^= g << i
     return (version << 12) | rem
 
+def get_mask_bit(pattern, r, c):
+    if pattern == 0: return (r + c) % 2 == 0
+    if pattern == 1: return r % 2 == 0
+    if pattern == 2: return c % 3 == 0
+    if pattern == 3: return (r + c) % 3 == 0
+    if pattern == 4: return (r // 2 + c // 3) % 2 == 0
+    if pattern == 5: return ((r * c) % 2) + ((r * c) % 3) == 0
+    if pattern == 6: return (((r * c) % 2) + ((r * c) % 3)) % 2 == 0
+    if pattern == 7: return (((r + c) % 2) + ((r * c) % 3)) % 2 == 0
+    return False
+
+def evaluate_penalty(matrix, size):
+    penalty = 0
+    # Rule 1: 5 or more same color modules in row/col
+    for r in range(size):
+        count = 1
+        for c in range(1, size):
+            if matrix[r][c] == matrix[r][c - 1]:
+                count += 1
+            else:
+                if count >= 5:
+                    penalty += 3 + (count - 5)
+                count = 1
+        if count >= 5:
+            penalty += 3 + (count - 5)
+
+    for c in range(size):
+        count = 1
+        for r in range(1, size):
+            if matrix[r][c] == matrix[r - 1][c]:
+                count += 1
+            else:
+                if count >= 5:
+                    penalty += 3 + (count - 5)
+                count = 1
+        if count >= 5:
+            penalty += 3 + (count - 5)
+
+    # Rule 2: 2x2 blocks of same color
+    for r in range(size - 1):
+        for c in range(size - 1):
+            val = matrix[r][c]
+            if matrix[r + 1][c] == val and matrix[r][c + 1] == val and matrix[r + 1][c + 1] == val:
+                penalty += 3
+
+    # Rule 3: 1:1:3:1:1 finder-like pattern
+    for r in range(size):
+        for c in range(size - 6):
+            if matrix[r][c:c + 7] == [1, 0, 1, 1, 1, 0, 1]:
+                if c >= 4 and matrix[r][c - 4:c] == [0, 0, 0, 0]:
+                    penalty += 40
+                if c + 11 <= size and matrix[r][c + 7:c + 11] == [0, 0, 0, 0]:
+                    penalty += 40
+
+    for c in range(size):
+        col_vals = [matrix[r][c] for r in range(size)]
+        for r in range(size - 6):
+            if col_vals[r:r + 7] == [1, 0, 1, 1, 1, 0, 1]:
+                if r >= 4 and col_vals[r - 4:r] == [0, 0, 0, 0]:
+                    penalty += 40
+                if r + 11 <= size and col_vals[r + 7:r + 11] == [0, 0, 0, 0]:
+                    penalty += 40
+
+    # Rule 4: Proportion of dark modules
+    dark_count = sum(sum(row) for row in matrix)
+    percent = (dark_count * 100) // (size * size)
+    penalty += (abs(percent - 50) // 5) * 10
+
+    return penalty
+
 def generate_qr_matrix(text):
     data_bytes = text.encode('utf-8')
     data_len = len(data_bytes)
@@ -265,44 +335,51 @@ def generate_qr_matrix(text):
         col -= 2
         upward = not upward
 
-    # Apply mask pattern (pattern 0: (r + c) % 2 == 0)
-    mask_pattern = 0
-    final_matrix = [row[:] for row in grid]
-    for r in range(size):
-        for c in range(size):
-            if not reserved[r][c]:
-                if (r + c) % 2 == 0:
-                    final_matrix[r][c] ^= 1
+    # Evaluate 8 mask patterns and pick the one with lowest penalty score
+    best_matrix = None
+    best_penalty = float('inf')
 
-    # Write format information (ISO/IEC 18004)
-    fmt_bits = get_format_info(mask_pattern)
+    for p in range(8):
+        mat = [row[:] for row in grid]
+        for r in range(size):
+            for c in range(size):
+                if not reserved[r][c]:
+                    if get_mask_bit(p, r, c):
+                        mat[r][c] ^= 1
 
-    # Vertical format info (top: rows 0..5, 7..8 -> bits 14..7; bottom: rows size-7..size-1 -> bits 6..0)
-    for idx in range(15):
-        mod = (fmt_bits >> (14 - idx)) & 1
-        if idx < 6:
-            final_matrix[idx][8] = mod
-        elif idx < 8:
-            final_matrix[idx + 1][8] = mod
-        else:
-            final_matrix[size - 15 + idx][8] = mod
+        fmt_bits = get_format_info(p)
 
-    # Horizontal format info (left: cols 0..5, 7..8 -> bits 0..7; right: cols size-7..size-1 -> bits 8..14)
-    for idx in range(15):
-        mod = (fmt_bits >> idx) & 1
-        if idx < 6:
-            final_matrix[8][idx] = mod
-        elif idx == 6:
-            final_matrix[8][7] = mod
-        elif idx == 7:
-            final_matrix[8][8] = mod
-        else:
-            final_matrix[8][size - 15 + idx] = mod
+        # Vertical format info (top: rows 0..5, 7..8 -> bits 14..7; bottom: rows size-7..size-1 -> bits 6..0)
+        for idx in range(15):
+            mod = (fmt_bits >> (14 - idx)) & 1
+            if idx < 6:
+                mat[idx][8] = mod
+            elif idx < 8:
+                mat[idx + 1][8] = mod
+            else:
+                mat[size - 15 + idx][8] = mod
 
-    # Fixed dark module
-    final_matrix[size - 8][8] = 1
+        # Horizontal format info (left: cols 0..5, 7..8 -> bits 14..7; right: cols size-7..size-1 -> bits 6..0)
+        for idx in range(15):
+            mod = (fmt_bits >> (14 - idx)) & 1
+            if idx < 6:
+                mat[8][idx] = mod
+            elif idx == 6:
+                mat[8][7] = mod
+            elif idx == 7:
+                mat[8][8] = mod
+            else:
+                mat[8][size - 15 + idx] = mod
 
-    return final_matrix
+        # Fixed dark module
+        mat[size - 8][8] = 1
+
+        score = evaluate_penalty(mat, size)
+        if score < best_penalty:
+            best_penalty = score
+            best_matrix = mat
+
+    return best_matrix
 
 
 def generate_qr_svg(text, module_size=4, border=4):
