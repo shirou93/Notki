@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.44'
+VERSION = '0.1.5.45'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -1176,11 +1176,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 raise APIError('Nieprawidłowa kolejność notatek w snapshocie.')
             note_ids.add(note_id)
             color = note.get('color')
+            archived = bool(note.get('archived'))
+            deleted = bool(note.get('deleted'))
+            pinned = False if (archived or deleted) else bool(note.get('pinned'))
             prepared_notes.append((
                 note_id, user_id, title, body, 1 if note.get('bodyFormat') == 1 else 0,
                 color if isinstance(color, str) and color in NOTE_COLORS else 'default',
                 json.dumps([str(tag)[:80] for tag in tags[:64]], ensure_ascii=False),
-                int(bool(note.get('pinned'))), int(bool(note.get('archived'))), int(bool(note.get('deleted'))),
+                int(pinned), int(archived), int(deleted),
                 self.snapshot_date(note.get('createdAt')), self.snapshot_date(note.get('updatedAt')), sort_order,
             ))
 
@@ -1592,11 +1595,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 raise APIError('Nieprawidłowa kolejność notatek.') from error
             if not math.isfinite(sort_order):
                 raise APIError('Nieprawidłowa kolejność notatek.')
+            archived = bool(note.get('archived'))
+            deleted = bool(note.get('deleted'))
+            pinned = False if (archived or deleted) else bool(note.get('pinned'))
             prepared.append((
                 note_id, user_id, title, body, 1 if note.get('bodyFormat') == 1 else 0,
                 note.get('color') if note.get('color') in NOTE_COLORS else 'default',
                 json.dumps([str(tag)[:80] for tag in tags[:64]], ensure_ascii=False),
-                int(bool(note.get('pinned'))), int(bool(note.get('archived'))), int(bool(note.get('deleted'))),
+                int(pinned), int(archived), int(deleted),
                 created, updated, sort_order,
             ))
         with database() as connection:
