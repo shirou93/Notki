@@ -37,8 +37,8 @@ services:
       # Keeps the bind-mounted source tree free of root-owned __pycache__ files.
       PYTHONDONTWRITEBYTECODE: "1"
       # HTTPS & Reverse Proxy (e.g. Cloudflare, Nginx, Caddy, Traefik).
-      # Notki automatically detects HTTPS via X-Forwarded-Proto header.
-      # Set both to "1" in .env or environment to enforce HTTPS behavior manually.
+      # Note: Notki runs as a plain HTTP server. SSL/TLS termination must be handled by your reverse proxy or Cloudflare (Flexible mode / Tunnel).
+      # Setting these to "1" flags cookies as Secure and generates https:// URLs, but does not enable TLS directly on Notki.
       NOTKI_COOKIE_SECURE: "${NOTKI_COOKIE_SECURE:-0}"
       NOTKI_PUBLIC_HTTPS: "${NOTKI_PUBLIC_HTTPS:-0}"
       # Allow remote setup by default in Docker Compose since it's likely not accessed via localhost
