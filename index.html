@@ -11,7 +11,9 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns%3D%22http%3A//www.w3.org/2000/svg%22 viewBox%3D%220 0 24 24%22%3E%3Cstyle%3E.m%7Bstroke%3A%2352734c%7D%40media %28prefers-color-scheme%3Adark%29%7B.m%7Bstroke%3A%23b8d98c%7D%7D%3C/style%3E%3Cg class%3D%22m%22 transform%3D%22rotate%28-8 12 12%29%22 fill%3D%22none%22 stroke-width%3D%221.8%22%3E%3Crect x%3D%222.5%22 y%3D%222.5%22 width%3D%228%22 height%3D%2219%22 rx%3D%222%22/%3E%3Crect x%3D%2213.5%22 y%3D%222.5%22 width%3D%228%22 height%3D%228%22 rx%3D%222%22/%3E%3Crect x%3D%2213.5%22 y%3D%2213.5%22 width%3D%228%22 height%3D%228%22 rx%3D%222%22/%3E%3C/g%3E%3C/svg%3E">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
   <script src="translations/pl.js" defer></script>
   <script src="translations/en.js" defer></script>
   <script src="translations/de.js" defer></script>
@@ -105,7 +107,7 @@
           <span data-i18n="nav.storage">Saved on the server</span>
           <button class="storage-sync-button" id="sidebar-sync-button" type="button" data-i18n="nav.syncNow" hidden>Synchronize</button>
         </div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.46</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.47</span>
       </div>
     </aside>
 
@@ -183,7 +185,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.46</strong></p>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.47</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" class="admin-update-box" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>

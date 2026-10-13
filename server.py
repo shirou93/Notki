@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.46'
+VERSION = '0.1.5.47'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -42,7 +42,8 @@ NOTE_COLORS = {'default', 'mint', 'lemon', 'peach', 'lilac', 'sky'}
 AVATAR_PATTERN = re.compile(r'^data:image/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$')
 MAX_AVATAR_CHARS = 2_900_000
 STATIC_FILES = {
-    'manifest.json', 'index.html', 'app.js', 'i18n.js', 'theme.js', 'setup.html', 'setup.js', 'styles.css'}
+    'manifest.json', 'index.html', 'app.js', 'i18n.js', 'theme.js', 'setup.html', 'setup.js', 'styles.css',
+    'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon.svg'}
 TRANSLATION_FILES = {
     'translations/pl.js', 'translations/en.js', 'translations/de.js',
     'translations/fr.js', 'translations/ja.js', 'translations/ko.js',

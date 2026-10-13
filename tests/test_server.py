@@ -418,6 +418,20 @@ class ServerFlowTests(unittest.TestCase):
             self.assertIn('theme.js', html, path)
             self.assertIn('data-theme-select', html, path)
 
+    def test_serve_static_icons(self):
+        for filename, expected_mime in [
+            ('apple-touch-icon.png', 'image/png'),
+            ('icon-192.png', 'image/png'),
+            ('icon-512.png', 'image/png'),
+            ('icon.svg', 'image/svg+xml'),
+            ('manifest.json', 'application/json'),
+        ]:
+            with self.admin.open(f'{self.base_url}/{filename}') as response:
+                self.assertEqual(response.status, 200)
+                self.assertIn(expected_mime, response.headers.get_content_type())
+                data = response.read()
+                self.assertGreater(len(data), 0)
+
     def test_security_headers(self):
         req = Request(f'{self.base_url}/')
         with urlopen(req) as response:
@@ -469,7 +483,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.46', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.46'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.47', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.47'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -493,7 +507,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.46'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.47'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
