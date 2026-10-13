@@ -267,6 +267,18 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertIn('invitation', error['error'].lower())
 
+    def test_login_user_enumeration_timing_mitigation(self):
+        # Verify that non-existent user and wrong password return identical error responses
+        status1, res1 = self.request(self.new_client(), 'POST', '/api/login', {
+            'email': 'nonexistent@example.com', 'password': 'wrong-password-123'
+        })
+        status2, res2 = self.request(self.new_client(), 'POST', '/api/login', {
+            'email': 'admin@example.com', 'password': 'wrong-password-123'
+        })
+        self.assertEqual(status1, 401)
+        self.assertEqual(status2, 401)
+        self.assertEqual(res1, res2)
+
     def test_delete_invitation_by_admin(self):
         status, invite = self.request(self.admin, 'POST', '/api/admin/invites', {})
         self.assertEqual(status, 201)
@@ -483,7 +495,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.47', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.47'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.48', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.48'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -507,7 +519,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.47'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.48'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
