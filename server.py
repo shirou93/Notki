@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.32'
+VERSION = '0.1.5.33'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -43,9 +43,13 @@ AVATAR_PATTERN = re.compile(r'^data:image/(?:png|jpeg|webp|gif);base64,[A-Za-z0-
 MAX_AVATAR_CHARS = 2_900_000
 STATIC_FILES = {
     'manifest.json', 'index.html', 'app.js', 'i18n.js', 'theme.js', 'setup.html', 'setup.js', 'styles.css'}
-TRANSLATION_FILES = {'translations/pl.js', 'translations/en.js'}
+TRANSLATION_FILES = {
+    'translations/pl.js', 'translations/en.js', 'translations/de.js',
+    'translations/fr.js', 'translations/ja.js', 'translations/ko.js',
+    'translations/it.js', 'translations/es.js'
+}
 DEFAULT_LANGUAGE = 'en'
-SUPPORTED_LANGUAGES = ('pl', 'en')
+SUPPORTED_LANGUAGES = ('pl', 'en', 'de', 'fr', 'ja', 'ko', 'it', 'es')
 
 LOG_BUFFER = []
 LOG_BUFFER_LOCK = threading.Lock()
@@ -250,7 +254,7 @@ def parse_language(header_value):
 
 
 def translate_message(message, language):
-    if language == 'en':
+    if language != 'pl':
         return ENGLISH_MESSAGES.get(message, message)
     return message
 

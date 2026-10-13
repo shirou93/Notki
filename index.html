@@ -14,6 +14,12 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns%3D%22http%3A//www.w3.org/2000/svg%22 viewBox%3D%220 0 24 24%22%3E%3Cstyle%3E.m%7Bstroke%3A%2352734c%7D%40media %28prefers-color-scheme%3Adark%29%7B.m%7Bstroke%3A%23b8d98c%7D%7D%3C/style%3E%3Cg class%3D%22m%22 transform%3D%22rotate%28-8 12 12%29%22 fill%3D%22none%22 stroke-width%3D%221.8%22%3E%3Crect x%3D%222.5%22 y%3D%222.5%22 width%3D%228%22 height%3D%2219%22 rx%3D%222%22/%3E%3Crect x%3D%2213.5%22 y%3D%222.5%22 width%3D%228%22 height%3D%228%22 rx%3D%222%22/%3E%3Crect x%3D%2213.5%22 y%3D%2213.5%22 width%3D%228%22 height%3D%228%22 rx%3D%222%22/%3E%3C/g%3E%3C/svg%3E">
   <script src="translations/pl.js" defer></script>
   <script src="translations/en.js" defer></script>
+  <script src="translations/de.js" defer></script>
+  <script src="translations/fr.js" defer></script>
+  <script src="translations/ja.js" defer></script>
+  <script src="translations/ko.js" defer></script>
+  <script src="translations/it.js" defer></script>
+  <script src="translations/es.js" defer></script>
   <script src="i18n.js" defer></script>
   <script src="theme.js" defer></script>
   <script src="app.js" defer></script>
@@ -95,7 +101,7 @@
           </div>
         </details>
         <div class="storage-note"><span class="storage-dot"></span><span data-i18n="nav.storage">Saved on the server</span></div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.32</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.33</span>
       </div>
     </aside>
 
@@ -172,7 +178,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.32</strong></p>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.33</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" class="admin-update-box" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
@@ -278,7 +284,7 @@
       <small class="setup-hint" data-i18n="topbar.avatarHint">PNG, JPEG, WebP or GIF, up to 2 MB.</small>
       <p class="auth-message" id="avatar-message" role="alert" hidden></p>
       <label class="field-label" for="profile-language" data-i18n="topbar.language">LANGUAGE</label>
-      <select class="auth-input profile-select" id="profile-language" data-language-select aria-label="Change language" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option></select>
+      <select class="auth-input profile-select" id="profile-language" data-language-select aria-label="Change language" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="it">Italiano</option><option value="es">Español</option></select>
       <label class="field-label" for="profile-theme" data-i18n="topbar.themeLabel">THEME</label>
       <select class="auth-input profile-select" id="profile-theme" data-theme-select aria-label="Change theme" data-i18n-aria-label="theme.switch"><option value="system" data-i18n="theme.system">System</option><option value="light" data-i18n="theme.light">Light</option><option value="dark" data-i18n="theme.dark">Dark</option></select>
       <form class="profile-form" id="password-form">

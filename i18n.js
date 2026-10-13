@@ -2,8 +2,8 @@
 (() => {
   const STORAGE_KEY = 'notki.lang.v1';
   const FALLBACK_LANGUAGE = 'en';
-  const SUPPORTED_LANGUAGES = ['pl', 'en'];
-  const HTML_LANGUAGES = { pl: 'pl', en: 'en' };
+  const SUPPORTED_LANGUAGES = ['pl', 'en', 'de', 'fr', 'ja', 'ko', 'it', 'es'];
+  const HTML_LANGUAGES = { pl: 'pl', en: 'en', de: 'de', fr: 'fr', ja: 'ja', ko: 'ko', it: 'it', es: 'es' };
 
   const DICTIONARIES = window.notkiTranslations || {};
 
