@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.34'
+VERSION = '0.1.5.35'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -329,6 +329,7 @@ def initialize_database():
                 sort_order REAL NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS notes_user_idx ON notes(user_id);
+            CREATE INDEX IF NOT EXISTS notes_user_sort_idx ON notes(user_id, sort_order DESC);
             CREATE TABLE IF NOT EXISTS note_shares (
                 note_id TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
                 user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

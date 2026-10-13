@@ -1091,11 +1091,22 @@
     return output.innerHTML;
   }
 
+  const plainTextCache = new WeakMap();
+
+  // Memoizes extracted plain text for rich-text notes using a WeakMap keyed by the note object.
+  // Avoids repeated DOM node creation and HTML sanitization on every keystroke during search/render.
   function noteText(note) {
+    if (!note) return '';
     if (note.bodyFormat !== 1) return note.body || '';
+    const cached = plainTextCache.get(note);
+    if (cached && cached.body === note.body) {
+      return cached.text;
+    }
     const output = document.createElement('div');
     output.innerHTML = sanitizeRichHtml(note.body);
-    return (output.innerText || output.textContent || '').replace(/\n{3,}/g, '\n\n');
+    const text = (output.innerText || output.textContent || '').replace(/\n{3,}/g, '\n\n');
+    plainTextCache.set(note, { body: note.body, text });
+    return text;
   }
 
   function serializedEditorBody() {
