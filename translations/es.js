@@ -39,6 +39,8 @@ window.notkiTranslations.es = {
   'nav.newNote': 'Nueva nota',
   'nav.adminPanel': 'Panel de administración',
   'nav.storage': 'Guardado en el servidor',
+  'nav.storageOffline': 'Guardado localmente (Sin conexión)',
+  'nav.storageSyncing': 'Sincronizando...',
 
   'view.all': 'Todas las notas',
   'view.pinned': 'Fijadas',

@@ -39,6 +39,8 @@ window.notkiTranslations.pl = {
   'nav.newNote': 'Nowa notatka',
   'nav.adminPanel': 'Panel administracyjny',
   'nav.storage': 'Zapisane na serwerze',
+  'nav.storageOffline': 'Zapisano lokalnie (Tryb offline)',
+  'nav.storageSyncing': 'Synchronizowanie...',
 
   'view.all': 'Wszystkie notatki',
   'view.pinned': 'Przypięte',

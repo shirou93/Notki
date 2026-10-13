@@ -53,6 +53,84 @@
   let editorRange = null;
   let shareNoteId = null;
   let shareReturnFocus = null;
+  let isOffline = !navigator.onLine;
+  let isSyncing = false;
+  let pendingSync = false;
+
+  function getCacheKey(userId, key) {
+    return `notki.cache.${key}.${userId}`;
+  }
+
+  function saveLocalCache(userId, data) {
+    if (!userId) return;
+    try {
+      if (data.notes !== undefined) localStorage.setItem(getCacheKey(userId, 'notes'), JSON.stringify(data.notes));
+      if (data.sharedNotes !== undefined) localStorage.setItem(getCacheKey(userId, 'sharedNotes'), JSON.stringify(data.sharedNotes));
+      if (data.labels !== undefined) localStorage.setItem(getCacheKey(userId, 'labels'), JSON.stringify(data.labels));
+    } catch (e) {
+      console.error('Failed to save to local cache:', e);
+    }
+  }
+
+  function getLocalCache(userId) {
+    if (!userId) return { notes: null, sharedNotes: null, labels: null };
+    try {
+      const notes = JSON.parse(localStorage.getItem(getCacheKey(userId, 'notes')) || 'null');
+      const sharedNotes = JSON.parse(localStorage.getItem(getCacheKey(userId, 'sharedNotes')) || 'null');
+      const labels = JSON.parse(localStorage.getItem(getCacheKey(userId, 'labels')) || 'null');
+      return { notes, sharedNotes, labels };
+    } catch (e) {
+      return { notes: null, sharedNotes: null, labels: null };
+    }
+  }
+
+  function saveCachedUser(user) {
+    try {
+      if (user) localStorage.setItem('notki.cache.user', JSON.stringify(user));
+      else localStorage.removeItem('notki.cache.user');
+    } catch (e) {}
+  }
+
+  function getCachedUser() {
+    try {
+      return JSON.parse(localStorage.getItem('notki.cache.user') || 'null');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function setOnlineStatus(online) {
+    const changed = isOffline === online;
+    isOffline = !online;
+    updateStorageIndicator();
+    if (changed && online && currentUser) {
+      syncPendingChanges();
+    }
+  }
+
+  function updateStorageIndicator() {
+    const container = $('.storage-note');
+    if (!container) return;
+    const dot = container.querySelector('.storage-dot');
+    const label = container.querySelector('span:not(.storage-dot)');
+
+    if (isSyncing) {
+      if (dot) dot.style.background = '#e6c875'; // Yellow
+      if (label) label.textContent = t('nav.storageSyncing');
+    } else if (isOffline) {
+      if (dot) dot.style.background = '#e57373'; // Red/orange
+      if (label) label.textContent = t('nav.storageOffline');
+    } else if (currentUser && (hasPendingSync(currentUser.id) || pendingSync)) {
+      if (dot) dot.style.background = '#e6c875'; // Yellow
+      if (label) label.textContent = t('nav.storageSyncing');
+    } else {
+      if (dot) dot.style.background = '#a9d377'; // Green
+      if (label) label.textContent = t('nav.storage');
+    }
+  }
+
+  window.addEventListener('online', () => setOnlineStatus(true));
+  window.addEventListener('offline', () => setOnlineStatus(false));
 
   function getTaskStatsFromElement(rootElement) {
     if (!rootElement) return { total: 0, completed: 0, percent: 0 };
@@ -195,10 +273,18 @@
     const headers = new Headers(options.headers || {});
     if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
     headers.set('Accept-Language', window.i18n.getLanguage());
-    const response = await fetch(path, { cache: 'no-store', ...options, headers, credentials: 'same-origin' });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || t('error.server'));
-    return payload;
+    try {
+      const response = await fetch(path, { cache: 'no-store', ...options, headers, credentials: 'same-origin' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || t('error.server'));
+      setOnlineStatus(true);
+      return payload;
+    } catch (err) {
+      if (err.name === 'TypeError' || err.message === 'Failed to fetch') {
+        setOnlineStatus(false);
+      }
+      throw err;
+    }
   }
 
   function showAuth(mode, message = '') {
@@ -221,11 +307,26 @@
 
   async function showApp(user) {
     currentUser = user;
-    const [response, shared] = await Promise.all([apiRequest('/api/notes'), apiRequest('/api/shared')]);
-    notes = response.notes;
-    sharedNotes = shared.notes;
+    saveCachedUser(user);
+    userLabels = user.labels || [];
+
+    let loadedFromOnline = false;
+    try {
+      const [response, shared] = await Promise.all([apiRequest('/api/notes'), apiRequest('/api/shared')]);
+      notes = response.notes;
+      sharedNotes = shared.notes;
+      loadedFromOnline = true;
+      saveLocalCache(user.id, { notes, sharedNotes, labels: userLabels });
+    } catch (err) {
+      // Offline fallback
+      const cached = getLocalCache(user.id);
+      notes = cached.notes || [];
+      sharedNotes = cached.sharedNotes || [];
+      if (cached.labels) userLabels = cached.labels;
+    }
+
     const migratedKey = `${MIGRATION_KEY}.${user.id}`;
-    if (!notes.length && legacyNotes.length && !localStorage.getItem(migratedKey)) {
+    if (loadedFromOnline && !notes.length && legacyNotes.length && !localStorage.getItem(migratedKey)) {
       if (window.confirm(t('auth.migrateConfirm', { count: legacyNotes.length, email: user.email }))) {
         notes = legacyNotes;
         await apiRequest('/api/notes', { method: 'PUT', body: JSON.stringify({ notes }) });
@@ -244,11 +345,15 @@
     elements.profileAccount.textContent = user.email;
     if (elements.sidebarUserEmail) elements.sidebarUserEmail.textContent = user.email;
     renderAvatar(user);
-    userLabels = user.labels || [];
     document.body.classList.remove('is-auth');
     applyHashIntent();
     render();
     readSharedNote();
+    updateStorageIndicator();
+
+    if (loadedFromOnline) {
+      syncPendingChanges();
+    }
   }
 
     function applyHashIntent() {
@@ -581,7 +686,13 @@
       }
       showAuth(inviteToken ? 'register' : 'login');
     } catch (error) {
-      showAuth(inviteToken ? 'register' : 'login', t('auth.connectionFailed', { message: error.message }));
+      const cachedUser = getCachedUser();
+      if (cachedUser) {
+        setOnlineStatus(false);
+        await showApp(cachedUser);
+      } else {
+        showAuth(inviteToken ? 'register' : 'login', t('auth.connectionFailed', { message: error.message }));
+      }
     }
   }
 
@@ -1555,11 +1666,93 @@
       }
     }
 
+  function queueSync(userId) {
+    if (!userId) return;
+    try {
+      localStorage.setItem(`notki.sync.pending.${userId}`, '1');
+    } catch (e) {}
+    pendingSync = true;
+    updateStorageIndicator();
+  }
+
+  function clearSyncQueue(userId) {
+    if (!userId) return;
+    try {
+      localStorage.removeItem(`notki.sync.pending.${userId}`);
+    } catch (e) {}
+    pendingSync = false;
+    updateStorageIndicator();
+  }
+
+  function hasPendingSync(userId) {
+    if (!userId) return false;
+    try {
+      return localStorage.getItem(`notki.sync.pending.${userId}`) === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function syncPendingChanges() {
+    if (!currentUser || isOffline || isSyncing) return;
+    if (!hasPendingSync(currentUser.id) && !pendingSync) return;
+
+    isSyncing = true;
+    updateStorageIndicator();
+
+    try {
+      // 1. Fetch remote notes
+      const remoteResponse = await apiRequest('/api/notes');
+      const remoteNotes = remoteResponse.notes || [];
+
+      // 2. Merge local and remote notes
+      // Keyed by ID. If modified dates differ, take the latest.
+      const noteMap = new Map();
+      remoteNotes.forEach(note => noteMap.set(note.id, note));
+
+      notes.forEach(localNote => {
+        const remoteNote = noteMap.get(localNote.id);
+        if (!remoteNote) {
+          noteMap.set(localNote.id, localNote);
+        } else {
+          const localTime = Date.parse(localNote.updatedAt) || 0;
+          const remoteTime = Date.parse(remoteNote.updatedAt) || 0;
+          if (localTime > remoteTime) {
+            noteMap.set(localNote.id, localNote);
+          }
+        }
+      });
+
+      const mergedNotes = [...noteMap.values()];
+      mergedNotes.forEach((note, index) => { note.order = mergedNotes.length - index; });
+
+      // 3. Save merged list to server
+      const snapshot = JSON.stringify({ notes: mergedNotes });
+      await apiRequest('/api/notes', { method: 'PUT', body: snapshot });
+
+      // 4. Update memory & cache
+      notes = mergedNotes;
+      saveLocalCache(currentUser.id, { notes: mergedNotes });
+      clearSyncQueue(currentUser.id);
+      render();
+    } catch (err) {
+      console.error('Failed syncPendingChanges:', err);
+    } finally {
+      isSyncing = false;
+      updateStorageIndicator();
+    }
+  }
+
   function persist() {
     notes.forEach((note, index) => { note.order = notes.length - index; });
     if (!currentUser) return;
+    saveLocalCache(currentUser.id, { notes });
+    queueSync(currentUser.id);
     const snapshot = JSON.stringify({ notes });
-    saveQueue = saveQueue.catch(() => {}).then(() => apiRequest('/api/notes', { method: 'PUT', body: snapshot }));
+    saveQueue = saveQueue.catch(() => {}).then(() => apiRequest('/api/notes', { method: 'PUT', body: snapshot }))
+      .then(() => {
+        clearSyncQueue(currentUser.id);
+      });
     saveQueue.catch(error => showToast(t('editor.saveFailed', { message: error.message })));
   }
 
@@ -2876,6 +3069,7 @@
   window.i18n.onChange(() => {
     applyTheme(document.documentElement.dataset.theme);
     if (!elements.authView.hidden) showAuth(elements.registerForm.hidden ? 'login' : 'register', elements.authMessage.hidden ? '' : elements.authMessage.textContent);
+    updateStorageIndicator();
     if (currentUser) render();
     if (activeId) {
       const current = notes.find(note => note.id === activeId);

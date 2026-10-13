@@ -39,6 +39,8 @@ window.notkiTranslations.ko = {
   'nav.newNote': '새 노트',
   'nav.adminPanel': '관리자 패널',
   'nav.storage': '서버에 저장됨',
+  'nav.storageOffline': '로컬에 저장됨 (오프라인)',
+  'nav.storageSyncing': '동기화 중...',
 
   'view.all': '모든 노트',
   'view.pinned': '고정됨',

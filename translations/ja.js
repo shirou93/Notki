@@ -39,6 +39,8 @@ window.notkiTranslations.ja = {
   'nav.newNote': '新規ノート',
   'nav.adminPanel': '管理パネル',
   'nav.storage': 'サーバーに保存済み',
+  'nav.storageOffline': 'ローカルに保存済み (オフライン)',
+  'nav.storageSyncing': '同期中...',
 
   'view.all': 'すべてのノート',
   'view.pinned': 'ピン留め',

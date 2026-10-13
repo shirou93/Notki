@@ -39,6 +39,8 @@ window.notkiTranslations.en = {
   'nav.newNote': 'New note',
   'nav.adminPanel': 'Admin panel',
   'nav.storage': 'Saved on the server',
+  'nav.storageOffline': 'Saved locally (Offline)',
+  'nav.storageSyncing': 'Syncing...',
 
   'view.all': 'All notes',
   'view.pinned': 'Pinned',
