@@ -11,6 +11,8 @@ A fast, lightweight, and private browser-based note-taking app built with pure P
 - 📝 **Note Creation & Editing**: Rich text formatting, bulleted and numbered lists, and interactive checklists (tasks).
 - 📌 **Organization**: Pin important notes, archive, apply labels, and set colors for easy categorization.
 - 🤝 **Sharing**: Securely share notes with other server users with read or edit permissions.
+- 📶 **Offline Support & Sync**: Access and edit notes offline with automatic local caching and manual synchronization when reconnecting.
+- 👤 **User Profiles & Avatars**: Profile customization with custom user avatars.
 - 🔐 **Security**:
   - Two-Factor Authentication (2FA) via TOTP apps and Passkeys / WebAuthn security keys.
   - Mandatory 2FA enforcement for all users configurable by admins.
