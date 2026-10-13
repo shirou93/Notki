@@ -8,14 +8,14 @@ class QRError(Exception):
 EXP = [0] * 512
 LOG = [0] * 256
 x = 1
-for i in range(256):
+for i in range(255):
     EXP[i] = x
     LOG[x] = i
     x <<= 1
     if x & 256:
         x ^= 285
-for i in range(256, 512):
-    EXP[i] = EXP[i - 256]
+for i in range(255, 512):
+    EXP[i] = EXP[i - 255]
 
 def gf_mul(x, y):
     if x == 0 or y == 0:
@@ -46,18 +46,18 @@ def rs_encode(data, nsym):
     return res[len(data):]
 
 # QR Version Capacity and EC Specs (Version 1..10, EC level M)
-# Format: (version, size, ec_codewords_per_block, num_blocks, total_data_bytes)
+# Format: (version, size, [(block_count, total_codewords_per_block, data_codewords_per_block), ...])
 QR_SPECS_M = [
-    (1, 21, 10, 1, 16),
-    (2, 25, 16, 1, 28),
-    (3, 29, 26, 1, 44),
-    (4, 33, 18, 2, 64),
-    (5, 37, 24, 2, 86),
-    (6, 41, 16, 4, 108),
-    (7, 45, 18, 4, 124),
-    (8, 49, 22, 4, 154),
-    (9, 53, 20, 5, 182),
-    (10, 57, 24, 5, 216),
+    (1, 21, [(1, 26, 16)]),
+    (2, 25, [(1, 44, 28)]),
+    (3, 29, [(1, 70, 44)]),
+    (4, 33, [(2, 50, 32)]),
+    (5, 37, [(2, 67, 43)]),
+    (6, 41, [(4, 43, 27)]),
+    (7, 45, [(4, 49, 31)]),
+    (8, 49, [(2, 60, 38), (2, 61, 39)]),
+    (9, 53, [(3, 58, 36), (2, 59, 37)]),
+    (10, 57, [(4, 69, 43), (1, 70, 44)]),
 ]
 
 ALIGNMENT_PATTERNS = {
@@ -66,24 +66,31 @@ ALIGNMENT_PATTERNS = {
     4: [6, 26],
     5: [6, 30],
     6: [6, 34],
-    7: [6, 38],
-    8: [6, 42],
-    9: [6, 46],
-    10: [6, 50],
+    7: [6, 22, 38],
+    8: [6, 24, 42],
+    9: [6, 26, 46],
+    10: [6, 28, 50],
 }
 
-# Format info string generator (15 bits: 5 data bits + 10 BCH bits ^ mask 0x5465)
+# Format info string generator (15 bits: 5 data bits + 10 BCH bits ^ mask 0x5412)
 # EC Level M = 00
 def get_format_info(mask_pattern):
-    data = (0 << 3) | mask_pattern  # EC Level M is 00
+    data = (0b00 << 3) | mask_pattern  # EC Level M is 00
     g = 0x537  # BCH generator 10100110111
     rem = data << 10
     for i in range(4, -1, -1):
         if (rem >> (i + 10)) & 1:
             rem ^= g << i
     fmt = (data << 10) | rem
-    return fmt ^ 0x5465
+    return fmt ^ 0x5412
 
+def get_version_info(version):
+    g = 0x1F25
+    rem = version << 12
+    for i in range(5, -1, -1):
+        if (rem >> (i + 12)) & 1:
+            rem ^= g << i
+    return (version << 12) | rem
 
 def generate_qr_matrix(text):
     data_bytes = text.encode('utf-8')
@@ -92,17 +99,19 @@ def generate_qr_matrix(text):
     # Find suitable QR version
     spec = None
     for s in QR_SPECS_M:
-        # Byte mode overhead: 4 bits mode + 8 bits len (v1-9) or 16 bits len (v10+)
-        len_bits = 16 if s[0] >= 10 else 8
+        version, size, blocks_spec = s
+        total_data_bytes = sum(count * dcnt for count, tcnt, dcnt in blocks_spec)
+        len_bits = 16 if version >= 10 else 8
         needed_bytes = (4 + len_bits + data_len * 8 + 7) // 8
-        if needed_bytes <= s[4]:
+        if needed_bytes <= total_data_bytes:
             spec = s
             break
 
     if not spec:
         raise QRError("Data too long for QR generator")
 
-    version, size, ec_per_block, num_blocks, total_data_bytes = spec
+    version, size, blocks_spec = spec
+    total_data_bytes = sum(count * dcnt for count, tcnt, dcnt in blocks_spec)
 
     # Build bit buffer
     bits = []
@@ -141,17 +150,16 @@ def generate_qr_matrix(text):
         raw_data.append(val)
 
     # Divide data into blocks and compute EC
-    block_len = total_data_bytes // num_blocks
-    extra = total_data_bytes % num_blocks
     data_blocks = []
     ec_blocks = []
     offset = 0
-    for i in range(num_blocks):
-        blen = block_len + (1 if i >= num_blocks - extra else 0)
-        block = raw_data[offset : offset + blen]
-        offset += blen
-        data_blocks.append(block)
-        ec_blocks.append(rs_encode(block, ec_per_block))
+    for count, tcnt, dcnt in blocks_spec:
+        ec_per_block = tcnt - dcnt
+        for _ in range(count):
+            block = raw_data[offset : offset + dcnt]
+            offset += dcnt
+            data_blocks.append(block)
+            ec_blocks.append(rs_encode(block, ec_per_block))
 
     # Interleave codewords
     final_codewords = []
@@ -160,9 +168,11 @@ def generate_qr_matrix(text):
         for b in data_blocks:
             if i < len(b):
                 final_codewords.append(b[i])
-    for i in range(ec_per_block):
+    max_ec_len = max(len(b) for b in ec_blocks)
+    for i in range(max_ec_len):
         for b in ec_blocks:
-            final_codewords.append(b[i])
+            if i < len(b):
+                final_codewords.append(b[i])
 
     # Build matrix grid
     # grid: -1 = unassigned, 0 = white, 1 = black
@@ -191,13 +201,6 @@ def generate_qr_matrix(text):
     place_finder(0, size - 7)
     place_finder(size - 7, 0)
 
-    # Timing patterns
-    for i in range(8, size - 8):
-        if not reserved[6][i]:
-            set_module(6, i, 1 if i % 2 == 0 else 0)
-        if not reserved[i][6]:
-            set_module(i, 6, 1 if i % 2 == 0 else 0)
-
     # Alignment patterns
     if version in ALIGNMENT_PATTERNS:
         coords = ALIGNMENT_PATTERNS[version]
@@ -209,6 +212,13 @@ def generate_qr_matrix(text):
                     for dc in range(-2, 3):
                         is_black = (abs(dr) == 2 or abs(dc) == 2) or (dr == 0 and dc == 0)
                         set_module(r + dr, c + dc, 1 if is_black else 0)
+
+    # Timing patterns
+    for i in range(8, size - 8):
+        if not reserved[6][i]:
+            set_module(6, i, 1 if i % 2 == 0 else 0)
+        if not reserved[i][6]:
+            set_module(i, 6, 1 if i % 2 == 0 else 0)
 
     # Reserve format info areas
     for i in range(9):
@@ -222,6 +232,14 @@ def generate_qr_matrix(text):
         if not reserved[size - 1 - i][8]:
             set_module(size - 1 - i, 8, 0)
     set_module(size - 8, 8, 1)  # Always dark module
+
+    # Reserve version info areas (Version 7+)
+    if version >= 7:
+        v_bits = get_version_info(version)
+        for i in range(18):
+            mod = (v_bits >> i) & 1
+            set_module(i // 3, i % 3 + size - 11, mod)
+            set_module(i % 3 + size - 11, i // 3, mod)
 
     # Place data bits
     bit_index = 0
@@ -256,23 +274,33 @@ def generate_qr_matrix(text):
                 if (r + c) % 2 == 0:
                     final_matrix[r][c] ^= 1
 
-    # Write format information
+    # Write format information (ISO/IEC 18004)
     fmt_bits = get_format_info(mask_pattern)
-    fmt_list = [(fmt_bits >> i) & 1 for i in range(15)]
 
-    # Top-left format info
-    coords_tl = [(8,0),(8,1),(8,2),(8,3),(8,4),(8,5),(8,7),(8,8),(7,8),(5,8),(4,8),(3,8),(2,8),(1,8),(0,8)]
-    for idx, (r, c) in enumerate(coords_tl):
-        final_matrix[r][c] = fmt_list[idx]
+    # Vertical format info (top: rows 0..5, 7..8 -> bits 14..7; bottom: rows size-7..size-1 -> bits 6..0)
+    for idx in range(15):
+        mod = (fmt_bits >> (14 - idx)) & 1
+        if idx < 6:
+            final_matrix[idx][8] = mod
+        elif idx < 8:
+            final_matrix[idx + 1][8] = mod
+        else:
+            final_matrix[size - 15 + idx][8] = mod
 
-    # Split format info (top-right and bottom-left)
-    coords_br = [(8, size-1), (8, size-2), (8, size-3), (8, size-4), (8, size-5), (8, size-6), (8, size-7),
-                 (size-7, 8), (size-6, 8), (size-5, 8), (size-4, 8), (size-3, 8), (size-2, 8), (size-1, 8)]
-    for idx, (r, c) in enumerate(coords_br[:7]):
-        final_matrix[r][c] = fmt_list[idx]
-    for idx, (r, c) in enumerate(coords_br[7:]):
-        final_matrix[r][c] = fmt_list[idx + 7]
-    final_matrix[size - 8][8] = fmt_list[14]
+    # Horizontal format info (left: cols 0..5, 7..8 -> bits 0..7; right: cols size-7..size-1 -> bits 8..14)
+    for idx in range(15):
+        mod = (fmt_bits >> idx) & 1
+        if idx < 6:
+            final_matrix[8][idx] = mod
+        elif idx == 6:
+            final_matrix[8][7] = mod
+        elif idx == 7:
+            final_matrix[8][8] = mod
+        else:
+            final_matrix[8][size - 15 + idx] = mod
+
+    # Fixed dark module
+    final_matrix[size - 8][8] = 1
 
     return final_matrix
 
