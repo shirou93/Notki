@@ -1739,6 +1739,9 @@
     dragHandle.addEventListener('pointerdown', event => {
       if (event.button !== 0) return;
       event.preventDefault();
+      if (document.activeElement && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+        document.activeElement.blur();
+      }
       try { dragHandle.setPointerCapture(event.pointerId); } catch {}
       dragState = { noteId: note.id, card, grid: card.parentElement, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, active: false, gapIndex: null, others: [], startIndex: 0 };
     });
@@ -1793,7 +1796,11 @@
       const item = handle.closest('li');
       if (!item || !item.closest('ul.task-list')) return;
 
+      event.preventDefault();
       event.stopPropagation();
+      if (document.activeElement && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+        document.activeElement.blur();
+      }
       cleanupAllTaskDrags();
       cardTaskDragItem = item;
       cardTaskPointerId = event.pointerId;
@@ -2313,6 +2320,15 @@
     }
   });
   elements.noteBody.addEventListener('pointerdown', event => {
+    if (event.target.closest?.('input[type="checkbox"], .task-checkbox, .task-drag-handle')) {
+      if (document.activeElement && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+        document.activeElement.blur();
+      }
+      if (event.target.closest?.('.task-drag-handle')) {
+        event.preventDefault();
+      }
+      return;
+    }
     if (event.button === 0) placeTaskCaretFromPointer(event);
   });
   elements.noteBody.addEventListener('change', event => {
@@ -2389,6 +2405,11 @@
     const item = handle.closest('li');
     if (!item || !item.closest('ul.task-list')) return;
 
+    event.preventDefault();
+    event.stopPropagation();
+    if (document.activeElement && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+      document.activeElement.blur();
+    }
     cleanupAllTaskDrags();
     taskDragItem = item;
     taskPointerId = event.pointerId;
@@ -2864,4 +2885,17 @@
       elements.sharedPreview.textContent = noteText(pendingSharedNote) || t('editor.emptyNote');
     }
   });
+
+  document.addEventListener('pointerdown', event => {
+    const isCheckbox = event.target.matches?.('input[type="checkbox"], .task-checkbox') || event.target.closest?.('.task-checkbox');
+    const isDragHandle = event.target.closest?.('.task-drag-handle, .card-drag');
+    if (isCheckbox || isDragHandle) {
+      if (document.activeElement && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+        document.activeElement.blur();
+      }
+    }
+    if (isDragHandle) {
+      event.preventDefault();
+    }
+  }, true);
 })();
