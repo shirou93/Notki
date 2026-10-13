@@ -2320,13 +2320,21 @@
     }
   });
   elements.noteBody.addEventListener('pointerdown', event => {
-    if (event.target.closest?.('input[type="checkbox"], .task-checkbox, .task-drag-handle')) {
+    const checkbox = event.target.closest?.('input[type="checkbox"], .task-checkbox');
+    if (checkbox) {
       if (document.activeElement && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
         document.activeElement.blur();
       }
-      if (event.target.closest?.('.task-drag-handle')) {
-        event.preventDefault();
+      event.preventDefault();
+      checkbox.checked = !checkbox.checked;
+      checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+      return;
+    }
+    if (event.target.closest?.('.task-drag-handle')) {
+      if (document.activeElement && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+        document.activeElement.blur();
       }
+      event.preventDefault();
       return;
     }
     if (event.button === 0) placeTaskCaretFromPointer(event);
