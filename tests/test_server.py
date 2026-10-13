@@ -481,7 +481,7 @@ class ServerFlowTests(unittest.TestCase):
             self.new_client(), 'GET', '/api/notes', headers={'Accept-Language': 'pl-PL,pl;q=0.9'},
         )
         self.assertEqual(status, 401)
-        self.assertEqual(error['error'], 'Zaloguj się, aby kontynuować.')
+        self.assertEqual(error['error'], 'Sign in to continue.')
 
         status, error = self.request(self.new_client(), 'GET', '/api/notes')
         self.assertEqual(status, 401)
@@ -513,7 +513,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.58', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.58'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.59', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.59'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -537,7 +537,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.58'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.59'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
@@ -940,7 +940,7 @@ class FirstRunSetupTests(unittest.TestCase):
             'email': 'admin@example.com', 'password': 'short',
         }, {'Accept-Language': 'pl-PL'})
         self.assertEqual(status, 400)
-        self.assertEqual(result['error'], 'Hasło musi mieć co najmniej 12 znaków.')
+        self.assertEqual(result['error'], 'The password must be at least 12 characters long.')
 
         status, result = self.request('POST', '/api/setup/admin', {
             'email': 'admin@example.com', 'password': 'secure-first-admin-password',
