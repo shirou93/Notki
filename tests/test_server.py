@@ -267,6 +267,24 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertIn('invitation', error['error'].lower())
 
+    def test_log_message_handles_missing_path_and_command(self):
+        import socket
+        # Send a malformed raw HTTP request to trigger server's parse_request error and log_message
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect(('127.0.0.1', self.http_server.server_port))
+        s.sendall(b'INVALID_REQUEST_LINE\r\n\r\n')
+        s.recv(1024)
+        s.close()
+
+        # Also test log_message directly on a mock handler without path or command attributes
+        class MockHandler(server.NotkiHandler):
+            def __init__(self):
+                self.client_address = ('127.0.0.1', 12345)
+
+        handler = MockHandler()
+        # Should not raise AttributeError when logging
+        handler.log_message('%s', 'test error log')
+
     def test_login_user_enumeration_timing_mitigation(self):
         # Verify that non-existent user and wrong password return identical error responses
         status1, res1 = self.request(self.new_client(), 'POST', '/api/login', {
@@ -495,7 +513,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.50', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.50'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.51', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.51'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -519,7 +537,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.50'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.51'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
