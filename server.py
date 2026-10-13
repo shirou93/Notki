@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.50'
+VERSION = '0.1.5.51'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -1802,7 +1802,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def log_message(self, format_string, *args):
         msg = format_string % args
         add_log('INFO', msg)
-        super().log_message('%s %s', self.command, urlsplit(self.path).path)
+        command = getattr(self, 'command', None) or '-'
+        path = getattr(self, 'path', None)
+        path_str = urlsplit(path).path if path else '-'
+        super().log_message('%s %s', command, path_str)
 
 
 def main():
