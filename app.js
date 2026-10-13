@@ -1999,16 +1999,16 @@
     const labelLeft = $('.card-swipe-label-left', card);
     const iconLeft = $('.card-swipe-icon-left', card);
 
-    if (labelRight) labelRight.textContent = t(note.pinned ? 'editor.unpin' : 'editor.pin');
+    if (labelRight) labelRight.textContent = t(note.pinned ? 'editor.unpinTitle' : 'editor.pinTitle');
     if (labelLeft) {
-      if (view === 'trash') labelLeft.textContent = t('editor.deleteForever');
-      else if (view === 'archive') labelLeft.textContent = t('editor.trashedToast');
-      else labelLeft.textContent = t('editor.archive');
+      if (view === 'trash') labelLeft.textContent = t('editor.deleteForeverTitle');
+      else if (view === 'archive') labelLeft.textContent = t('editor.deleteTitle');
+      else labelLeft.textContent = t('editor.archiveTitle');
     }
     if (iconLeft) {
       if (view === 'trash') iconLeft.textContent = '🗑';
       else if (view === 'archive') iconLeft.textContent = '🗑';
-      else iconLeft.textContent = '▣';
+      else iconLeft.textContent = '📦';
     }
 
     const cardInner = $('.card-inner', card);
@@ -2495,7 +2495,7 @@
     elements.pin.classList.toggle('is-pinned', note.pinned);
     elements.pin.setAttribute('aria-label', t(note.pinned ? 'editor.unpin' : 'editor.pin'));
     elements.pin.title = t(note.pinned ? 'editor.unpinTitle' : 'editor.pinTitle');
-    elements.archive.textContent = note.deleted ? '↶' : '▣';
+    elements.archive.textContent = note.deleted ? '↶' : '📦';
     elements.archive.setAttribute('aria-label', t(note.deleted ? 'editor.restoreTrash' : note.archived ? 'editor.unarchive' : 'editor.archive'));
     elements.archive.title = t(note.deleted || note.archived ? 'editor.unarchiveTitle' : 'editor.archiveTitle');
     elements.delete.setAttribute('aria-label', t(note.deleted ? 'editor.deleteForever' : 'editor.delete'));
