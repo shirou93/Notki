@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.49'
+VERSION = '0.1.5.50'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -491,10 +491,24 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('Nieprawidłowe dane żądania.')
         return value
 
+    def get_forwarded_host(self):
+        forwarded = self.headers.get('X-Forwarded-Host')
+        if forwarded:
+            return forwarded.split(',')[0].strip()
+        return self.headers.get('Host')
+
+    def get_forwarded_proto(self):
+        forwarded = self.headers.get('X-Forwarded-Proto')
+        if forwarded:
+            return forwarded.split(',')[0].strip().lower()
+        return ''
+
     def check_origin(self):
         origin = self.headers.get('Origin')
-        if origin and urlsplit(origin).netloc != self.headers.get('Host'):
-            raise APIError('Żądanie z innej domeny zostało zablokowane.', 403)
+        if origin:
+            expected_host = self.get_forwarded_host()
+            if expected_host and urlsplit(origin).netloc.lower() != expected_host.lower():
+                raise APIError('Żądanie z innej domeny zostało zablokowane.', 403)
 
     def has_admin(self):
         with database() as connection:
@@ -507,7 +521,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             remote_ip = ipaddress.ip_address(self.client_address[0].split('%', 1)[0])
         except ValueError:
             return False
-        host = urlsplit(f"//{self.headers.get('Host', '')}").hostname or ''
+        host = urlsplit(f"//{self.get_forwarded_host() or ''}").hostname or ''
         return remote_ip.is_loopback and host.lower() in {'localhost', '127.0.0.1', '::1'}
 
     def send_redirect(self, path):
@@ -540,7 +554,11 @@ class NotkiHandler(BaseHTTPRequestHandler):
         return user
 
     def session_headers(self, token, max_age=SESSION_DAYS * 24 * 60 * 60):
-        secure = '; Secure' if os.environ.get('NOTKI_COOKIE_SECURE') == '1' else ''
+        is_https = (
+            os.environ.get('NOTKI_COOKIE_SECURE') == '1' or
+            self.get_forwarded_proto() == 'https'
+        )
+        secure = '; Secure' if is_https else ''
         return [('Set-Cookie', f'{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={max_age}{secure}')]
 
     def new_session(self, user_id):
@@ -1574,8 +1592,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 'INSERT INTO invites (token_hash, created_by, created_at, expires_at) VALUES (?, ?, ?, ?)',
                 (token_hash(token), user['id'], iso_time(created), iso_time(expires)),
             )
-        host = self.headers.get('Host', 'localhost:8000')
-        scheme = 'https' if os.environ.get('NOTKI_PUBLIC_HTTPS') == '1' else 'http'
+        host = self.get_forwarded_host() or 'localhost:8000'
+        proto = self.get_forwarded_proto()
+        scheme = 'https' if (proto == 'https' or os.environ.get('NOTKI_PUBLIC_HTTPS') == '1') else 'http'
         self.send_json({'url': f'{scheme}://{host}/?invite={token}', 'expiresAt': iso_time(expires)}, 201)
 
     def save_notes(self, user_id, notes):
