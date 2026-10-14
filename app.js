@@ -716,17 +716,26 @@
     renderBackups(backupList.backups);
 
     if (settings) {
-      $('#admin-require-2fa').checked = settings.require2FA;
+      if ($('#admin-require-2fa')) $('#admin-require-2fa').checked = settings.require2FA;
+      if ($('#admin-session-days')) $('#admin-session-days').value = settings.sessionDays ?? 30;
     }
   }
 
-  $('#admin-require-2fa')?.addEventListener('change', async event => {
+  async function saveAdminSettings() {
     try {
-      await apiRequest('/api/admin/settings', { method: 'POST', body: JSON.stringify({ require2FA: event.target.checked }) });
+      const require2FA = $('#admin-require-2fa')?.checked ?? false;
+      const sessionDays = parseInt($('#admin-session-days')?.value, 10) || 30;
+      await apiRequest('/api/admin/settings', {
+        method: 'POST',
+        body: JSON.stringify({ require2FA, sessionDays })
+      });
     } catch (e) {
       alert(e.message);
     }
-  });
+  }
+
+  $('#admin-require-2fa')?.addEventListener('change', saveAdminSettings);
+  $('#admin-session-days')?.addEventListener('change', saveAdminSettings);
 
   function setBackupMessage(message, isError = false) {
     const element = document.querySelector('#backup-message');
@@ -1002,13 +1011,15 @@
   async function loadDirectory() {
     try {
       const { users } = await apiRequest('/api/users');
-      elements.shareDirectory.replaceChildren(...users.map(user => {
+      const filtered = users.filter(user => user.email !== currentUser?.email);
+      elements.shareEmail.replaceChildren(...filtered.map(user => {
         const option = document.createElement('option');
         option.value = user.email;
+        option.textContent = user.email;
         return option;
       }));
     } catch {
-      // The directory is only a convenience; typing an address still works.
+      // Failed to load directory
     }
   }
 
@@ -1064,14 +1075,30 @@
       renderShareList(shares);
       elements.shareEmail.value = '';
       showShareMessage(t('share.granted'));
-      const targetNote = notes.find(item => item.id === shareNoteId);
+      const targetNote = notes.find(item => item.id === shareNoteId) || sharedNotes.find(item => item.id === shareNoteId);
       if (targetNote) {
         targetNote.shareCount = shares.length;
+        updateCardShareState(shareNoteId, shares.length);
         render();
       }
     } catch (error) {
       showShareMessage(t('share.failed', { message: error.message }), true);
     }
+  }
+
+  function updateCardShareState(noteId, shareCount) {
+    const cards = $$(`.note-card[data-id="${CSS.escape ? CSS.escape(noteId) : noteId}"]`);
+    cards.forEach(card => {
+      const shareBtn = $('.card-share', card);
+      if (!shareBtn) return;
+      const isSharedOut = Boolean(shareCount && shareCount > 0);
+      if (isSharedOut) {
+        shareBtn.classList.add('is-shared');
+        shareBtn.hidden = false;
+      } else {
+        shareBtn.classList.remove('is-shared');
+      }
+    });
   }
 
   async function revokeShare(userId) {
@@ -1080,9 +1107,10 @@
       const { shares } = await apiRequest(`/api/notes/${encodeURIComponent(shareNoteId)}/shares/${userId}`, { method: 'DELETE' });
       renderShareList(shares);
       showShareMessage(t('share.revoked'));
-      const targetNote = notes.find(item => item.id === shareNoteId);
+      const targetNote = notes.find(item => item.id === shareNoteId) || sharedNotes.find(item => item.id === shareNoteId);
       if (targetNote) {
         targetNote.shareCount = shares.length;
+        updateCardShareState(shareNoteId, shares.length);
         render();
       }
     } catch (error) {
@@ -2686,6 +2714,57 @@
       const span = document.createElement('span');
       span.textContent = label;
 
+      const btnWrap = document.createElement('div');
+      btnWrap.style.display = 'flex';
+      btnWrap.style.gap = '6px';
+
+      const editBtn = document.createElement('button');
+      editBtn.className = 'button-secondary';
+      editBtn.type = 'button';
+      editBtn.style.padding = '2px 8px';
+      editBtn.textContent = t('labels.edit');
+      editBtn.addEventListener('click', async () => {
+        const renamed = prompt(t('labels.title'), label);
+        if (renamed === null) return;
+        const newLabel = renamed.trim().toLowerCase();
+        if (!newLabel || newLabel === label) return;
+        if (userLabels.includes(newLabel)) {
+          showToast(t('labels.alreadyExists') || 'Label already exists.');
+          return;
+        }
+
+        const oldLabel = label;
+        userLabels = userLabels.map(l => l === oldLabel ? newLabel : l);
+
+        try {
+          await apiRequest('/api/account/labels', {
+            method: 'POST',
+            body: JSON.stringify({ labels: userLabels })
+          });
+
+          let notesUpdated = false;
+          notes.forEach(note => {
+            if (Array.isArray(note.tags) && note.tags.includes(oldLabel)) {
+              note.tags = note.tags.map(t => t === oldLabel ? newLabel : t);
+              notesUpdated = true;
+            }
+          });
+
+          if (notesUpdated) {
+            persist();
+          }
+
+          renderLabelsEditList();
+          render();
+          if (activeId) {
+            const note = notes.find(item => item.id === activeId) || sharedNotes.find(item => item.id === activeId);
+            if (note) renderLabels(note.tags || []);
+          }
+        } catch (error) {
+          showToast(error.message);
+        }
+      });
+
       const delBtn = document.createElement('button');
       delBtn.className = 'share-revoke';
       delBtn.type = 'button';
@@ -2707,7 +2786,8 @@
         }
       });
 
-      item.append(span, delBtn);
+      btnWrap.append(editBtn, delBtn);
+      item.append(span, btnWrap);
       list.append(item);
     });
   }

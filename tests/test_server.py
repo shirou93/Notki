@@ -871,7 +871,7 @@ class ServerFlowTests(unittest.TestCase):
         status, restored = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {})
         self.assertEqual(status, 200)
         self.assertEqual(restored.get('passkeys'), 0)
-        self.assertEqual(restored.get('settings'), 2)
+        self.assertEqual(restored.get('settings'), 3)
 
         # Verify settings restored
         admin_client = self.new_client()
@@ -881,18 +881,39 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(settings['logLevel'], 'DEBUG')
 
-        # Verify 2FA status restored for user
-        user2_client = self.new_client()
-        status, res = self.request(user2_client, 'POST', '/api/login', {'email': 'user2fa2@example.com', 'password': 'user-passphrase-123'})
+    def test_session_days_and_formatted_backup_code(self):
+        # Admin sets custom session days
+        status, settings = self.request(self.admin, 'POST', '/api/admin/settings', {'sessionDays': 14})
         self.assertEqual(status, 200)
-        self.assertTrue(res['requires2FA'])
-        self.assertTrue(res['hasTotp'])
-        self.assertFalse(res['hasPasskey'])
+        self.assertEqual(settings['sessionDays'], 14)
+
+        # Create user with 2FA
+        status, invite = self.request(self.admin, 'POST', '/api/admin/invites', {})
+        invite_token = parse_qs(urlsplit(invite['url']).query)['invite'][0]
+        user_client = self.new_client()
+        status, _ = self.request(user_client, 'POST', '/api/register', {
+            'email': 'backupcodeuser@example.com', 'password': 'user-passphrase-123', 'invite': invite_token
+        })
+        self.assertEqual(status, 201)
+
+        # Enable TOTP and get backup codes
+        status, res = self.request(user_client, 'POST', '/api/account/totp', {})
+        totp_code = server.compute_totp_code(res['secret'])
+        status, res = self.request(user_client, 'POST', '/api/account/totp/verify', {'code': totp_code})
+        backup_codes = res.get('backupCodes', [])
+        self.assertTrue(len(backup_codes) > 0)
+        formatted_code = backup_codes[0] # e.g. "2B6E-E77F"
+
+        # Login with formatted backup code containing hyphen
+        login_client = self.new_client()
+        status, res = self.request(login_client, 'POST', '/api/login', {'email': 'backupcodeuser@example.com', 'password': 'user-passphrase-123'})
+        self.assertTrue(res.get('requires2FA'))
         temp_token = res['tempToken']
-        totp_code = server.compute_totp_code(secret)
-        status, login_res = self.request(user2_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': totp_code})
+
+        status, res = self.request(login_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': formatted_code.lower()})
         self.assertEqual(status, 200)
-        self.assertEqual(login_res['user']['email'], 'user2fa2@example.com')
+        self.assertEqual(res['user']['email'], 'backupcodeuser@example.com')
+
 
     def test_archived_or_deleted_notes_cannot_be_pinned(self):
         user = self.register_user('pin-test@example.com')

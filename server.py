@@ -609,7 +609,19 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('This section is available only to the administrator.', 403)
         return user
 
-    def session_headers(self, token, max_age=SESSION_DAYS * 24 * 60 * 60):
+    def get_session_days(self):
+        try:
+            with database() as connection:
+                row = connection.execute("SELECT value FROM settings WHERE key = 'sessionDays'").fetchone()
+                if row and row['value']:
+                    return max(1, min(3650, int(row['value'])))
+        except Exception:
+            pass
+        return SESSION_DAYS
+
+    def session_headers(self, token, max_age=None):
+        if max_age is None:
+            max_age = self.get_session_days() * 24 * 60 * 60
         is_https = (
             os.environ.get('NOTKI_COOKIE_SECURE') == '1' or
             self.get_forwarded_proto() == 'https'
@@ -619,11 +631,12 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def new_session(self, user_id):
         token = secrets.token_urlsafe(32)
+        days = self.get_session_days()
         with database() as connection:
             connection.execute('DELETE FROM sessions WHERE expires_at <= ?', (iso_time(),))
             connection.execute(
                 'INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)',
-                (token_hash(token), user_id, iso_time(utc_now() + timedelta(days=SESSION_DAYS))),
+                (token_hash(token), user_id, iso_time(utc_now() + timedelta(days=days))),
             )
         return token
 
@@ -1889,7 +1902,11 @@ class NotkiHandler(BaseHTTPRequestHandler):
             settings_dict = {row['key']: row['value'] for row in rows}
         require_2fa = settings_dict.get('require2FA') == 'true'
         log_level = settings_dict.get('logLevel', 'INFO')
-        self.send_json({'require2FA': require_2fa, 'logLevel': log_level})
+        try:
+            session_days = int(settings_dict.get('sessionDays', SESSION_DAYS))
+        except (ValueError, TypeError):
+            session_days = SESSION_DAYS
+        self.send_json({'require2FA': require_2fa, 'logLevel': log_level, 'sessionDays': session_days})
 
     def save_settings(self, payload):
         self.require_user(admin=True)
@@ -1897,10 +1914,15 @@ class NotkiHandler(BaseHTTPRequestHandler):
         log_level = str(payload.get('logLevel') or 'INFO').upper()
         if log_level not in ('INFO', 'WARNING', 'ERROR', 'DEBUG'):
             log_level = 'INFO'
+        try:
+            session_days = max(1, min(3650, int(payload.get('sessionDays', SESSION_DAYS))))
+        except (ValueError, TypeError):
+            session_days = SESSION_DAYS
         with database() as connection:
             connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('require2FA', require_2fa))
             connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('logLevel', log_level))
-        self.send_json({'require2FA': require_2fa == 'true', 'logLevel': log_level})
+            connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('sessionDays', str(session_days)))
+        self.send_json({'require2FA': require_2fa == 'true', 'logLevel': log_level, 'sessionDays': session_days})
 
     def get_logs(self):
         self.require_user(admin=True)
