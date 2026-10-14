@@ -53,7 +53,7 @@
       </form>
       <form class="auth-form" id="login-2fa-form" hidden>
         <label class="field-label" for="login-totp" data-i18n="auth.2fa.totpCode">TWO-FACTOR CODE</label>
-        <input class="auth-input" id="login-totp" type="text" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]*" placeholder="6-digit code">
+        <input class="auth-input" id="login-totp" type="text" autocomplete="one-time-code" placeholder="6-digit code or emergency code">
         <button class="button-primary" type="submit" data-i18n="auth.2fa.verify">Verify</button>
         <button class="button-secondary login-passkey-btn" id="login-2fa-passkey-btn" type="button" style="margin-top: 8px;" data-i18n="auth.2fa.usePasskey">Use Passkey</button>
       </form>
@@ -107,7 +107,7 @@
           <span class="storage-dot"></span>
           <span data-i18n="nav.storage">Saved on the server</span>
         </div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.66</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.67</span>
       </div>
     </aside>
 
@@ -177,6 +177,10 @@
         <label class="admin-toggle-label">
           <input type="checkbox" id="admin-require-2fa"> <span data-i18n="admin.security.require2fa">Require 2FA for all users</span>
         </label>
+        <div style="margin-top: 12px;">
+          <label class="field-label" for="admin-session-days" data-i18n="admin.security.sessionDays">Session duration (days, default 30)</label>
+          <input class="auth-input" id="admin-session-days" type="number" min="1" max="3650" value="30" style="max-width: 150px;">
+        </div>
       </div>
     </section>
 
@@ -185,7 +189,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.66</strong></p>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.67</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" class="admin-update-box" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
@@ -354,8 +358,7 @@
       <p class="profile-description" data-i18n="share.description">Give another account access to this note. Read-only recipients can open it but not change it.</p>
       <form class="profile-form" id="share-form">
         <label class="field-label" for="share-email" data-i18n="share.emailLabel">E-MAIL OF THE RECIPIENT</label>
-        <input class="auth-input" id="share-email" type="email" list="share-directory" autocomplete="off" required maxlength="254" placeholder="name@example.com">
-        <datalist id="share-directory"></datalist>
+        <select class="auth-input profile-select" id="share-email" required></select>
         <label class="field-label" for="share-permission" data-i18n="share.permissionLabel">PERMISSION</label>
         <select class="auth-input profile-select" id="share-permission">
           <option value="read" data-i18n="share.permission.read">Read only</option>
