@@ -1148,6 +1148,7 @@
         shareBtn.hidden = false;
       } else {
         shareBtn.classList.remove('is-shared');
+        shareBtn.hidden = true;
       }
     });
   }
@@ -1755,6 +1756,13 @@
       button.classList.toggle('is-active', active);
       button.setAttribute('aria-pressed', String(active));
     });
+    const fontSelect = $('#font-size-select');
+    if (fontSelect) {
+      const size = document.queryCommandValue('fontSize');
+      if (size && ['1', '2', '3', '4', '5', '6', '7'].includes(String(size))) {
+        fontSelect.value = String(size);
+      }
+    }
   }
 
   function createChecklistItem() {
@@ -2271,7 +2279,8 @@
         shareBtn.classList.add('is-shared');
         shareBtn.hidden = false;
       } else {
-        shareBtn.hidden = note.archived || note.deleted || view === 'archive' || view === 'trash';
+        shareBtn.classList.remove('is-shared');
+        shareBtn.hidden = true;
       }
       shareBtn.addEventListener('click', event => {
         event.stopPropagation();
@@ -2699,6 +2708,20 @@
     updateWordCount();
     updateEditorActions(note);
     setColor(note.color);
+
+    const isMobile = window.matchMedia('(max-width: 700px), (max-height: 500px)').matches;
+    if (isMobile) {
+      elements.panel.classList.add('is-writer-mode');
+      const toggleBtn = $('#toggle-writer-mode');
+      if (toggleBtn) {
+        toggleBtn.classList.add('is-active');
+        const labelText = t('editor.writerModeExit');
+        toggleBtn.setAttribute('aria-label', labelText);
+        toggleBtn.title = labelText;
+        toggleBtn.innerHTML = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="10" y1="14" x2="3" y2="21"/></svg>';
+      }
+    }
+
     elements.panel.classList.add('is-open');
     elements.panel.setAttribute('aria-hidden', 'false');
     elements.backdrop.hidden = false;
@@ -2718,6 +2741,15 @@
     }
     activeId = null;
     activeIsNew = false;
+    elements.panel.classList.remove('is-writer-mode');
+    const toggleBtn = $('#toggle-writer-mode');
+    if (toggleBtn) {
+      toggleBtn.classList.remove('is-active');
+      const labelText = t('editor.writerMode');
+      toggleBtn.setAttribute('aria-label', labelText);
+      toggleBtn.title = labelText;
+      toggleBtn.innerHTML = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+    }
     elements.panel.classList.remove('is-open');
     elements.panel.setAttribute('aria-hidden', 'true');
     elements.backdrop.hidden = true;
@@ -2996,6 +3028,8 @@
   function setColor(color) {
     activeColor = COLORS.includes(color) ? color : 'default';
     $$('.color-swatch').forEach(swatch => swatch.classList.toggle('is-selected', swatch.dataset.color === activeColor));
+    COLORS.forEach(c => elements.panel.classList.remove(`color-${c}`));
+    elements.panel.classList.add(`color-${activeColor}`);
   }
 
   async function shareNote(note) {
@@ -3060,6 +3094,12 @@
     if (selection?.anchorNode && elements.noteBody.contains(selection.anchorNode)) {
       rememberEditorRange();
     }
+  });
+  $('#font-size-select')?.addEventListener('change', event => {
+    restoreEditorRange();
+    document.execCommand('fontSize', false, event.target.value);
+    rememberEditorRange();
+    scheduleSave();
   });
   $$('#format-toolbar button').forEach(button => {
     button.addEventListener('click', () => {

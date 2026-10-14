@@ -106,7 +106,7 @@
           <span class="storage-dot"></span>
           <span data-i18n="nav.storage">Saved on the server</span>
         </div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.76</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.77</span>
       </div>
     </aside>
 
@@ -192,7 +192,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.76</strong></p>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.77</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" class="admin-update-box" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
@@ -403,8 +403,15 @@
       </div>
       <label class="sr-only" for="note-body" data-i18n="editor.bodyLabel">Note body</label>
       <div class="format-toolbar" id="format-toolbar" role="toolbar" aria-label="Note formatting" data-i18n-aria-label="editor.toolbar">
-        <button class="format-tool" type="button" data-command="fontSize" data-value="2" aria-label="Small text" title="Small text" data-i18n-aria-label="editor.fontSizeSmall" data-i18n-title="editor.fontSizeSmall"><small style="font-size: 11px;">A</small></button>
-        <button class="format-tool" type="button" data-command="fontSize" data-value="5" aria-label="Large text" title="Large text" data-i18n-aria-label="editor.fontSizeLarge" data-i18n-title="editor.fontSizeLarge"><strong style="font-size: 16px;">A</strong></button>
+        <select class="font-size-select" id="font-size-select" aria-label="Font size" title="Font size" data-i18n-aria-label="editor.fontSize" data-i18n-title="editor.fontSize">
+          <option value="1">11 pt</option>
+          <option value="2">12 pt</option>
+          <option value="3" selected>14 pt</option>
+          <option value="4">17 pt</option>
+          <option value="5">20 pt</option>
+          <option value="6">24 pt</option>
+          <option value="7">30 pt</option>
+        </select>
         <span class="format-separator" aria-hidden="true"></span>
         <button class="format-tool" type="button" data-command="bold" aria-label="Bold" title="Bold" data-i18n-aria-label="editor.bold" data-i18n-title="editor.bold"><strong>B</strong></button>
         <button class="format-tool" type="button" data-command="italic" aria-label="Italic" title="Italic" data-i18n-aria-label="editor.italic" data-i18n-title="editor.italic"><em>I</em></button>
