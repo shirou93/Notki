@@ -58,6 +58,7 @@
   let isSyncing = false;
   let pendingSync = false;
   let passkeyConditionalAbortController = null;
+  let passkeyConditionalPromise = null;
 
   function bufferToBase64(buffer) {
     if (!buffer) return '';
@@ -335,14 +336,24 @@
     if (mode === 'login') {
       triggerConditionalPasskeyLogin();
     } else {
-      cancelConditionalPasskeyLogin();
+      await cancelConditionalPasskeyLogin();
     }
   }
 
-  function cancelConditionalPasskeyLogin() {
+  async function cancelConditionalPasskeyLogin() {
     if (passkeyConditionalAbortController) {
       passkeyConditionalAbortController.abort();
       passkeyConditionalAbortController = null;
+    }
+    if (passkeyConditionalPromise) {
+      const p = passkeyConditionalPromise;
+      passkeyConditionalPromise = null;
+      try {
+        await p;
+      } catch (e) {
+        // Ignored - expected AbortError
+      }
+      await new Promise(resolve => setTimeout(resolve, 50));
     }
   }
 
@@ -361,7 +372,7 @@
       return;
     }
 
-    cancelConditionalPasskeyLogin();
+    await cancelConditionalPasskeyLogin();
     passkeyConditionalAbortController = new AbortController();
 
     const hostname = window.location.hostname;
@@ -375,11 +386,12 @@
     }
 
     try {
-      const assertion = await navigator.credentials.get({
+      passkeyConditionalPromise = navigator.credentials.get({
         publicKey: publicKeyOptions,
         mediation: 'conditional',
         signal: passkeyConditionalAbortController.signal
       });
+      const assertion = await passkeyConditionalPromise;
 
       if (!assertion) return;
 
@@ -394,11 +406,13 @@
         method: 'POST',
         body: JSON.stringify(payload)
       });
-      cancelConditionalPasskeyLogin();
+      await cancelConditionalPasskeyLogin();
       await showApp(user);
     } catch (error) {
       // Passive conditional mediation runs in the background for autofill.
       // Any errors (e.g. aborted request, missing authenticator) should be swallowed silently.
+    } finally {
+      passkeyConditionalPromise = null;
     }
   }
 
@@ -843,7 +857,7 @@
   let loginTempToken = '';
 
   const handlePasskeyLogin = async (useTempToken = false) => {
-    cancelConditionalPasskeyLogin();
+    await cancelConditionalPasskeyLogin();
     try {
       if (!window.isSecureContext || !navigator?.credentials?.get) {
         throw new Error(t('topbar.2fa.passkeyNotSupported'));
@@ -921,7 +935,7 @@
         }
         return;
       }
-      cancelConditionalPasskeyLogin();
+      await cancelConditionalPasskeyLogin();
       await showApp(response.user);
     } catch (error) {
       if ($('#login-password')) $('#login-password').value = '';
