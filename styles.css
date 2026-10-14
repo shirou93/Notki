@@ -654,6 +654,7 @@ body.is-dragging-task-active, body.is-dragging-task-active * { cursor: var(--dra
   .shared-kicker { color: #c2d5a4; }
   .editor-topbar { border-bottom-color: var(--line); }
   .editor-title, .editor-body, .editor-body .task-list li > .task-text { color: var(--ink); }
+  .card-body .task-list li:hover > .task-drag-handle, .editor-body .task-list li:hover > .task-drag-handle { color: var(--ink); }
   .editor-body .task-group-label, .editor-body .task-list-completed .task-text { color: #a5b2a9; }
   .task-restore-suggestions { border-color: #435343; background: #263629; }
   .task-restore-message { color: #c2d5a4; }

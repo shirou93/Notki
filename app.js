@@ -1583,8 +1583,14 @@
         dragHandle.setAttribute('aria-label', t('card.drag'));
         dragHandle.title = t('card.dragTitle');
         item.insertBefore(dragHandle, checkbox);
-      } else if (dragHandle.innerHTML !== TASK_DRAG_SVG) {
-        dragHandle.innerHTML = TASK_DRAG_SVG;
+      } else {
+        dragHandle.contentEditable = 'false';
+        if (dragHandle.innerHTML !== TASK_DRAG_SVG) {
+          dragHandle.innerHTML = TASK_DRAG_SVG;
+        }
+        if (item.firstElementChild !== dragHandle) {
+          item.insertBefore(dragHandle, checkbox);
+        }
       }
       let text = item.querySelector(':scope > .task-text');
       const strayNodes = [...item.childNodes].filter(node => node !== checkbox && node !== text && node !== dragHandle);
@@ -1645,7 +1651,7 @@
   function normalizeChecklistGroups(root = elements.noteBody) {
     normalizeChecklistItemMarkup(root);
     root.querySelectorAll('input.task-checkbox').forEach(cb => {
-      if (cb.checked) cb.setAttribute('checked', '');
+      if (cb.checked || cb.hasAttribute('checked')) cb.setAttribute('checked', '');
       else cb.removeAttribute('checked');
     });
     root.querySelectorAll('ul.task-list:not(.task-list-completed)').forEach(activeList => {
@@ -1657,8 +1663,14 @@
         ...activeList.querySelectorAll(':scope > li'),
         ...(oldCompletedList ? oldCompletedList.querySelectorAll(':scope > li') : []),
       ].filter(item => item.querySelector('input.task-checkbox'));
-      const activeItems = allItems.filter(item => !item.querySelector('input.task-checkbox').checked);
-      const completedItems = allItems.filter(item => item.querySelector('input.task-checkbox').checked);
+      const activeItems = allItems.filter(item => {
+        const cb = item.querySelector('input.task-checkbox');
+        return cb && !cb.checked && !cb.hasAttribute('checked');
+      });
+      const completedItems = allItems.filter(item => {
+        const cb = item.querySelector('input.task-checkbox');
+        return cb && (cb.checked || cb.hasAttribute('checked'));
+      });
       const currentActiveItems = [...activeList.querySelectorAll(':scope > li')];
       if (currentActiveItems.length !== activeItems.length
           || currentActiveItems.some((item, index) => item !== activeItems[index])) {
@@ -2631,8 +2643,13 @@
         const cardCheckboxes = [...card.querySelectorAll('input[type="checkbox"]')];
         const index = cardCheckboxes.indexOf(event.target);
         if (index > -1 && checkboxes[index]) {
-          if (event.target.checked) checkboxes[index].setAttribute('checked', '');
-          else checkboxes[index].removeAttribute('checked');
+          if (event.target.checked) {
+            checkboxes[index].setAttribute('checked', '');
+            checkboxes[index].checked = true;
+          } else {
+            checkboxes[index].removeAttribute('checked');
+            checkboxes[index].checked = false;
+          }
           normalizeChecklistGroups(wrapper);
           note.body = sanitizeRichHtml(wrapper.innerHTML);
           note.updatedAt = new Date().toISOString();
