@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.66'
+VERSION = '0.1.5.67'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -741,24 +741,24 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 pdict['boundary'] = boundary.encode('utf-8') if isinstance(boundary, str) else boundary
                 pdict['CONTENT-LENGTH'] = int(self.headers.get('Content-Length', 0))
                 fields = cgi.parse_multipart(self.rfile, pdict)
-            except Exception as error:
-                raise APIError('The backup archive cannot be read.', 400) from error
-            archive_list = fields.get('archive') or [b'']
+            except Exception:
+                fields = {}
+            archive_list = fields.get('archive') or fields.get('file') or []
             archive_bytes = archive_list[0] if archive_list else b''
             if isinstance(archive_bytes, str):
-                archive_bytes = archive_bytes.encode('iso-8859-1')
+                archive_bytes = archive_bytes.encode('utf-8')
+            if not archive_bytes:
+                archive_bytes = self.read_body(MAX_SNAPSHOT_BYTES)
             if not archive_bytes:
                 raise APIError('No backup archive provided in request.', 400)
             if len(archive_bytes) > MAX_SNAPSHOT_BYTES:
                 raise APIError('The backup file exceeds the size limit.', 413)
             return archive_bytes
-        elif ctype in ('application/json', 'application/gzip', 'application/x-gzip', 'application/octet-stream', 'application/x-tgz', 'text/plain', ''):
+        else:
             archive_bytes = self.read_body(MAX_SNAPSHOT_BYTES)
             if not archive_bytes:
                 raise APIError('No backup archive provided in request.', 400)
             return archive_bytes
-        else:
-            raise APIError('Expected .json, .tgz, or multipart/form-data file.', 415)
 
     def do_POST(self):
         try:
@@ -1164,7 +1164,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         if len(raw_bytes) > MAX_SNAPSHOT_BYTES:
             raise APIError('The snapshot exceeds the 100 MB limit.', 413)
         try:
-            return json.loads(raw_bytes.decode('utf-8'))
+            return json.loads(raw_bytes.decode('utf-8-sig'))
         except (json.JSONDecodeError, UnicodeDecodeError):
             try:
                 with tarfile.open(fileobj=io.BytesIO(raw_bytes), mode='r:*') as archive:
@@ -1177,7 +1177,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                         snapshot_member = valid_members[0]
                         snapshot_file = archive.extractfile(snapshot_member)
                         if snapshot_file:
-                            return json.loads(snapshot_file.read(MAX_SNAPSHOT_BYTES + 1).decode('utf-8'))
+                            return json.loads(snapshot_file.read(MAX_SNAPSHOT_BYTES + 1).decode('utf-8-sig'))
             except Exception:
                 pass
             raise APIError('The backup archive cannot be read.')
