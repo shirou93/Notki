@@ -1064,6 +1064,11 @@
       renderShareList(shares);
       elements.shareEmail.value = '';
       showShareMessage(t('share.granted'));
+      const targetNote = notes.find(item => item.id === shareNoteId);
+      if (targetNote) {
+        targetNote.shareCount = shares.length;
+        render();
+      }
     } catch (error) {
       showShareMessage(t('share.failed', { message: error.message }), true);
     }
@@ -1075,6 +1080,11 @@
       const { shares } = await apiRequest(`/api/notes/${encodeURIComponent(shareNoteId)}/shares/${userId}`, { method: 'DELETE' });
       renderShareList(shares);
       showShareMessage(t('share.revoked'));
+      const targetNote = notes.find(item => item.id === shareNoteId);
+      if (targetNote) {
+        targetNote.shareCount = shares.length;
+        render();
+      }
     } catch (error) {
       showShareMessage(t('share.revokeFailed', { message: error.message }), true);
     }
@@ -1216,6 +1226,8 @@
     if (!confirm(t('topbar.2fa.confirmRemoveTotp'))) return;
     try {
       await apiRequest('/api/account/totp', { method: 'DELETE' });
+      currentBackupCodes = [];
+      if ($('#backup-codes-display-area')) $('#backup-codes-display-area').hidden = true;
       await refresh2faStatus();
     } catch (error) {
       alert(error.message);
@@ -2028,11 +2040,12 @@
   function render() {
     const active = notes.filter(isActive);
     const pinned = active.filter(note => note.pinned).length;
+    const sharedByMeCount = active.filter(note => note.shareCount && note.shareCount > 0).length;
     elements.allCount.textContent = String(active.length);
     elements.pinnedCount.textContent = String(pinned);
     elements.archiveCount.textContent = String(notes.filter(note => note.archived && !note.deleted).length);
     elements.trashCount.textContent = String(notes.filter(note => note.deleted).length);
-    elements.sharedCount.textContent = String(sharedNotes.length);
+    elements.sharedCount.textContent = String(sharedNotes.length + sharedByMeCount);
     elements.nav.forEach(button => button.classList.toggle('is-active', button.dataset.view === view));
     elements.navAdmin.classList.toggle('is-active', view === 'admin');
 
@@ -2064,24 +2077,64 @@
         Object.assign(document.createElement('span'), { className: 'heading-period', textContent: '.' }),
       );
 
-      const visible = filteredNotes();
-      const splitPinned = view === 'all' && !query;
-      const pinnedItems = splitPinned ? visible.filter(note => note.pinned) : [];
-      const regularItems = splitPinned ? visible.filter(note => !note.pinned) : visible;
-      elements.pinnedGrid.replaceChildren(...pinnedItems.map(makeCard));
-      elements.grid.replaceChildren(...regularItems.map(makeCard));
-      elements.pinnedLabel.hidden = pinnedItems.length === 0;
-      elements.otherLabel.hidden = pinnedItems.length === 0 || regularItems.length === 0;
-      elements.otherLabelText.textContent = t('section.other');
-      elements.empty.hidden = visible.length !== 0;
-      elements.countLabel.textContent = query
-        ? t('count.searchResults', { count: visible.length })
-        : `${visible.length} ${pluralText(view === 'shared' ? 'count.sharedLabel' : 'count.notesLabel', visible.length)}`;
-      elements.footerCount.textContent = `${visible.length} ${pluralText('footer.count', visible.length)}`;
-      updateEmptyState();
-      if (activeId) {
-        const current = notes.find(note => note.id === activeId) || sharedNotes.find(note => note.id === activeId);
-        if (current) updateEditorActions(current);
+      if (view === 'shared') {
+        const sharedWithMe = sharedNotes.filter(note => {
+          if (!query) return true;
+          const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')} ${note.ownerEmail || ''}`.toLocaleLowerCase();
+          return searchable.includes(query.toLocaleLowerCase());
+        }).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+
+        const sharedByMe = notes.filter(note => {
+          if (!isActive(note)) return false;
+          if (!note.shareCount || note.shareCount <= 0) return false;
+          if (!query) return true;
+          const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')}`.toLocaleLowerCase();
+          return searchable.includes(query.toLocaleLowerCase());
+        }).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+
+        const totalVisible = sharedWithMe.length + sharedByMe.length;
+
+        elements.pinnedGrid.replaceChildren(...sharedWithMe.map(makeCard));
+        elements.grid.replaceChildren(...sharedByMe.map(makeCard));
+
+        if ($('#pinned-label-text')) $('#pinned-label-text').textContent = t('section.sharedWithMe');
+        elements.pinnedLabel.hidden = sharedWithMe.length === 0;
+
+        elements.otherLabelText.textContent = t('section.sharedByMe');
+        elements.otherLabel.hidden = sharedByMe.length === 0;
+
+        elements.empty.hidden = totalVisible !== 0;
+        elements.countLabel.textContent = query
+          ? t('count.searchResults', { count: totalVisible })
+          : `${totalVisible} ${pluralText('count.sharedLabel', totalVisible)}`;
+        elements.footerCount.textContent = `${totalVisible} ${pluralText('footer.count', totalVisible)}`;
+        updateEmptyState();
+        if (activeId) {
+          const current = notes.find(note => note.id === activeId) || sharedNotes.find(note => note.id === activeId);
+          if (current) updateEditorActions(current);
+        }
+      } else {
+        if ($('#pinned-label-text')) $('#pinned-label-text').textContent = t('section.pinned');
+        elements.otherLabelText.textContent = t('section.other');
+
+        const visible = filteredNotes();
+        const splitPinned = view === 'all' && !query;
+        const pinnedItems = splitPinned ? visible.filter(note => note.pinned) : [];
+        const regularItems = splitPinned ? visible.filter(note => !note.pinned) : visible;
+        elements.pinnedGrid.replaceChildren(...pinnedItems.map(makeCard));
+        elements.grid.replaceChildren(...regularItems.map(makeCard));
+        elements.pinnedLabel.hidden = pinnedItems.length === 0;
+        elements.otherLabel.hidden = pinnedItems.length === 0 || regularItems.length === 0;
+        elements.empty.hidden = visible.length !== 0;
+        elements.countLabel.textContent = query
+          ? t('count.searchResults', { count: visible.length })
+          : `${visible.length} ${pluralText('count.notesLabel', visible.length)}`;
+        elements.footerCount.textContent = `${visible.length} ${pluralText('footer.count', visible.length)}`;
+        updateEmptyState();
+        if (activeId) {
+          const current = notes.find(note => note.id === activeId) || sharedNotes.find(note => note.id === activeId);
+          if (current) updateEditorActions(current);
+        }
       }
     }
   }
@@ -2195,8 +2248,16 @@
     const labelRight = $('.card-swipe-label-right', card);
     const labelLeft = $('.card-swipe-label-left', card);
     const iconLeft = $('.card-swipe-icon-left', card);
+    const iconRight = $('.card-swipe-icon-right', card);
 
-    if (labelRight) labelRight.textContent = t(note.pinned ? 'editor.unpinTitle' : 'editor.pinTitle');
+    if (labelRight) {
+      if (view === 'archive' || view === 'trash') labelRight.textContent = t('editor.unarchiveTitle');
+      else labelRight.textContent = t(note.pinned ? 'editor.unpinTitle' : 'editor.pinTitle');
+    }
+    if (iconRight) {
+      if (view === 'archive' || view === 'trash') iconRight.textContent = '↺';
+      else iconRight.textContent = '📌';
+    }
     if (labelLeft) {
       if (view === 'trash') labelLeft.textContent = t('editor.deleteForeverTitle');
       else if (view === 'archive') labelLeft.textContent = t('editor.deleteTitle');
@@ -2251,7 +2312,7 @@
         cardSwipeState.deltaX = deltaX;
         const width = card.getBoundingClientRect().width || 200;
         const maxSwipe = width * 0.7;
-        const maxSwipeRight = (note.archived || note.deleted || view === 'archive' || view === 'trash') ? 0 : maxSwipe;
+        const maxSwipeRight = maxSwipe;
         const clampedX = Math.max(-maxSwipe, Math.min(maxSwipeRight, deltaX));
         cardInner.style.transform = `translateX(${clampedX}px)`;
 
@@ -2291,8 +2352,26 @@
 
         const SWIPE_THRESHOLD = 70;
         if (deltaX >= SWIPE_THRESHOLD) {
-          // Swipe Right: Pin / Unpin (disabled in Archive and Trash)
-          if (!note.archived && !note.deleted && view !== 'archive' && view !== 'trash') {
+          // Swipe Right: Restore (Archive/Trash) or Pin/Unpin (Notes)
+          if (view === 'trash') {
+            note.deleted = false;
+            note.archived = false;
+            note.pinned = false;
+            note.updatedAt = new Date().toISOString();
+            moveToFront(note);
+            persist();
+            showToast(t('editor.restoredToast'));
+            render();
+          } else if (view === 'archive') {
+            note.archived = false;
+            note.deleted = false;
+            note.pinned = false;
+            note.updatedAt = new Date().toISOString();
+            moveToFront(note);
+            persist();
+            showToast(t('editor.unarchivedToast'));
+            render();
+          } else if (!note.archived && !note.deleted) {
             note.pinned = !note.pinned;
             note.updatedAt = new Date().toISOString();
             moveToFront(note);
@@ -3468,15 +3547,14 @@
 
     setBackupMessage(t('admin.backups.restoring'));
 
-    const formData = new FormData();
-    formData.append('archive', file);
-
     try {
+      const buffer = await file.arrayBuffer();
       const response = await fetch('/api/admin/backups/upload-restore', {
         method: 'POST',
-        body: formData,
+        body: buffer,
         credentials: 'same-origin',
         headers: {
+          'Content-Type': 'application/octet-stream',
           'Accept-Language': window.i18n.getLanguage(),
         },
       });

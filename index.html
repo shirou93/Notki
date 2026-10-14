@@ -148,7 +148,7 @@
       </section>
 
       <section class="notes-area" aria-live="polite">
-        <div class="section-label" id="pinned-label" hidden><span data-i18n="section.pinned">PINNED</span><span class="section-rule"></span></div>
+        <div class="section-label" id="pinned-label" hidden><span id="pinned-label-text" data-i18n="section.pinned">PINNED</span><span class="section-rule"></span></div>
         <div class="notes-grid" id="pinned-grid"></div>
         <div class="section-label" id="other-label" hidden><span id="other-label-text" data-i18n="section.other">OTHER</span><span class="section-rule"></span></div>
         <div class="notes-grid" id="notes-grid"></div>
@@ -321,15 +321,15 @@
               <button class="button-primary" type="submit" data-i18n="topbar.2fa.verifyTotp">Verify</button>
             </form>
           </div>
-          <div id="backup-codes-display-area" hidden style="margin-top: 12px; padding: 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg);">
+        </div>
+        <div id="totp-active-area" hidden>
+          <p class="setup-hint" style="color: var(--accent-color);" data-i18n="topbar.2fa.totpActive">Authenticator App is active.</p>
+          <div id="backup-codes-display-area" hidden style="margin-top: 12px; margin-bottom: 12px; padding: 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg);">
             <p class="field-label" style="margin-bottom: 4px;" data-i18n="topbar.2fa.backupCodesTitle">EMERGENCY BACKUP CODES</p>
             <p class="setup-hint" style="margin-bottom: 8px;" data-i18n="topbar.2fa.backupCodesHint">Save these backup codes in a safe place. Each code can only be used once if you lose access to your authenticator app.</p>
             <div id="backup-codes-list" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-family: monospace; font-size: 13px; font-weight: 600; text-align: center; margin-bottom: 10px; background: var(--bg-color); padding: 8px; border-radius: 4px;"></div>
             <button class="button-secondary" id="copy-backup-codes-btn" type="button" style="width: 100%;" data-i18n="topbar.2fa.copyBackupCodes">Copy Backup Codes</button>
           </div>
-        </div>
-        <div id="totp-active-area" hidden>
-          <p class="setup-hint" style="color: var(--accent-color);" data-i18n="topbar.2fa.totpActive">Authenticator App is active.</p>
           <button class="button-secondary" id="remove-totp-btn" type="button" data-i18n="topbar.2fa.removeTotp">Remove</button>
         </div>
 
@@ -435,7 +435,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <template id="note-template">
     <article class="note-card">
-      <div class="card-swipe-bg card-swipe-right"><span class="card-swipe-icon">📌</span><span class="card-swipe-label card-swipe-label-right"></span></div>
+      <div class="card-swipe-bg card-swipe-right"><span class="card-swipe-icon card-swipe-icon-right">📌</span><span class="card-swipe-label card-swipe-label-right"></span></div>
       <div class="card-swipe-bg card-swipe-left"><span class="card-swipe-label card-swipe-label-left"></span><span class="card-swipe-icon card-swipe-icon-left">📦</span></div>
       <div class="card-inner">
         <div class="card-topline"><span class="card-date"></span><div class="card-tools"><button class="card-share" type="button" aria-label="Share note" title="Share link" data-i18n-aria-label="editor.share" data-i18n-title="editor.shareTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button><button class="card-drag" type="button" aria-label="Reorder note" title="Drag to reorder" data-i18n-aria-label="card.drag" data-i18n-title="card.dragTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></button><button class="card-pin" type="button" aria-label="Pin note" title="Pin" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><path d="M10 3v6l-3 3v2h10v-2l-3-3V3"/><path d="M12 14v7"/></svg></button></div></div>
