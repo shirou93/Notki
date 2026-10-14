@@ -50,6 +50,9 @@ window.notkiTranslations.en = {
   'view.archive': 'Archive',
   'view.trash': 'Trash',
 
+  'topbar.toggleMenu': 'Toggle menu',
+  'topbar.listView': 'List view',
+  'topbar.gridView': 'Grid view',
   'topbar.breadcrumb': 'YOUR NOTEBOOK',
   'topbar.search': 'Search notes',
 // 'topbar.theme.enableDark': 'Enable dark theme',
@@ -214,6 +217,7 @@ window.notkiTranslations.en = {
   'editor.bodyPlaceholder': 'Start writing...',
   'editor.progressLabel': 'CHECKLIST PROGRESS',
   'editor.tags': 'TAGS',
+  'editor.editLabels': 'Edit labels',
   'editor.tagsPlaceholder': 'e.g. work, ideas',
   'editor.color': 'NOTE COLOR',
   'editor.colorGroup': 'Note color',

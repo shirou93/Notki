@@ -50,6 +50,9 @@ window.notkiTranslations.pl = {
   'view.archive': 'Archiwum',
   'view.trash': 'Kosz',
 
+  'topbar.toggleMenu': 'Przełącz menu',
+  'topbar.listView': 'Widok listy',
+  'topbar.gridView': 'Widok siatki',
   'topbar.breadcrumb': 'TWÓJ NOTATNIK',
   'topbar.search': 'Szukaj w notatkach',
   'topbar.settings': 'Ustawienia',
@@ -221,6 +224,7 @@ window.notkiTranslations.pl = {
   'editor.bodyPlaceholder': 'Zacznij pisać...',
   'editor.progressLabel': 'POSTĘP ZADAŃ',
   'editor.tags': 'ETYKIETY',
+  'editor.editLabels': 'Edytuj etykiety',
   'editor.tagsPlaceholder': 'np. praca, pomysły',
   'editor.color': 'KOLOR NOTATKI',
   'editor.colorGroup': 'Kolor notatki',

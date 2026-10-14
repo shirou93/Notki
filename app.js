@@ -3356,7 +3356,16 @@
   function applyViewPref() {
     elements.pinnedGrid.classList.toggle('is-list-view', listViewPref);
     elements.grid.classList.toggle('is-list-view', listViewPref);
-    $('#view-toggle').textContent = listViewPref ? '▦' : '▤';
+    const viewToggleBtn = $('#view-toggle');
+    if (viewToggleBtn) {
+      viewToggleBtn.textContent = listViewPref ? '▦' : '▤';
+      const key = listViewPref ? 'topbar.gridView' : 'topbar.listView';
+      const labelText = t(key);
+      viewToggleBtn.setAttribute('aria-label', labelText);
+      viewToggleBtn.setAttribute('title', labelText);
+      viewToggleBtn.dataset.i18nAriaLabel = key;
+      viewToggleBtn.dataset.i18nTitle = key;
+    }
   }
   applyViewPref();
 
@@ -3738,6 +3747,7 @@
 
   window.i18n.onChange(() => {
     applyTheme(document.documentElement.dataset.theme);
+    applyViewPref();
     if (!elements.authView.hidden) showAuth(elements.registerForm.hidden ? 'login' : 'register', elements.authMessage.hidden ? '' : elements.authMessage.textContent);
     updateStorageIndicator();
     if (currentUser) render();
