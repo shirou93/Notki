@@ -196,6 +196,8 @@ window.notkiTranslations.de = {
   'editor.titlePlaceholder': 'Titel',
   'editor.bodyLabel': 'Notizinhalt',
   'editor.toolbar': 'Notizformatierung',
+  'editor.fontSizeSmall': 'Kleiner Text',
+  'editor.fontSizeLarge': 'Großer Text',
   'editor.bold': 'Fett',
   'editor.italic': 'Kursiv',
   'editor.underline': 'Unterstrichen',

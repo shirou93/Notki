@@ -196,6 +196,8 @@ window.notkiTranslations.it = {
   'editor.titlePlaceholder': 'Titolo',
   'editor.bodyLabel': 'Testo della nota',
   'editor.toolbar': 'Formattazione nota',
+  'editor.fontSizeSmall': 'Testo piccolo',
+  'editor.fontSizeLarge': 'Testo grande',
   'editor.bold': 'Grassetto',
   'editor.italic': 'Corsivo',
   'editor.underline': 'Sottolineato',

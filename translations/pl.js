@@ -209,6 +209,8 @@ window.notkiTranslations.pl = {
   'editor.titlePlaceholder': 'Tytuł',
   'editor.bodyLabel': 'Treść notatki',
   'editor.toolbar': 'Formatowanie notatki',
+  'editor.fontSizeSmall': 'Mniejsza czcionka',
+  'editor.fontSizeLarge': 'Większa czcionka',
   'editor.bold': 'Pogrubienie',
   'editor.italic': 'Kursywa',
   'editor.underline': 'Podkreślenie',

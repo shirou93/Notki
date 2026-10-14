@@ -196,6 +196,8 @@ window.notkiTranslations.ko = {
   'editor.titlePlaceholder': '제목',
   'editor.bodyLabel': '노트 본문',
   'editor.toolbar': '노트 서식',
+  'editor.fontSizeSmall': '작은 텍스트',
+  'editor.fontSizeLarge': '큰 텍스트',
   'editor.bold': '굵게',
   'editor.italic': '기울임꼴',
   'editor.underline': '밑줄',

@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import os
 import http.cookiejar
 import io
 import json
@@ -859,6 +860,20 @@ class ServerFlowTests(unittest.TestCase):
         code = server.compute_totp_code(secret)
         self.request(user_client, 'POST', '/api/account/totp/verify', {'code': code})
 
+        # Register Passkey
+        passkey_id = 'test-backup-passkey-id'
+        with tempfile.NamedTemporaryFile('wb', delete=False) as key_file:
+            key_path = key_file.name
+        try:
+            subprocess.run(['openssl', 'ecparam', '-name', 'prime256v1', '-genkey', '-noout', '-out', key_path], check=True)
+            spki_der = subprocess.run(['openssl', 'ec', '-in', key_path, '-pubout', '-outform', 'DER'], capture_output=True, check=True).stdout
+            pub_b64 = base64.b64encode(spki_der).decode('utf-8')
+            status, res = self.request(user_client, 'POST', '/api/account/passkey', {
+                'id': passkey_id, 'name': 'My Laptop', 'publicKey': pub_b64
+            })
+            self.assertTrue(res.get('added'))
+        finally:
+            os.unlink(key_path)
 
         # Change admin settings
         self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': False, 'logLevel': 'DEBUG'})
@@ -870,7 +885,7 @@ class ServerFlowTests(unittest.TestCase):
         # Restore backup
         status, restored = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {})
         self.assertEqual(status, 200)
-        self.assertEqual(restored.get('passkeys'), 0)
+        self.assertEqual(restored.get('passkeys'), 1)
         self.assertEqual(restored.get('settings'), 3)
 
         # Verify settings restored
@@ -880,6 +895,21 @@ class ServerFlowTests(unittest.TestCase):
         status, settings = self.request(admin_client, 'GET', '/api/admin/settings')
         self.assertEqual(status, 200)
         self.assertEqual(settings['logLevel'], 'DEBUG')
+
+        # Verify user passkeys and TOTP survived backup/restore
+        status, res = self.request(user_client, 'POST', '/api/login', {'email': 'user2fa2@example.com', 'password': 'user-passphrase-123'})
+        self.assertEqual(status, 200)
+        temp_token = res['tempToken']
+        totp_code = server.compute_totp_code(secret)
+        status, res = self.request(user_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': totp_code})
+        self.assertEqual(status, 200)
+
+        status, twofa_info = self.request(user_client, 'GET', '/api/account/2fa')
+        self.assertEqual(status, 200)
+        self.assertTrue(twofa_info['hasTotp'])
+        self.assertEqual(len(twofa_info['passkeys']), 1)
+        self.assertEqual(twofa_info['passkeys'][0]['id'], passkey_id)
+        self.assertEqual(twofa_info['passkeys'][0]['name'], 'My Laptop')
 
     def test_session_days_and_formatted_backup_code(self):
         # Admin sets custom session days
