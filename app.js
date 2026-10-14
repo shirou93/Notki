@@ -57,6 +57,7 @@
   let isOffline = !navigator.onLine;
   let isSyncing = false;
   let pendingSync = false;
+  let passkeyConditionalAbortController = null;
 
   function getCacheKey(userId, key) {
     return `notki.cache.${key}.${userId}`;
@@ -312,6 +313,75 @@
     elements.authSwitch.hidden = !inviteToken;
     elements.authSwitch.textContent = t(mode === 'register' ? 'auth.switch.register' : 'auth.switch.login');
     document.body.classList.add('is-auth');
+
+    if (mode === 'login') {
+      triggerConditionalPasskeyLogin();
+    } else {
+      cancelConditionalPasskeyLogin();
+    }
+  }
+
+  function cancelConditionalPasskeyLogin() {
+    if (passkeyConditionalAbortController) {
+      passkeyConditionalAbortController.abort();
+      passkeyConditionalAbortController = null;
+    }
+  }
+
+  async function triggerConditionalPasskeyLogin() {
+    if (!window.isSecureContext || !navigator?.credentials?.get || !window.PublicKeyCredential) {
+      return;
+    }
+    try {
+      if (typeof PublicKeyCredential.isConditionalMediationAvailable === 'function') {
+        const available = await PublicKeyCredential.isConditionalMediationAvailable();
+        if (!available) return;
+      } else {
+        return;
+      }
+    } catch (e) {
+      return;
+    }
+
+    cancelConditionalPasskeyLogin();
+    passkeyConditionalAbortController = new AbortController();
+
+    const hostname = window.location.hostname;
+    const isDomain = Boolean(hostname && !/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) && hostname !== 'localhost');
+    const publicKeyOptions = {
+      challenge: new Uint8Array(32),
+      userVerification: 'preferred'
+    };
+    if (isDomain) {
+      publicKeyOptions.rpId = hostname;
+    }
+
+    try {
+      const assertion = await navigator.credentials.get({
+        publicKey: publicKeyOptions,
+        mediation: 'conditional',
+        signal: passkeyConditionalAbortController.signal
+      });
+
+      if (!assertion) return;
+
+      const payload = {
+        id: assertion.id,
+        authenticatorData: btoa(String.fromCharCode(...new Uint8Array(assertion.response.authenticatorData))),
+        clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(assertion.response.clientDataJSON))),
+        signature: btoa(String.fromCharCode(...new Uint8Array(assertion.response.signature)))
+      };
+
+      const { user } = await apiRequest('/api/login/passkey', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      cancelConditionalPasskeyLogin();
+      await showApp(user);
+    } catch (error) {
+      // Passive conditional mediation runs in the background for autofill.
+      // Any errors (e.g. aborted request, missing authenticator) should be swallowed silently.
+    }
   }
 
   async function showApp(user) {
@@ -731,6 +801,7 @@
         if (response.hasTotp) $('#login-totp').focus();
         return;
       }
+      cancelConditionalPasskeyLogin();
       await showApp(response.user);
     } catch (error) {
       $('#login-password').value = '';
