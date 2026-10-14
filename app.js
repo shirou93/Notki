@@ -17,7 +17,7 @@
     noteTitle: $('#note-title'), noteBody: $('#note-body'), labelsContainer: $('#note-labels'), saveState: $('#save-state'), date: $('#editor-date'),
     words: $('#editor-words'), pin: $('#pin-note'), archive: $('#archive-note'), delete: $('#delete-note'), toast: $('#toast'),
     appShell: $('#app-shell'), authView: $('#auth-view'), authHeading: $('#auth-heading'), authDescription: $('#auth-description'), authMessage: $('#auth-message'),
-    topbar: $('header.topbar'), loginForm: $('#login-form'), registerForm: $('#register-form'), authSwitch: $('#auth-switch'), adminLink: $('#admin-link'), navAdmin: $('#nav-admin'), adminArea: $('#admin-area'), pageHeading: $('.page-heading'), captureWrap: $('.capture-wrap'), notesArea: $('.notes-area'), topbarSearch: $('.search-box'),
+    topbar: $('header.topbar'), loginForm: $('#login-form'), registerForm: $('#register-form'), login2faForm: $('#login-2fa-form'), loginTotp: $('#login-totp'), loginPasskeyBtn: $('#login-passkey-btn') || $('#login-2fa-passkey-btn'), authSwitch: $('#auth-switch'), adminLink: $('#admin-link'), navAdmin: $('#nav-admin'), adminArea: $('#admin-area'), pageHeading: $('.page-heading'), captureWrap: $('.capture-wrap'), notesArea: $('.notes-area'), topbarSearch: $('.search-box'),
     sharedBanner: $('#shared-banner'), sharedTitle: $('#shared-title'), sharedPreview: $('#shared-preview'),
     avatar: $('#avatar'), profilePanel: $('#profile-panel'), profileBackdrop: $('#profile-backdrop'), profileAccount: $('#profile-account'),
     profileMessage: $('#profile-message'), passwordForm: $('#password-form'),
@@ -58,6 +58,16 @@
   let isSyncing = false;
   let pendingSync = false;
   let passkeyConditionalAbortController = null;
+
+  function bufferToBase64(buffer) {
+    if (!buffer) return '';
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
 
   function getCacheKey(userId, key) {
     return `notki.cache.${key}.${userId}`;
@@ -298,8 +308,8 @@
     if (elements.appShell) elements.appShell.hidden = true;
     if (elements.panel) elements.panel.hidden = true;
     if (elements.backdrop) elements.backdrop.hidden = true;
-    if ($('#login-2fa-form')) $('#login-2fa-form').hidden = true;
-    if ($('#login-passkey-btn')) $('#login-passkey-btn').hidden = true;
+    if (elements.login2faForm) elements.login2faForm.hidden = true;
+    if (elements.loginPasskeyBtn) elements.loginPasskeyBtn.hidden = true;
     if (elements.loginForm) elements.loginForm.hidden = mode !== 'login';
     if (elements.registerForm) elements.registerForm.hidden = mode !== 'register';
     const authHeadingSpan = elements.authHeading?.querySelector?.('span[data-i18n]');
@@ -375,9 +385,9 @@
 
       const payload = {
         id: assertion.id,
-        authenticatorData: btoa(String.fromCharCode(...new Uint8Array(assertion.response.authenticatorData))),
-        clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(assertion.response.clientDataJSON))),
-        signature: btoa(String.fromCharCode(...new Uint8Array(assertion.response.signature)))
+        authenticatorData: bufferToBase64(assertion.response.authenticatorData),
+        clientDataJSON: bufferToBase64(assertion.response.clientDataJSON),
+        signature: bufferToBase64(assertion.response.signature)
       };
 
       const { user } = await apiRequest('/api/login/passkey', {
@@ -833,10 +843,14 @@
   let loginTempToken = '';
 
   const handlePasskeyLogin = async (useTempToken = false) => {
+    cancelConditionalPasskeyLogin();
     try {
       if (!window.isSecureContext || !navigator?.credentials?.get) {
         throw new Error(t('topbar.2fa.passkeyNotSupported'));
       }
+      const passkeyBtn = elements.loginPasskeyBtn || $('#login-passkey-btn') || $('#login-2fa-passkey-btn');
+      if (passkeyBtn) passkeyBtn.hidden = false;
+
       const hostname = window.location.hostname;
       const isDomain = Boolean(hostname && !/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) && hostname !== 'localhost');
       const publicKeyOptions = {
@@ -849,9 +863,9 @@
       const assertion = await navigator.credentials.get({ publicKey: publicKeyOptions });
       const payload = {
         id: assertion.id,
-        authenticatorData: btoa(String.fromCharCode(...new Uint8Array(assertion.response.authenticatorData))),
-        clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(assertion.response.clientDataJSON))),
-        signature: btoa(String.fromCharCode(...new Uint8Array(assertion.response.signature)))
+        authenticatorData: bufferToBase64(assertion.response.authenticatorData),
+        clientDataJSON: bufferToBase64(assertion.response.clientDataJSON),
+        signature: bufferToBase64(assertion.response.signature)
       };
       if (useTempToken && loginTempToken) {
         payload.tempToken = loginTempToken;
@@ -862,7 +876,10 @@
       });
       await showApp(user);
     } catch (error) {
-      if (error.name !== 'NotAllowedError' && error.name !== 'AbortError') {
+      const passkeyBtn = elements.loginPasskeyBtn || $('#login-passkey-btn') || $('#login-2fa-passkey-btn');
+      if (passkeyBtn && useTempToken) passkeyBtn.hidden = false;
+
+      if (error.name !== 'NotAllowedError' && error.name !== 'AbortError' && error.name !== 'InvalidStateError') {
         if (elements.authMessage) {
           elements.authMessage.textContent = error.message;
           elements.authMessage.hidden = false;
@@ -883,9 +900,9 @@
       if (response.requires2FA) {
         loginTempToken = response.tempToken;
         if (elements.loginForm) elements.loginForm.hidden = true;
-        const form2fa = $('#login-2fa-form');
+        const form2fa = elements.login2faForm || $('#login-2fa-form');
         if (form2fa) form2fa.hidden = false;
-        const totpInput = $('#login-totp');
+        const totpInput = elements.loginTotp || $('#login-totp');
         if (totpInput) {
           totpInput.hidden = !response.hasTotp;
           if (totpInput.previousElementSibling) {
@@ -894,7 +911,7 @@
         }
         const totpSubmitBtn = form2fa?.querySelector('button[type="submit"]');
         if (totpSubmitBtn) totpSubmitBtn.hidden = !response.hasTotp;
-        const passkeyBtn = $('#login-passkey-btn');
+        const passkeyBtn = elements.loginPasskeyBtn || $('#login-passkey-btn') || $('#login-2fa-passkey-btn');
         if (passkeyBtn) passkeyBtn.hidden = !response.hasPasskey;
 
         if (response.hasPasskey) {
@@ -912,16 +929,17 @@
     }
   });
 
-  $('#login-2fa-form')?.addEventListener('submit', async event => {
+  (elements.login2faForm || $('#login-2fa-form'))?.addEventListener('submit', async event => {
     event.preventDefault();
     try {
+      const totpVal = (elements.loginTotp || $('#login-totp'))?.value || '';
       const { user } = await apiRequest('/api/login/2fa', {
         method: 'POST',
-        body: JSON.stringify({ tempToken: loginTempToken, totpCode: $('#login-totp')?.value || '' }),
+        body: JSON.stringify({ tempToken: loginTempToken, totpCode: totpVal }),
       });
       await showApp(user);
     } catch (error) {
-      if ($('#login-totp')) $('#login-totp').value = '';
+      if (elements.loginTotp || $('#login-totp')) (elements.loginTotp || $('#login-totp')).value = '';
       if (elements.authMessage) {
         elements.authMessage.textContent = error.message;
         elements.authMessage.hidden = false;
@@ -929,7 +947,7 @@
     }
   });
 
-  $('#login-passkey-btn')?.addEventListener('click', () => handlePasskeyLogin(true));
+  (elements.loginPasskeyBtn || $('#login-passkey-btn') || $('#login-2fa-passkey-btn'))?.addEventListener('click', () => handlePasskeyLogin(true));
 
   elements.registerForm.addEventListener('submit', async event => {
     event.preventDefault();
@@ -1340,7 +1358,7 @@
         throw new Error(t('topbar.2fa.passkeyNotSupported'));
       }
 
-      const pubKeyB64 = btoa(String.fromCharCode(...new Uint8Array(spkiBuffer)));
+      const pubKeyB64 = bufferToBase64(spkiBuffer);
       const defaultName = (typeof WebAssembly === 'object' && /iPad|iPhone|iPod/.test(navigator.userAgent)) ? 'iOS Device' : t('topbar.2fa.passkeyDefaultName');
       const inputName = prompt(t('topbar.2fa.passkeyPromptName'), defaultName);
       const name = (inputName && inputName.trim()) ? inputName.trim() : defaultName;
