@@ -1437,6 +1437,7 @@
         safeNode.contentEditable = 'false';
         safeNode.setAttribute('aria-label', t('card.drag'));
         safeNode.title = t('card.dragTitle');
+        safeNode.textContent = '⠟';
       }
       if (node.tagName === 'SPAN' && (node.classList.contains('task-text')
           || (!node.classList.contains('task-drag-handle') && node.parentElement?.matches('li') && node.parentElement.querySelector('input[type="checkbox"]')))) {
@@ -2031,11 +2032,12 @@
   }
 
   function filteredNotes() {
+    const q = query ? query.toLocaleLowerCase() : '';
     if (view === 'shared') {
       const matches = sharedNotes.filter(note => {
-        if (!query) return true;
+        if (!q) return true;
         const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')} ${note.ownerEmail || ''}`.toLocaleLowerCase();
-        return searchable.includes(query.toLocaleLowerCase());
+        return searchable.includes(q);
       });
       return matches.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
     }
@@ -2044,19 +2046,19 @@
       if (view === 'pinned' && (!isActive(note) || !note.pinned)) return false;
       if (view === 'archive' && (!note.archived || note.deleted)) return false;
       if (view === 'trash' && !note.deleted) return false;
-      if (!query) return true;
+      if (!q) return true;
       const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')}`.toLocaleLowerCase();
-      return searchable.includes(query.toLocaleLowerCase());
-      }).sort((a, b) => {
-        // In 'all' view without search, sort by pinned first, then by manual order
-        if (view === 'all' && !query) {
-          if (a.pinned !== b.pinned) return Number(b.pinned) - Number(a.pinned);
-          return b.order - a.order;
-        }
-        // In other views or with search, maintain manual order
+      return searchable.includes(q);
+    }).sort((a, b) => {
+      // In 'all' view without search, sort by pinned first, then by manual order
+      if (view === 'all' && !query) {
+        if (a.pinned !== b.pinned) return Number(b.pinned) - Number(a.pinned);
         return b.order - a.order;
-      });
-    }
+      }
+      // In other views or with search, maintain manual order
+      return b.order - a.order;
+    });
+  }
 
   function render() {
     const active = notes.filter(isActive);
