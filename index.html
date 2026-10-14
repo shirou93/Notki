@@ -36,7 +36,7 @@
       <p class="auth-message" id="auth-message" role="alert" hidden></p>
       <form class="auth-form" id="login-form">
         <label class="field-label" for="login-email" data-i18n="auth.email">E-MAIL</label>
-        <input class="auth-input" id="login-email" type="email" autocomplete="username" required maxlength="254">
+        <input class="auth-input" id="login-email" type="email" autocomplete="username webauthn" required maxlength="254">
         <label class="field-label" for="login-password" data-i18n="auth.password">PASSWORD</label>
         <input class="auth-input" id="login-password" type="password" autocomplete="current-password" required>
         <button class="button-primary" type="submit" data-i18n="auth.submit.login">Sign in</button>
@@ -107,7 +107,7 @@
           <span class="storage-dot"></span>
           <span data-i18n="nav.storage">Saved on the server</span>
         </div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.61</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.62</span>
       </div>
     </aside>
 
@@ -185,7 +185,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.61</strong></p>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.62</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" class="admin-update-box" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
