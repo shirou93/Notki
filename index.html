@@ -40,6 +40,7 @@
         <label class="field-label" for="login-password" data-i18n="auth.password">PASSWORD</label>
         <input class="auth-input" id="login-password" type="password" autocomplete="current-password" required>
         <button class="button-primary" type="submit" data-i18n="auth.submit.login">Sign in</button>
+        <button class="button-secondary login-passkey-btn" id="login-passkey-btn" type="button" style="margin-top: 8px;" data-i18n="auth.2fa.usePasskey">Use Passkey</button>
       </form>
       <form class="auth-form" id="register-form" hidden>
         <label class="field-label" for="register-email" data-i18n="auth.email">E-MAIL</label>
@@ -54,7 +55,7 @@
         <label class="field-label" for="login-totp" data-i18n="auth.2fa.totpCode">TWO-FACTOR CODE</label>
         <input class="auth-input" id="login-totp" type="text" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]*" placeholder="6-digit code">
         <button class="button-primary" type="submit" data-i18n="auth.2fa.verify">Verify</button>
-        <button class="button-secondary" id="login-passkey-btn" type="button" style="margin-top: 8px;" data-i18n="auth.2fa.usePasskey">Use Passkey</button>
+        <button class="button-secondary login-passkey-btn" id="login-2fa-passkey-btn" type="button" style="margin-top: 8px;" data-i18n="auth.2fa.usePasskey">Use Passkey</button>
       </form>
       <button class="auth-switch" id="auth-switch" type="button" hidden></button>
     </div>
@@ -106,7 +107,7 @@
           <span class="storage-dot"></span>
           <span data-i18n="nav.storage">Saved on the server</span>
         </div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.60</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.61</span>
       </div>
     </aside>
 
@@ -184,7 +185,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.60</strong></p>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.61</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" class="admin-update-box" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>

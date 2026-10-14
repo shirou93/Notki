@@ -727,7 +727,7 @@
         $('#login-totp').hidden = !response.hasTotp;
         $('#login-totp').previousElementSibling.hidden = !response.hasTotp;
         $('#login-2fa-form').querySelector('button[type="submit"]').hidden = !response.hasTotp;
-        $('#login-passkey-btn').hidden = !response.hasPasskey;
+        $('#login-2fa-passkey-btn').hidden = !response.hasPasskey;
         if (response.hasTotp) $('#login-totp').focus();
         return;
       }
@@ -753,7 +753,7 @@
     }
   });
 
-  $('#login-passkey-btn')?.addEventListener('click', async () => {
+  const handlePasskeyLogin = async (useTempToken = false) => {
     try {
       if (!window.isSecureContext || !navigator?.credentials?.get) {
         throw new Error(t('topbar.2fa.passkeyNotSupported'));
@@ -768,15 +768,18 @@
         publicKeyOptions.rpId = hostname;
       }
       const assertion = await navigator.credentials.get({ publicKey: publicKeyOptions });
+      const payload = {
+        id: assertion.id,
+        authenticatorData: btoa(String.fromCharCode(...new Uint8Array(assertion.response.authenticatorData))),
+        clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(assertion.response.clientDataJSON))),
+        signature: btoa(String.fromCharCode(...new Uint8Array(assertion.response.signature)))
+      };
+      if (useTempToken && loginTempToken) {
+        payload.tempToken = loginTempToken;
+      }
       const { user } = await apiRequest('/api/login/passkey', {
         method: 'POST',
-        body: JSON.stringify({
-          tempToken: loginTempToken,
-          id: assertion.id,
-          authenticatorData: btoa(String.fromCharCode(...new Uint8Array(assertion.response.authenticatorData))),
-          clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(assertion.response.clientDataJSON))),
-          signature: btoa(String.fromCharCode(...new Uint8Array(assertion.response.signature)))
-        }),
+        body: JSON.stringify(payload),
       });
       await showApp(user);
     } catch (error) {
@@ -785,7 +788,10 @@
         elements.authMessage.hidden = false;
       }
     }
-  });
+  };
+
+  $('#login-passkey-btn')?.addEventListener('click', () => handlePasskeyLogin(false));
+  $('#login-2fa-passkey-btn')?.addEventListener('click', () => handlePasskeyLogin(true));
   elements.registerForm.addEventListener('submit', async event => {
     event.preventDefault();
     const password = $('#register-password').value;
@@ -1129,12 +1135,14 @@
 
       const pubKeyB64 = btoa(String.fromCharCode(...new Uint8Array(spkiBuffer)));
       const defaultName = (typeof WebAssembly === 'object' && /iPad|iPhone|iPod/.test(navigator.userAgent)) ? 'iOS Device' : t('topbar.2fa.passkeyDefaultName');
+      const inputName = prompt(t('topbar.2fa.passkeyPromptName'), defaultName);
+      const name = (inputName && inputName.trim()) ? inputName.trim() : defaultName;
 
       await apiRequest('/api/account/passkey', {
         method: 'POST',
         body: JSON.stringify({
           id: credential.id,
-          name: defaultName,
+          name,
           publicKey: pubKeyB64,
         }),
       });

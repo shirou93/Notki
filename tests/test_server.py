@@ -513,7 +513,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.60', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.60'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.61', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.61'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -537,7 +537,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.60'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.61'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
@@ -747,8 +747,9 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(len(res['passkeys']), 1)
         self.assertEqual(res['passkeys'][0]['id'], passkey_id)
+        self.assertEqual(res['passkeys'][0]['name'], 'My Laptop')
 
-        # Test login via passkey
+        # Test login via passkey with tempToken (2FA flow)
         status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa@example.com', 'password': 'user-passphrase-123'})
         self.assertEqual(status, 200)
         self.assertTrue(res['hasPasskey'])
@@ -767,6 +768,17 @@ class ServerFlowTests(unittest.TestCase):
 
         status, res = self.request(unauth_client, 'POST', '/api/login/passkey', {
             'tempToken': temp_token,
+            'id': passkey_id,
+            'authenticatorData': base64.b64encode(auth_data).decode('utf-8'),
+            'clientDataJSON': base64.b64encode(client_data).decode('utf-8'),
+            'signature': base64.b64encode(sig_der).decode('utf-8')
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(res['user']['email'], 'user2fa@example.com')
+
+        # Test passwordless login via passkey without tempToken
+        passwordless_client = self.new_client()
+        status, res = self.request(passwordless_client, 'POST', '/api/login/passkey', {
             'id': passkey_id,
             'authenticatorData': base64.b64encode(auth_data).decode('utf-8'),
             'clientDataJSON': base64.b64encode(client_data).decode('utf-8'),

@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.60'
+VERSION = '0.1.5.61'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -1432,18 +1432,28 @@ class NotkiHandler(BaseHTTPRequestHandler):
         self.send_json({'user': public_user(row)}, extra_headers=self.session_headers(token))
 
     def login_passkey(self, payload):
-        user_id = consume_temp_2fa_token(payload.get('tempToken'))
-        if not user_id:
-            raise APIError('Sesja 2FA wygasła lub jest nieprawidłowa.', 401)
         key_id = payload.get('id')
         auth_data_b64 = payload.get('authenticatorData')
         client_data_b64 = payload.get('clientDataJSON')
         sig_b64 = payload.get('signature')
         if not key_id or not auth_data_b64 or not client_data_b64 or not sig_b64:
             raise APIError('Nieprawidłowe dane klucza.', 400)
+
+        temp_token = payload.get('tempToken')
         with database() as connection:
-            row = connection.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-            pk_row = connection.execute('SELECT public_key_pem FROM passkeys WHERE id = ? AND user_id = ?', (key_id, user_id)).fetchone()
+            if temp_token:
+                user_id = consume_temp_2fa_token(temp_token)
+                if not user_id:
+                    raise APIError('Sesja 2FA wygasła lub jest nieprawidłowa.', 401)
+                row = connection.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+                pk_row = connection.execute('SELECT public_key_pem FROM passkeys WHERE id = ? AND user_id = ?', (key_id, user_id)).fetchone()
+            else:
+                pk_row = connection.execute('SELECT user_id, public_key_pem FROM passkeys WHERE id = ?', (key_id,)).fetchone()
+                if not pk_row:
+                    raise APIError('Nie znaleziono klucza zabezpieczeń.', 401)
+                user_id = pk_row['user_id']
+                row = connection.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+
             if not pk_row or not row:
                 raise APIError('Nie znaleziono klucza zabezpieczeń.', 401)
         try:
