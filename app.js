@@ -834,7 +834,6 @@
         $('#login-totp').hidden = !response.hasTotp;
         $('#login-totp').previousElementSibling.hidden = !response.hasTotp;
         $('#login-2fa-form').querySelector('button[type="submit"]').hidden = !response.hasTotp;
-        $('#login-2fa-passkey-btn').hidden = !response.hasPasskey;
         if (response.hasTotp) $('#login-totp').focus();
         return;
       }
@@ -898,8 +897,6 @@
     }
   };
 
-  $('#login-passkey-btn')?.addEventListener('click', () => handlePasskeyLogin(false));
-  $('#login-2fa-passkey-btn')?.addEventListener('click', () => handlePasskeyLogin(true));
   elements.registerForm.addEventListener('submit', async event => {
     event.preventDefault();
     const password = $('#register-password').value;

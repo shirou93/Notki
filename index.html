@@ -40,7 +40,6 @@
         <label class="field-label" for="login-password" data-i18n="auth.password">PASSWORD</label>
         <input class="auth-input" id="login-password" type="password" autocomplete="current-password" required>
         <button class="button-primary" type="submit" data-i18n="auth.submit.login">Sign in</button>
-        <button class="button-secondary login-passkey-btn" id="login-passkey-btn" type="button" style="margin-top: 8px;" data-i18n="auth.2fa.usePasskey">Use Passkey</button>
       </form>
       <form class="auth-form" id="register-form" hidden>
         <label class="field-label" for="register-email" data-i18n="auth.email">E-MAIL</label>
@@ -55,7 +54,6 @@
         <label class="field-label" for="login-totp" data-i18n="auth.2fa.totpCode">TWO-FACTOR CODE</label>
         <input class="auth-input" id="login-totp" type="text" autocomplete="one-time-code" placeholder="6-digit code or emergency code">
         <button class="button-primary" type="submit" data-i18n="auth.2fa.verify">Verify</button>
-        <button class="button-secondary login-passkey-btn" id="login-2fa-passkey-btn" type="button" style="margin-top: 8px;" data-i18n="auth.2fa.usePasskey">Use Passkey</button>
       </form>
       <button class="auth-switch" id="auth-switch" type="button" hidden></button>
     </div>
@@ -179,6 +177,8 @@
             <input type="checkbox" id="admin-require-2fa"> <span data-i18n="admin.security.require2fa">Require 2FA for all users</span>
           </label>
         </div>
+      </div>
+      <div class="admin-security-controls">
         <div class="admin-security-row">
           <label class="field-label" for="admin-session-days" data-i18n="admin.security.sessionDays">Session duration (days, default 30)</label>
           <input class="auth-input" id="admin-session-days" type="number" min="1" max="3650" value="30" style="max-width: 150px;">
