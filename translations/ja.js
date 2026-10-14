@@ -50,6 +50,9 @@ window.notkiTranslations.ja = {
   'view.archive': 'アーカイブ',
   'view.trash': 'ゴミ箱',
 
+  'topbar.toggleMenu': 'メニューを切り替え',
+  'topbar.listView': 'リスト表示',
+  'topbar.gridView': 'グリッド表示',
   'topbar.breadcrumb': 'あなたのノート',
   'topbar.search': 'ノートを検索',
   'topbar.settings': '設定',
@@ -207,6 +210,7 @@ window.notkiTranslations.ja = {
   'editor.clearFormat': '書式をクリア',
   'editor.bodyPlaceholder': '書き始める...',
   'editor.tags': 'タグ',
+  'editor.editLabels': 'ラベルを編集',
   'editor.tagsPlaceholder': '例: 仕事, アイディア',
   'editor.color': 'ノートの色',
   'editor.colorGroup': 'ノートの色',

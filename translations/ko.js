@@ -50,6 +50,9 @@ window.notkiTranslations.ko = {
   'view.archive': '보관함',
   'view.trash': '휴지통',
 
+  'topbar.toggleMenu': '메뉴 토글',
+  'topbar.listView': '목록 보기',
+  'topbar.gridView': '격자 보기',
   'topbar.breadcrumb': '나의 노트',
   'topbar.search': '노트 검색',
   'topbar.settings': '설정',
@@ -207,6 +210,7 @@ window.notkiTranslations.ko = {
   'editor.clearFormat': '서식 지우기',
   'editor.bodyPlaceholder': '글을 작성하세요...',
   'editor.tags': '라벨',
+  'editor.editLabels': '라벨 편집',
   'editor.tagsPlaceholder': '예: 업무, 아이디어',
   'editor.color': '노트 색상',
   'editor.colorGroup': '노트 색상',

@@ -63,7 +63,7 @@
   <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
   <div class="app-shell" id="app-shell" hidden>
     <div class="mobile-header" id="mobile-header">
-      <button class="icon-button hamburger-toggle" id="hamburger-toggle" type="button" aria-label="Toggle menu" title="Menu" aria-expanded="false" aria-controls="sidebar">☰</button>
+      <button class="icon-button hamburger-toggle" id="hamburger-toggle" type="button" aria-label="Toggle menu" title="Menu" data-i18n-aria-label="topbar.toggleMenu" data-i18n-title="topbar.toggleMenu" aria-expanded="false" aria-controls="sidebar">☰</button>
       <a class="brand" href="#all" aria-label="Notki, all notes" data-i18n-aria-label="brand.homeAria">
         <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
         <span>notki<span class="brand-period">.</span></span>
@@ -106,7 +106,7 @@
           <span class="storage-dot"></span>
           <span data-i18n="nav.storage">Saved on the server</span>
         </div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.75</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.76</span>
       </div>
     </aside>
 
@@ -117,7 +117,7 @@
           <button class="button-secondary sync-button" id="topbar-sync-button" type="button" data-i18n="nav.syncNow" hidden>Synchronize</button>
           <label class="search-box" for="search-input"><span class="search-icon" aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="Search notes" autocomplete="off" data-i18n-placeholder="topbar.search"><kbd>⌘ K</kbd></label>
 
-          <button class="icon-button" id="view-toggle" type="button" aria-label="Toggle view" title="Toggle view">▤</button>
+          <button class="icon-button" id="view-toggle" type="button" aria-label="List view" title="List view" data-i18n-aria-label="topbar.listView" data-i18n-title="topbar.listView">▤</button>
 
           <details class="settings-menu" id="settings-menu">
             <summary class="avatar" id="avatar" aria-label="Local profile" title="Local profile" data-i18n-aria-label="topbar.profile" data-i18n-title="topbar.profile">N</summary>
@@ -192,7 +192,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.75</strong></p>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.76</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" class="admin-update-box" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
@@ -420,7 +420,7 @@
       <div class="task-restore-suggestions" id="task-restore-suggestions" role="status" hidden></div>
       <div class="editor-meta"><span id="editor-date"></span><span class="meta-separator">·</span><span id="editor-words">0 words</span></div>
       <div class="editor-divider"></div>
-      <div class="field-label labels-label-row"><span data-i18n="editor.tags">TAGS</span> <button type="button" class="icon-button labels-edit-button" id="edit-labels" aria-label="Edit labels">✎</button></div>
+      <div class="field-label labels-label-row"><span data-i18n="editor.tags">TAGS</span> <button type="button" class="icon-button labels-edit-button" id="edit-labels" aria-label="Edit labels" title="Edit labels" data-i18n-aria-label="editor.editLabels" data-i18n-title="editor.editLabels">✎</button></div>
       <div class="labels-container" id="note-labels"></div>
       <div class="field-label color-label" data-i18n="editor.color">NOTE COLOR</div>
       <div class="color-picker" role="group" aria-label="Note color" data-i18n-aria-label="editor.colorGroup">

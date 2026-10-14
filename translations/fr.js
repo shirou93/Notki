@@ -50,6 +50,9 @@ window.notkiTranslations.fr = {
   'view.archive': 'Archives',
   'view.trash': 'Corbeille',
 
+  'topbar.toggleMenu': 'Basculer le menu',
+  'topbar.listView': 'Vue en liste',
+  'topbar.gridView': 'Vue en grille',
   'topbar.breadcrumb': 'VOTRE BLOC-NOTES',
   'topbar.search': 'Rechercher des notes',
   'topbar.settings': 'Paramètres',
@@ -207,6 +210,7 @@ window.notkiTranslations.fr = {
   'editor.clearFormat': 'Effacer la mise en forme',
   'editor.bodyPlaceholder': 'Commencez à écrire...',
   'editor.tags': 'ÉTIQUETTES',
+  'editor.editLabels': 'Modifier les étiquettes',
   'editor.tagsPlaceholder': 'ex. travail, idées',
   'editor.color': 'COULEUR DE LA NOTE',
   'editor.colorGroup': 'Couleur de la note',
