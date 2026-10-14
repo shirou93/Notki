@@ -1070,6 +1070,63 @@
     }
   });
 
+  $('#add-passkey-btn')?.addEventListener('click', async () => {
+    try {
+      if (!window.isSecureContext || !navigator?.credentials?.create) {
+        throw new Error(t('topbar.2fa.passkeyNotSupported'));
+      }
+      const name = prompt(t('topbar.2fa.passkeyPromptName'), t('topbar.2fa.passkeyDefaultName'));
+      if (name === null) return;
+      const keyName = name.trim() || t('topbar.2fa.passkeyDefaultName');
+
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge: new Uint8Array(32),
+          rp: { name: 'Notki', id: window.location.hostname },
+          user: {
+            id: new TextEncoder().encode(currentUser?.email || 'user'),
+            name: currentUser?.email || 'user',
+            displayName: currentUser?.email || 'user',
+          },
+          pubKeyCredParams: [
+            { alg: -7, type: 'public-key' },
+            { alg: -257, type: 'public-key' },
+          ],
+          authenticatorSelection: {
+            userVerification: 'preferred',
+          },
+          timeout: 60000,
+        },
+      });
+
+      if (!credential || !credential.response || !credential.response.getPublicKey) {
+        throw new Error(t('topbar.2fa.passkeyNotSupported'));
+      }
+
+      const spkiBuffer = credential.response.getPublicKey();
+      if (!spkiBuffer) {
+        throw new Error(t('topbar.2fa.passkeyNotSupported'));
+      }
+
+      const pubKeyB64 = btoa(String.fromCharCode(...new Uint8Array(spkiBuffer)));
+
+      await apiRequest('/api/account/passkey', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: credential.id,
+          name: keyName,
+          publicKey: pubKeyB64,
+        }),
+      });
+
+      await refresh2faStatus();
+    } catch (error) {
+      if (error.name !== 'NotAllowedError' && error.name !== 'AbortError') {
+        alert(error.message);
+      }
+    }
+  });
+
   async function refresh2faStatus() {
     try {
       const status = await apiRequest('/api/account/2fa');
