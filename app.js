@@ -2044,7 +2044,11 @@
       .then(() => {
         clearSyncQueue(currentUser.id);
       });
-    saveQueue.catch(error => showToast(t('editor.saveFailed', { message: error.message })));
+    saveQueue.catch(error => {
+      if (!isOffline && error.name !== 'TypeError' && error.message !== 'Failed to fetch') {
+        showToast(t('editor.saveFailed', { message: error.message }));
+      }
+    });
   }
 
   function moveNote(noteId, targetId, after = false) {
@@ -2922,7 +2926,11 @@
       .then(() => {
         if (currentUser) saveLocalCache(currentUser.id, { sharedNotes });
       });
-    saveQueue.catch(error => showToast(t('editor.saveFailed', { message: error.message })));
+    saveQueue.catch(error => {
+      if (!isOffline && error.name !== 'TypeError' && error.message !== 'Failed to fetch') {
+        showToast(t('editor.saveFailed', { message: error.message }));
+      }
+    });
   }
 
   function scheduleSave() {
