@@ -299,6 +299,7 @@
     elements.panel.hidden = true;
     elements.backdrop.hidden = true;
     if ($('#login-2fa-form')) $('#login-2fa-form').hidden = true;
+    if ($('#login-passkey-btn')) $('#login-passkey-btn').hidden = true;
     elements.loginForm.hidden = mode !== 'login';
     elements.registerForm.hidden = mode !== 'register';
     elements.authHeading.firstChild.dataset.i18n = mode === 'register' ? 'auth.heading.register' : 'auth.heading.login';
@@ -820,46 +821,6 @@
   });
   let loginTempToken = '';
 
-  elements.loginForm.addEventListener('submit', async event => {
-    event.preventDefault();
-    try {
-      const response = await apiRequest('/api/login', {
-        method: 'POST',
-        body: JSON.stringify({ email: $('#login-email').value, password: $('#login-password').value }),
-      });
-      if (response.requires2FA) {
-        loginTempToken = response.tempToken;
-        elements.loginForm.hidden = true;
-        $('#login-2fa-form').hidden = false;
-        $('#login-totp').hidden = !response.hasTotp;
-        $('#login-totp').previousElementSibling.hidden = !response.hasTotp;
-        $('#login-2fa-form').querySelector('button[type="submit"]').hidden = !response.hasTotp;
-        if (response.hasTotp) $('#login-totp').focus();
-        return;
-      }
-      cancelConditionalPasskeyLogin();
-      await showApp(response.user);
-    } catch (error) {
-      $('#login-password').value = '';
-      showAuth('login', error.message);
-    }
-  });
-
-  $('#login-2fa-form')?.addEventListener('submit', async event => {
-    event.preventDefault();
-    try {
-      const { user } = await apiRequest('/api/login/2fa', {
-        method: 'POST',
-        body: JSON.stringify({ tempToken: loginTempToken, totpCode: $('#login-totp')?.value || '' }),
-      });
-      await showApp(user);
-    } catch (error) {
-      if ($('#login-totp')) $('#login-totp').value = '';
-      elements.authMessage.textContent = error.message;
-      elements.authMessage.hidden = false;
-    }
-  });
-
   const handlePasskeyLogin = async (useTempToken = false) => {
     try {
       if (!window.isSecureContext || !navigator?.credentials?.get) {
@@ -896,6 +857,55 @@
       }
     }
   };
+
+  elements.loginForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    try {
+      const response = await apiRequest('/api/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: $('#login-email').value, password: $('#login-password').value }),
+      });
+      if (response.requires2FA) {
+        loginTempToken = response.tempToken;
+        elements.loginForm.hidden = true;
+        $('#login-2fa-form').hidden = false;
+        if ($('#login-totp')) $('#login-totp').hidden = !response.hasTotp;
+        if ($('#login-totp')?.previousElementSibling) $('#login-totp').previousElementSibling.hidden = !response.hasTotp;
+        const totpSubmitBtn = $('#login-2fa-form')?.querySelector('button[type="submit"]');
+        if (totpSubmitBtn) totpSubmitBtn.hidden = !response.hasTotp;
+        if ($('#login-passkey-btn')) $('#login-passkey-btn').hidden = !response.hasPasskey;
+
+        if (response.hasPasskey) {
+          handlePasskeyLogin(true);
+        } else if (response.hasTotp && $('#login-totp')) {
+          $('#login-totp').focus();
+        }
+        return;
+      }
+      cancelConditionalPasskeyLogin();
+      await showApp(response.user);
+    } catch (error) {
+      $('#login-password').value = '';
+      showAuth('login', error.message);
+    }
+  });
+
+  $('#login-2fa-form')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    try {
+      const { user } = await apiRequest('/api/login/2fa', {
+        method: 'POST',
+        body: JSON.stringify({ tempToken: loginTempToken, totpCode: $('#login-totp')?.value || '' }),
+      });
+      await showApp(user);
+    } catch (error) {
+      if ($('#login-totp')) $('#login-totp').value = '';
+      elements.authMessage.textContent = error.message;
+      elements.authMessage.hidden = false;
+    }
+  });
+
+  $('#login-passkey-btn')?.addEventListener('click', () => handlePasskeyLogin(true));
 
   elements.registerForm.addEventListener('submit', async event => {
     event.preventDefault();
