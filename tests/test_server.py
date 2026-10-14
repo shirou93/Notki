@@ -178,6 +178,25 @@ class ServerFlowTests(unittest.TestCase):
         status, error = self.request(other, 'PUT', '/api/shared/mine-1', {'title': 'x', 'body': 'y'})
         self.assertEqual(status, 404)
 
+    def test_save_notes_preserves_existing_shares(self):
+        owner = self.register_user('owner_save@example.com')
+        reader = self.register_user('reader_save@example.com')
+        self.request(owner, 'PUT', '/api/notes', {'notes': [self.note_payload('note-share-1', 'Notes before save')]})
+        self.request(owner, 'POST', '/api/notes/note-share-1/shares', {'email': 'reader_save@example.com', 'permission': 'write'})
+
+        status, shared = self.request(reader, 'GET', '/api/shared')
+        self.assertEqual(status, 200)
+        self.assertEqual(len(shared['notes']), 1)
+
+        # Owner saves notes again
+        self.request(owner, 'PUT', '/api/notes', {'notes': [self.note_payload('note-share-1', 'Notes after save')]})
+
+        # Verify reader still has access to the shared note
+        status, shared = self.request(reader, 'GET', '/api/shared')
+        self.assertEqual(status, 200)
+        self.assertEqual(len(shared['notes']), 1)
+        self.assertEqual(shared['notes'][0]['title'], 'Notes after save')
+
     def test_shares_survive_server_backup_restore(self):
         owner = self.register_user('owner3@example.com')
         reader = self.register_user('reader3@example.com')

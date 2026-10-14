@@ -521,6 +521,51 @@
     return svg;
   }
 
+  function createDownloadIconSvg() {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '1em');
+    svg.setAttribute('height', '1em');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.7');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.innerHTML = '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>';
+    return svg;
+  }
+
+  function createRestoreIconSvg() {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '1em');
+    svg.setAttribute('height', '1em');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.7');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.innerHTML = '<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>';
+    return svg;
+  }
+
+  function createLockIconSvg() {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '1em');
+    svg.setAttribute('height', '1em');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.7');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.innerHTML = '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>';
+    return svg;
+  }
+
   async function resetUser2FA(userId, email) {
     if (!confirm(t('admin.users.confirmReset2FA', { email }))) return;
     try {
@@ -535,26 +580,14 @@
     const rows = users.map(user => {
       const row = document.createElement('tr');
       const actions = document.createElement('td');
-      actions.className = 'admin-table-actions';
+      actions.className = 'admin-table-actions backup-actions';
       if (user.has2FA) {
-        const reset2faBtn = document.createElement('button');
-        reset2faBtn.type = 'button';
-        reset2faBtn.className = 'action-icon admin-reset-2fa-btn';
-        reset2faBtn.append(createShieldOffIconSvg());
-        reset2faBtn.title = t('admin.users.reset2FA');
-        reset2faBtn.setAttribute('aria-label', t('admin.users.reset2FA'));
-        reset2faBtn.addEventListener('click', () => resetUser2FA(user.id, user.email));
-        actions.append(reset2faBtn);
+        actions.append(backupAction(createShieldOffIconSvg(), t('admin.users.reset2FA'), () => resetUser2FA(user.id, user.email), true));
       }
       if (user.role !== 'admin') {
-        const delBtn = document.createElement('button');
-        delBtn.type = 'button';
-        delBtn.className = 'action-icon admin-delete-btn';
-        delBtn.append(createTrashIconSvg());
-        delBtn.title = t('admin.users.delete');
-        delBtn.setAttribute('aria-label', t('admin.users.delete'));
-        delBtn.addEventListener('click', () => deleteUser(user.id));
-        actions.append(delBtn);
+        actions.append(backupAction(createTrashIconSvg(), t('admin.users.delete'), () => deleteUser(user.id), true));
+      } else {
+        actions.append(backupAction(createLockIconSvg(), t('admin.users.cannotDeleteAdmin'), null, false, true));
       }
       const roleCell = document.createElement('td');
       const roleBadge = document.createElement('span');
@@ -598,16 +631,9 @@
       const statusKey = invite.usedAt ? 'used' : expired ? 'expired' : 'pending';
       const statusClass = invite.usedAt ? 'status-used' : expired ? 'status-expired' : 'status-pending';
       const actions = document.createElement('td');
-      actions.className = 'admin-table-actions';
+      actions.className = 'admin-table-actions backup-actions';
       if (invite.tokenHash) {
-        const delBtn = document.createElement('button');
-        delBtn.type = 'button';
-        delBtn.className = 'action-icon admin-delete-btn';
-        delBtn.append(createTrashIconSvg());
-        delBtn.title = t('admin.invites.delete');
-        delBtn.setAttribute('aria-label', t('admin.invites.delete'));
-        delBtn.addEventListener('click', () => deleteInvite(invite.tokenHash));
-        actions.append(delBtn);
+        actions.append(backupAction(createTrashIconSvg(), t('admin.invites.delete'), () => deleteInvite(invite.tokenHash), true));
       }
       const statusCell = document.createElement('td');
       const statusBadge = document.createElement('span');
@@ -626,7 +652,7 @@
     document.querySelector('#admin-invites').replaceChildren(...rows);
   }
 
-  function backupAction(content, title, handler, isDanger = false) {
+  function backupAction(content, title, handler, isDanger = false, isDisabled = false) {
     const button = document.createElement('button');
     button.className = `button-secondary backup-action${isDanger ? ' backup-action-danger' : ''}`;
     button.type = 'button';
@@ -637,7 +663,13 @@
     }
     button.title = title;
     button.setAttribute('aria-label', title);
-    button.addEventListener('click', handler);
+    if (isDisabled) {
+      button.disabled = true;
+      button.style.opacity = '0.6';
+      button.style.cursor = 'not-allowed';
+    } else if (handler) {
+      button.addEventListener('click', handler);
+    }
     return button;
   }
 
@@ -661,8 +693,8 @@
       const actions = document.createElement('td');
       actions.className = 'backup-actions';
       actions.append(
-        backupAction('↓', t('admin.backups.download'), () => downloadBackup(backup.filename)),
-        backupAction('↻', t('admin.backups.restore'), () => restoreBackup(backup)),
+        backupAction(createDownloadIconSvg(), t('admin.backups.download'), () => downloadBackup(backup.filename)),
+        backupAction(createRestoreIconSvg(), t('admin.backups.restore'), () => restoreBackup(backup)),
         backupAction(createTrashIconSvg(), t('admin.backups.delete'), () => deleteBackup(backup.filename), true),
       );
       row.append(filename, tableCell(formatDate(backup.createdAt)), tableCell(size), actions);
@@ -981,7 +1013,7 @@
   }
 
   async function openShare(noteId) {
-    const note = notes.find(item => item.id === noteId);
+    const note = notes.find(item => item.id === noteId) || sharedNotes.find(item => item.id === noteId);
     if (!note) return;
     shareNoteId = noteId;
     shareReturnFocus = document.activeElement;
@@ -995,8 +1027,17 @@
     elements.sharePanel.setAttribute('aria-hidden', 'false');
     elements.shareBackdrop.hidden = false;
     document.body.style.overflow = 'hidden';
-    window.setTimeout(() => elements.shareEmail.focus(), 180);
-    await Promise.all([loadShares(), loadDirectory()]);
+
+    const shared = Boolean(note.ownerEmail);
+    if (shared) {
+      elements.shareForm.hidden = true;
+      elements.shareEmpty.textContent = t('share.ownerLabel', { email: note.ownerEmail });
+      elements.shareEmpty.hidden = false;
+    } else {
+      elements.shareForm.hidden = false;
+      window.setTimeout(() => elements.shareEmail.focus(), 180);
+      await Promise.all([loadShares(), loadDirectory()]);
+    }
   }
 
   function closeShare() {
@@ -2077,6 +2118,21 @@
     } else {
       cardBody.textContent = noteText(note) || t('editor.emptyNote');
     }
+    const shareBtn = $('.card-share', card);
+    const isSharedOut = Boolean(note.shareCount && note.shareCount > 0);
+    if (shareBtn) {
+      if (shared || isSharedOut) {
+        shareBtn.classList.add('is-shared');
+        shareBtn.hidden = false;
+      } else {
+        shareBtn.hidden = note.archived || note.deleted || view === 'archive' || view === 'trash';
+      }
+      shareBtn.addEventListener('click', event => {
+        event.stopPropagation();
+        openShare(note.id);
+      });
+    }
+
     const pin = $('.card-pin', card);
     pin.classList.toggle('is-pinned', note.pinned);
     pin.setAttribute('aria-label', t(note.pinned ? 'editor.unpin' : 'editor.pin'));
@@ -2158,7 +2214,7 @@
     card.addEventListener('pointerdown', event => {
       if (readOnly) return;
       if (event.button !== 0) return;
-      if (event.target.closest('button, input, .task-checkbox, .task-drag-handle, .card-drag, .card-pin, .card-tag')) return;
+      if (event.target.closest('button, input, .task-checkbox, .task-drag-handle, .card-drag, .card-pin, .card-tag, .card-share')) return;
 
       cardSwipeState = {
         pointerId: event.pointerId,
@@ -2648,7 +2704,10 @@
     const payload = JSON.stringify({
       title: note.title, body: note.body, bodyFormat: note.bodyFormat, color: note.color, tags: note.tags,
     });
-    saveQueue = saveQueue.catch(() => {}).then(() => apiRequest(`/api/shared/${encodeURIComponent(note.id)}`, { method: 'PUT', body: payload }));
+    saveQueue = saveQueue.catch(() => {}).then(() => apiRequest(`/api/shared/${encodeURIComponent(note.id)}`, { method: 'PUT', body: payload }))
+      .then(() => {
+        if (currentUser) saveLocalCache(currentUser.id, { sharedNotes });
+      });
     saveQueue.catch(error => showToast(t('editor.saveFailed', { message: error.message })));
   }
 
@@ -3089,6 +3148,21 @@
 
   const handleManualSync = () => syncPendingChanges(true);
   elements.topbarSyncBtn?.addEventListener('click', handleManualSync);
+
+  $('#toggle-writer-mode')?.addEventListener('click', () => {
+    const isWriter = elements.panel.classList.toggle('is-writer-mode');
+    const toggleBtn = $('#toggle-writer-mode');
+    if (toggleBtn) {
+      toggleBtn.classList.toggle('is-active', isWriter);
+      const labelKey = isWriter ? 'editor.writerModeExit' : 'editor.writerMode';
+      const labelText = t(labelKey);
+      toggleBtn.setAttribute('aria-label', labelText);
+      toggleBtn.title = labelText;
+      toggleBtn.innerHTML = isWriter
+        ? '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="10" y1="14" x2="3" y2="21"/></svg>'
+        : '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+    }
+  });
 
   elements.hamburgerToggle?.addEventListener('click', toggleSidebar);
   elements.sidebarBackdrop?.addEventListener('click', closeSidebar);

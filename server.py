@@ -652,7 +652,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
             elif path == '/api/notes':
                 user = self.require_user()
                 with database() as connection:
-                    rows = connection.execute('SELECT * FROM notes WHERE user_id = ? ORDER BY sort_order DESC', (user['id'],)).fetchall()
+                    rows = connection.execute('''
+                        SELECT notes.*, (SELECT COUNT(*) FROM note_shares WHERE note_shares.note_id = notes.id) AS share_count
+                        FROM notes WHERE user_id = ? ORDER BY sort_order DESC
+                    ''', (user['id'],)).fetchall()
                 self.send_json({'notes': [self.note_from_row(row) for row in rows]})
             elif path == '/api/shared':
                 user = self.require_user()
@@ -1717,21 +1720,41 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 created, updated, sort_order,
             ))
         with database() as connection:
-            connection.execute('DELETE FROM notes WHERE user_id = ?', (user_id,))
+            if seen:
+                placeholders = ','.join('?' for _ in seen)
+                connection.execute(f'DELETE FROM notes WHERE user_id = ? AND id NOT IN ({placeholders})', (user_id, *seen))
+            else:
+                connection.execute('DELETE FROM notes WHERE user_id = ?', (user_id,))
             connection.executemany('''
                 INSERT INTO notes (id, user_id, title, body, body_format, color, tags_json, pinned, archived,
                                    deleted, created_at, updated_at, sort_order)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    title = excluded.title,
+                    body = excluded.body,
+                    body_format = excluded.body_format,
+                    color = excluded.color,
+                    tags_json = excluded.tags_json,
+                    pinned = excluded.pinned,
+                    archived = excluded.archived,
+                    deleted = excluded.deleted,
+                    created_at = excluded.created_at,
+                    updated_at = excluded.updated_at,
+                    sort_order = excluded.sort_order
+                WHERE user_id = excluded.user_id
             ''', prepared)
 
     @staticmethod
     def note_from_row(row):
-        return {
+        note = {
             'id': row['id'], 'title': row['title'], 'body': row['body'], 'bodyFormat': row['body_format'],
             'color': row['color'], 'tags': json.loads(row['tags_json']), 'pinned': bool(row['pinned']),
             'archived': bool(row['archived']), 'deleted': bool(row['deleted']), 'createdAt': row['created_at'],
             'updatedAt': row['updated_at'], 'order': row['sort_order'],
         }
+        if 'share_count' in row.keys():
+            note['shareCount'] = row['share_count']
+        return note
 
     def owned_note(self, connection, user_id, note_id):
         """Return the note only when the given user owns it."""
