@@ -205,6 +205,7 @@ window.notkiTranslations.en = {
   'editor.titlePlaceholder': 'Title',
   'editor.bodyLabel': 'Note body',
   'editor.toolbar': 'Note formatting',
+  'editor.fontSize': 'Font size',
   'editor.fontSizeSmall': 'Small text',
   'editor.fontSizeLarge': 'Large text',
   'editor.bold': 'Bold',
