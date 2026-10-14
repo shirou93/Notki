@@ -171,10 +171,21 @@
     return getTaskStatsFromElement(temp);
   }
 
+  // Cache to memoize expensive DOM parsing for task stats during list rendering/search.
+  // WeakMap prevents memory leaks when note objects are destroyed.
+  // Expected impact: Eliminates synchronous main-thread blocking during rapid keystrokes in search input for lists containing checklists.
+  const taskStatsCache = new WeakMap();
+
   function getTaskStats(note) {
     if (!note || !note.body) return { total: 0, completed: 0, percent: 0 };
+    const cached = taskStatsCache.get(note);
+    if (cached && cached.body === note.body && cached.bodyFormat === note.bodyFormat) {
+      return cached.stats;
+    }
     const html = note.bodyFormat === 1 ? sanitizeRichHtml(note.body) : plainTextToHtml(note.body);
-    return getTaskStatsFromHtml(html);
+    const stats = getTaskStatsFromHtml(html);
+    taskStatsCache.set(note, { body: note.body, bodyFormat: note.bodyFormat, stats });
+    return stats;
   }
 
   function updateEditorProgress() {
