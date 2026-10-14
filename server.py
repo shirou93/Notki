@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.74'
+VERSION = '0.1.5.75'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -268,6 +268,10 @@ def extract_spki_der(pub_bytes):
         return None
     if len(pub_bytes) == 91 and pub_bytes.startswith(SPKI_P256_HEADER):
         return pub_bytes
+    if len(pub_bytes) == 65 and pub_bytes[0] == 4:
+        return SPKI_P256_HEADER[:-1] + pub_bytes
+    if len(pub_bytes) == 64:
+        return SPKI_P256_HEADER + pub_bytes
 
     idx_x = pub_bytes.find(b'\x21\x58\x20')
     idx_y = pub_bytes.find(b'\x22\x58\x20')
