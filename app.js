@@ -2714,7 +2714,6 @@
       input.maxLength = 80;
       input.style.flex = '1';
       input.style.height = '34px';
-      input.style.fontSize = '13px';
 
       const saveLabelChange = async () => {
         const oldLabel = label;
