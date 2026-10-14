@@ -294,21 +294,32 @@
   }
 
   function showAuth(mode, message = '') {
-    elements.authView.hidden = false;
-    elements.appShell.hidden = true;
-    elements.panel.hidden = true;
-    elements.backdrop.hidden = true;
+    if (elements.authView) elements.authView.hidden = false;
+    if (elements.appShell) elements.appShell.hidden = true;
+    if (elements.panel) elements.panel.hidden = true;
+    if (elements.backdrop) elements.backdrop.hidden = true;
     if ($('#login-2fa-form')) $('#login-2fa-form').hidden = true;
     if ($('#login-passkey-btn')) $('#login-passkey-btn').hidden = true;
-    elements.loginForm.hidden = mode !== 'login';
-    elements.registerForm.hidden = mode !== 'register';
-    elements.authHeading.firstChild.dataset.i18n = mode === 'register' ? 'auth.heading.register' : 'auth.heading.login';
-    elements.authDescription.dataset.i18n = mode === 'register' ? 'auth.description.register' : 'auth.description.login';
-    window.i18n.applyTranslations(elements.authView);
-    elements.authMessage.textContent = message;
-    elements.authMessage.hidden = !message;
-    elements.authSwitch.hidden = !inviteToken;
-    elements.authSwitch.textContent = t(mode === 'register' ? 'auth.switch.register' : 'auth.switch.login');
+    if (elements.loginForm) elements.loginForm.hidden = mode !== 'login';
+    if (elements.registerForm) elements.registerForm.hidden = mode !== 'register';
+    const authHeadingSpan = elements.authHeading?.querySelector?.('span[data-i18n]');
+    if (authHeadingSpan) {
+      authHeadingSpan.dataset.i18n = mode === 'register' ? 'auth.heading.register' : 'auth.heading.login';
+    } else if (elements.authHeading?.firstChild) {
+      elements.authHeading.firstChild.dataset.i18n = mode === 'register' ? 'auth.heading.register' : 'auth.heading.login';
+    }
+    if (elements.authDescription) {
+      elements.authDescription.dataset.i18n = mode === 'register' ? 'auth.description.register' : 'auth.description.login';
+    }
+    if (window.i18n && elements.authView) window.i18n.applyTranslations(elements.authView);
+    if (elements.authMessage) {
+      elements.authMessage.textContent = message;
+      elements.authMessage.hidden = !message;
+    }
+    if (elements.authSwitch) {
+      elements.authSwitch.hidden = !inviteToken;
+      elements.authSwitch.textContent = t(mode === 'register' ? 'auth.switch.register' : 'auth.switch.login');
+    }
     document.body.classList.add('is-auth');
 
     if (mode === 'login') {
@@ -852,40 +863,51 @@
       await showApp(user);
     } catch (error) {
       if (error.name !== 'NotAllowedError' && error.name !== 'AbortError') {
-        elements.authMessage.textContent = error.message;
-        elements.authMessage.hidden = false;
+        if (elements.authMessage) {
+          elements.authMessage.textContent = error.message;
+          elements.authMessage.hidden = false;
+        }
       }
     }
   };
 
-  elements.loginForm.addEventListener('submit', async event => {
+  elements.loginForm?.addEventListener('submit', async event => {
     event.preventDefault();
     try {
+      const emailVal = $('#login-email')?.value || '';
+      const passwordVal = $('#login-password')?.value || '';
       const response = await apiRequest('/api/login', {
         method: 'POST',
-        body: JSON.stringify({ email: $('#login-email').value, password: $('#login-password').value }),
+        body: JSON.stringify({ email: emailVal, password: passwordVal }),
       });
       if (response.requires2FA) {
         loginTempToken = response.tempToken;
-        elements.loginForm.hidden = true;
-        $('#login-2fa-form').hidden = false;
-        if ($('#login-totp')) $('#login-totp').hidden = !response.hasTotp;
-        if ($('#login-totp')?.previousElementSibling) $('#login-totp').previousElementSibling.hidden = !response.hasTotp;
-        const totpSubmitBtn = $('#login-2fa-form')?.querySelector('button[type="submit"]');
+        if (elements.loginForm) elements.loginForm.hidden = true;
+        const form2fa = $('#login-2fa-form');
+        if (form2fa) form2fa.hidden = false;
+        const totpInput = $('#login-totp');
+        if (totpInput) {
+          totpInput.hidden = !response.hasTotp;
+          if (totpInput.previousElementSibling) {
+            totpInput.previousElementSibling.hidden = !response.hasTotp;
+          }
+        }
+        const totpSubmitBtn = form2fa?.querySelector('button[type="submit"]');
         if (totpSubmitBtn) totpSubmitBtn.hidden = !response.hasTotp;
-        if ($('#login-passkey-btn')) $('#login-passkey-btn').hidden = !response.hasPasskey;
+        const passkeyBtn = $('#login-passkey-btn');
+        if (passkeyBtn) passkeyBtn.hidden = !response.hasPasskey;
 
         if (response.hasPasskey) {
           handlePasskeyLogin(true);
-        } else if (response.hasTotp && $('#login-totp')) {
-          $('#login-totp').focus();
+        } else if (response.hasTotp && totpInput) {
+          totpInput.focus();
         }
         return;
       }
       cancelConditionalPasskeyLogin();
       await showApp(response.user);
     } catch (error) {
-      $('#login-password').value = '';
+      if ($('#login-password')) $('#login-password').value = '';
       showAuth('login', error.message);
     }
   });
@@ -900,8 +922,10 @@
       await showApp(user);
     } catch (error) {
       if ($('#login-totp')) $('#login-totp').value = '';
-      elements.authMessage.textContent = error.message;
-      elements.authMessage.hidden = false;
+      if (elements.authMessage) {
+        elements.authMessage.textContent = error.message;
+        elements.authMessage.hidden = false;
+      }
     }
   });
 
@@ -1341,9 +1365,9 @@
   async function refresh2faStatus() {
     try {
       const status = await apiRequest('/api/account/2fa');
-      $('#totp-active-area').hidden = !status.hasTotp;
-      $('#totp-setup-area').hidden = status.hasTotp;
-      $('#setup-totp-btn').hidden = status.hasTotp;
+      if ($('#totp-active-area')) $('#totp-active-area').hidden = !status.hasTotp;
+      if ($('#totp-setup-area')) $('#totp-setup-area').hidden = status.hasTotp;
+      if ($('#setup-totp-btn')) $('#setup-totp-btn').hidden = status.hasTotp;
       const list = $('#passkey-list');
       if (list) {
         list.innerHTML = '';
