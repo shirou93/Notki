@@ -513,7 +513,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.63', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.63'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.64', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.64'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -537,7 +537,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.63'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.64'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
@@ -694,6 +694,9 @@ class ServerFlowTests(unittest.TestCase):
         status, res = self.request(user_client, 'POST', '/api/account/totp/verify', {'code': code})
         self.assertEqual(status, 200)
         self.assertTrue(res['verified'])
+        self.assertIn('backupCodes', res)
+        self.assertEqual(len(res['backupCodes']), 8)
+        backup_code = res['backupCodes'][0]
 
         # 2FA status should now be active
         status, res = self.request(user_client, 'GET', '/api/account/2fa')
@@ -711,7 +714,23 @@ class ServerFlowTests(unittest.TestCase):
         status, error = self.request(unauth_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': '000000'})
         self.assertEqual(status, 401)
 
-        # Re-login to get fresh tempToken
+        # Re-login to get fresh tempToken for emergency backup code login
+        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa@example.com', 'password': 'user-passphrase-123'})
+        self.assertEqual(status, 200)
+        temp_token = res['tempToken']
+
+        # Login 2FA with emergency backup code
+        status, res = self.request(unauth_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': backup_code})
+        self.assertEqual(status, 200)
+        self.assertEqual(res['user']['email'], 'user2fa@example.com')
+
+        # Attempt to reuse the consumed emergency backup code
+        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa@example.com', 'password': 'user-passphrase-123'})
+        temp_token = res['tempToken']
+        status, error = self.request(unauth_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': backup_code})
+        self.assertEqual(status, 401)
+
+        # Login 2FA with valid TOTP code
         status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa@example.com', 'password': 'user-passphrase-123'})
         temp_token = res['tempToken']
         valid_code = server.compute_totp_code(secret)

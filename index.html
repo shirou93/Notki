@@ -107,7 +107,7 @@
           <span class="storage-dot"></span>
           <span data-i18n="nav.storage">Saved on the server</span>
         </div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.63</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.64</span>
       </div>
     </aside>
 
@@ -185,7 +185,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.63</strong></p>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.64</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" class="admin-update-box" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
@@ -320,6 +320,12 @@
               <input class="auth-input" id="totp-verify-code" type="text" placeholder="6-digit code" data-i18n-placeholder="topbar.2fa.codePlaceholder" autocomplete="off" inputmode="numeric" pattern="[0-9]*" style="flex: 1;" required>
               <button class="button-primary" type="submit" data-i18n="topbar.2fa.verifyTotp">Verify</button>
             </form>
+          </div>
+          <div id="backup-codes-display-area" hidden style="margin-top: 12px; padding: 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg);">
+            <p class="field-label" style="margin-bottom: 4px;" data-i18n="topbar.2fa.backupCodesTitle">EMERGENCY BACKUP CODES</p>
+            <p class="setup-hint" style="margin-bottom: 8px;" data-i18n="topbar.2fa.backupCodesHint">Save these backup codes in a safe place. Each code can only be used once if you lose access to your authenticator app.</p>
+            <div id="backup-codes-list" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-family: monospace; font-size: 13px; font-weight: 600; text-align: center; margin-bottom: 10px; background: var(--bg-color); padding: 8px; border-radius: 4px;"></div>
+            <button class="button-secondary" id="copy-backup-codes-btn" type="button" style="width: 100%;" data-i18n="topbar.2fa.copyBackupCodes">Copy Backup Codes</button>
           </div>
         </div>
         <div id="totp-active-area" hidden>
