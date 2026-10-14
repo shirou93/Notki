@@ -264,12 +264,14 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .note-card.color-sky { background: var(--sky); border-color: #d7e6eb; }
 .card-topline { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; color: #819087; font-size: 10px; }
 .card-tools { display: flex; align-items: center; gap: 2px; }
-.card-drag, .card-pin { width: 25px; height: 25px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 5px; color: #74847a; background: transparent; font-size: 16px; opacity: 0; cursor: pointer; transition: opacity .15s, background .15s; }
-.card-drag svg, .card-pin svg { display: block; width: 1em; height: 1em; pointer-events: none; }
+.card-drag, .card-pin, .card-share { width: 25px; height: 25px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 5px; color: #74847a; background: transparent; font-size: 16px; opacity: 0; cursor: pointer; transition: opacity .15s, background .15s; }
+.card-drag svg, .card-pin svg, .card-share svg { display: block; width: 1em; height: 1em; pointer-events: none; }
 .card-drag { touch-action: none; cursor: var(--drag-cursor); }
-.note-card:hover .card-drag, .note-card:hover .card-pin, .card-pin.is-pinned { opacity: 1; }
+.note-card:hover .card-drag, .note-card:hover .card-pin, .note-card:hover .card-share, .card-pin.is-pinned, .card-share.is-shared { opacity: 1; }
 .card-drag:hover { color: #fff; background: var(--forest); }
-.card-pin:hover { background: #ffffff8c; }
+.card-pin:hover, .card-share:hover { background: #ffffff8c; }
+.card-share.is-shared { color: #275544; background: #e6f0e3; }
+.card-share.is-shared:hover { background: #d8e8d3; }
 .is-dragging-note, .is-dragging-note * { cursor: var(--drag-cursor) !important; user-select: none !important; }
 .note-drag-preview { position: fixed; top: 0; left: 0; z-index: 10; width: min(240px, 62vw); max-height: 104px; overflow: hidden; padding: 11px 13px; border: 2px solid #53734c; border-left: 5px solid #a4c66f; border-radius: 7px; background: #fff; color: #26382d; box-shadow: 0 10px 28px #14261c45; pointer-events: none; will-change: transform; }
 .note-drag-preview strong, .note-drag-preview span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -355,6 +357,9 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .modal-backdrop { position: fixed; inset: 0; z-index: 200; background: #14261c50; backdrop-filter: blur(2px); animation: fade-in .18s both; touch-action: none; overscroll-behavior: contain; }
 .editor-panel { position: fixed; inset: 0 0 0 auto; z-index: 205; width: min(610px, 100%); height: 100%; height: 100dvh; overscroll-behavior: contain; display: flex; flex-direction: column; background: #fff; box-shadow: none; visibility: hidden; transform: translateX(102%); transition: transform .26s cubic-bezier(.2,.75,.25,1), visibility .26s; }
 .editor-panel.is-open { transform: translateX(0); box-shadow: -15px 0 55px #18261b17; visibility: visible; }
+.editor-panel.is-writer-mode { width: 100% !important; max-width: 100% !important; inset: 0 !important; transform: none !important; }
+.editor-panel.is-writer-mode .editor-topbar { width: 100%; max-width: 800px; margin: 0 auto; border-bottom-color: transparent; }
+.editor-panel.is-writer-mode .editor-content { max-width: 760px; padding: 48px 32px; }
 .editor-topbar { min-height: 64px; display: flex; align-items: center; gap: 14px; padding: 0 24px; border-bottom: 1px solid #edf0ec; }
 .icon-button { width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; background: transparent; color: #67746a; font-size: 19px; cursor: pointer; transition: color .15s, background .15s; }
 .icon-button svg { display: block; }
@@ -586,7 +591,9 @@ body.is-dragging-task-active, body.is-dragging-task-active * { cursor: var(--dra
   .share-revoke:hover { background: #3a2c27; }
   .share-empty { color: #8b978e; }
   .editor-panel.is-read-only .editor-body { background: #22322a; }
-  .card-pin:hover { background: #ffffff20; }
+  .card-pin:hover, .card-share:hover { background: #ffffff20; }
+  .card-share.is-shared { color: #b9d99e; background: #2f4632; }
+  .card-share.is-shared:hover { background: #3a563e; }
   .card-drag { color: #9fb0a4; }
   .icon-button.is-pinned { color: #a8cc86; }
   .icon-button.is-pinned:hover { color: #c2e09c; }
