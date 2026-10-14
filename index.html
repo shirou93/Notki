@@ -107,7 +107,7 @@
           <span class="storage-dot"></span>
           <span data-i18n="nav.storage">Saved on the server</span>
         </div>
-        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.68</span>
+        <span class="sidebar-version">NOTKI · ALPHA 0.1.5.69</span>
       </div>
     </aside>
 
@@ -174,10 +174,12 @@
         <div><h2 data-i18n="admin.security.title">Security</h2><p data-i18n="admin.security.description">Configure server security settings.</p></div>
       </header>
       <div class="admin-security-controls">
-        <label class="admin-toggle-label">
-          <input type="checkbox" id="admin-require-2fa"> <span data-i18n="admin.security.require2fa">Require 2FA for all users</span>
-        </label>
-        <div style="margin-top: 12px;">
+        <div class="admin-security-row">
+          <label class="admin-toggle-label">
+            <input type="checkbox" id="admin-require-2fa"> <span data-i18n="admin.security.require2fa">Require 2FA for all users</span>
+          </label>
+        </div>
+        <div class="admin-security-row">
           <label class="field-label" for="admin-session-days" data-i18n="admin.security.sessionDays">Session duration (days, default 30)</label>
           <input class="auth-input" id="admin-session-days" type="number" min="1" max="3650" value="30" style="max-width: 150px;">
         </div>
@@ -189,7 +191,7 @@
         <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
         <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
       </header>
-      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.68</strong></p>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.5.69</strong></p>
       <p class="admin-message" id="update-message" role="status" hidden></p>
       <div id="update-result" class="admin-update-box" hidden>
         <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
@@ -424,6 +426,10 @@
         <button class="color-swatch swatch-peach" data-color="peach" type="button" aria-label="Peach" title="Peach" data-i18n-aria-label="editor.color.peach" data-i18n-title="editor.color.peach"></button>
         <button class="color-swatch swatch-lilac" data-color="lilac" type="button" aria-label="Lilac" title="Lilac" data-i18n-aria-label="editor.color.lilac" data-i18n-title="editor.color.lilac"></button>
         <button class="color-swatch swatch-sky" data-color="sky" type="button" aria-label="Sky" title="Sky" data-i18n-aria-label="editor.color.sky" data-i18n-title="editor.color.sky"></button>
+        <button class="color-swatch swatch-rose" data-color="rose" type="button" aria-label="Rose" title="Rose" data-i18n-aria-label="editor.color.rose" data-i18n-title="editor.color.rose"></button>
+        <button class="color-swatch swatch-sand" data-color="sand" type="button" aria-label="Sand" title="Sand" data-i18n-aria-label="editor.color.sand" data-i18n-title="editor.color.sand"></button>
+        <button class="color-swatch swatch-sage" data-color="sage" type="button" aria-label="Sage" title="Sage" data-i18n-aria-label="editor.color.sage" data-i18n-title="editor.color.sage"></button>
+        <button class="color-swatch swatch-plum" data-color="plum" type="button" aria-label="Plum" title="Plum" data-i18n-aria-label="editor.color.plum" data-i18n-title="editor.color.plum"></button>
       </div>
       <div class="editor-bottom-note" id="editor-share-notice" hidden></div>
       <div class="editor-bottom-note"><span class="lock-mark" aria-hidden="true">◈</span> <span data-i18n="editor.privacy">This note stays private until you share it.</span></div>

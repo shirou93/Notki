@@ -1,7 +1,7 @@
 (() => {
   const STORAGE_KEY = 'notki.notes.v1';
   const MIGRATION_KEY = 'notki.server-migrated.v1';
-  const COLORS = ['default', 'mint', 'lemon', 'peach', 'lilac', 'sky'];
+  const COLORS = ['default', 'mint', 'lemon', 'peach', 'lilac', 'sky', 'rose', 'sand', 'sage', 'plum'];
   const t = (key, params) => window.i18n.t(key, params);
   const pluralText = (key, count) => window.i18n.plural(key, count);
   const VIEW_KEYS = { all: 'view.all', pinned: 'view.pinned', archive: 'view.archive', trash: 'view.trash', shared: 'view.shared' };
@@ -15,7 +15,7 @@
     grid: $('#notes-grid'), empty: $('#empty-state'), emptyTitle: $('#empty-title'), emptyCopy: $('#empty-copy'),
     footerCount: $('#footer-count'), search: $('#search-input'), panel: $('#editor-panel'), backdrop: $('#editor-backdrop'),
     noteTitle: $('#note-title'), noteBody: $('#note-body'), labelsContainer: $('#note-labels'), saveState: $('#save-state'), date: $('#editor-date'),
-    words: $('#editor-words'), pin: $('#pin-note'), archive: $('#archive-note'), delete: $('#delete-note'), toast: $('#toast'), themeToggle: $('#theme-toggle'),
+    words: $('#editor-words'), pin: $('#pin-note'), archive: $('#archive-note'), delete: $('#delete-note'), toast: $('#toast'),
     appShell: $('#app-shell'), authView: $('#auth-view'), authHeading: $('#auth-heading'), authDescription: $('#auth-description'), authMessage: $('#auth-message'),
     topbar: $('header.topbar'), loginForm: $('#login-form'), registerForm: $('#register-form'), authSwitch: $('#auth-switch'), adminLink: $('#admin-link'), navAdmin: $('#nav-admin'), adminArea: $('#admin-area'), pageHeading: $('.page-heading'), captureWrap: $('.capture-wrap'), notesArea: $('.notes-area'), topbarSearch: $('.search-box'),
     sharedBanner: $('#shared-banner'), sharedTitle: $('#shared-title'), sharedPreview: $('#shared-preview'),
@@ -28,7 +28,7 @@
     sharedCount: $('#count-shared'), sharePanel: $('#share-panel'), shareBackdrop: $('#share-backdrop'),
     shareForm: $('#share-form'), shareEmail: $('#share-email'), sharePermission: $('#share-permission'),
     shareMessage: $('#share-message'), shareList: $('#share-list'), shareEmpty: $('#share-empty'),
-    shareNoteName: $('#share-note-name'), shareDirectory: $('#share-directory'),
+    shareNoteName: $('#share-note-name'),
   };
 
   let notes = [];
@@ -272,10 +272,6 @@
 
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
-    if (elements.themeToggle) {
-      const span = elements.themeToggle.querySelector('span');
-      if (span) span.textContent = theme === 'dark' ? '☀' : '☾';
-    }
     window.notkiTheme.sync();
   }
 
@@ -2702,39 +2698,40 @@
   function renderLabelsEditList() {
     const list = document.getElementById('labels-edit-list');
     list.replaceChildren();
-    userLabels.forEach(label => {
+    userLabels.forEach((label, index) => {
       const item = document.createElement('div');
       item.style.display = 'flex';
       item.style.justifyContent = 'space-between';
       item.style.alignItems = 'center';
-      item.style.padding = '8px';
+      item.style.gap = '8px';
+      item.style.padding = '6px 8px';
       item.style.border = '1px solid var(--line)';
       item.style.borderRadius = '5px';
 
-      const span = document.createElement('span');
-      span.textContent = label;
+      const input = document.createElement('input');
+      input.className = 'auth-input label-edit-input';
+      input.type = 'text';
+      input.value = label;
+      input.maxLength = 80;
+      input.style.flex = '1';
+      input.style.height = '34px';
+      input.style.fontSize = '13px';
 
-      const btnWrap = document.createElement('div');
-      btnWrap.style.display = 'flex';
-      btnWrap.style.gap = '6px';
-
-      const editBtn = document.createElement('button');
-      editBtn.className = 'button-secondary';
-      editBtn.type = 'button';
-      editBtn.style.padding = '2px 8px';
-      editBtn.textContent = t('labels.edit');
-      editBtn.addEventListener('click', async () => {
-        const renamed = prompt(t('labels.title'), label);
-        if (renamed === null) return;
-        const newLabel = renamed.trim().toLowerCase();
-        if (!newLabel || newLabel === label) return;
-        if (userLabels.includes(newLabel)) {
+      const saveLabelChange = async () => {
+        const oldLabel = label;
+        const newLabel = input.value.trim().toLowerCase();
+        if (!newLabel) {
+          input.value = oldLabel;
+          return;
+        }
+        if (newLabel === oldLabel) return;
+        if (userLabels.some((l, i) => i !== index && l === newLabel)) {
           showToast(t('labels.alreadyExists') || 'Label already exists.');
+          input.value = oldLabel;
           return;
         }
 
-        const oldLabel = label;
-        userLabels = userLabels.map(l => l === oldLabel ? newLabel : l);
+        userLabels[index] = newLabel;
 
         try {
           await apiRequest('/api/account/labels', {
@@ -2762,15 +2759,24 @@
           }
         } catch (error) {
           showToast(error.message);
+          input.value = oldLabel;
+        }
+      };
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          input.blur();
         }
       });
+      input.addEventListener('blur', saveLabelChange);
 
       const delBtn = document.createElement('button');
       delBtn.className = 'share-revoke';
       delBtn.type = 'button';
       delBtn.textContent = t('labels.remove');
       delBtn.addEventListener('click', async () => {
-        userLabels = userLabels.filter(l => l !== label);
+        userLabels = userLabels.filter((_, i) => i !== index);
         try {
           await apiRequest('/api/account/labels', {
             method: 'POST',
@@ -2786,8 +2792,7 @@
         }
       });
 
-      btnWrap.append(editBtn, delBtn);
-      item.append(span, btnWrap);
+      item.append(input, delBtn);
       list.append(item);
     });
   }
@@ -3628,19 +3633,28 @@
     setBackupMessage(t('admin.backups.restoring'));
 
     try {
-      const buffer = await file.arrayBuffer();
-      const response = await fetch('/api/admin/backups/upload-restore', {
-        method: 'POST',
-        body: buffer,
-        credentials: 'same-origin',
-        headers: {
-          'Content-Type': 'application/octet-stream',
-          'Accept-Language': window.i18n.getLanguage(),
-        },
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.error || t('admin.backups.restoreFailed'));
+      if (file.name.endsWith('.json') || file.type.includes('json')) {
+        const text = await file.text();
+        const snapshot = JSON.parse(text);
+        await apiRequest('/api/admin/backups/upload-restore', {
+          method: 'POST',
+          body: JSON.stringify({ snapshot })
+        });
+      } else {
+        const buffer = await file.arrayBuffer();
+        const response = await fetch('/api/admin/backups/upload-restore', {
+          method: 'POST',
+          body: buffer,
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            'Accept-Language': window.i18n.getLanguage(),
+          },
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.error || t('admin.backups.restoreFailed'));
+        }
       }
       setBackupMessage(t('admin.backups.restored'));
       fileInput.value = '';
