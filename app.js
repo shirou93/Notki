@@ -304,7 +304,7 @@
     }
   }
 
-  function showAuth(mode, message = '') {
+  async function showAuth(mode, message = '') {
     if (elements.authView) elements.authView.hidden = false;
     if (elements.appShell) elements.appShell.hidden = true;
     if (elements.panel) elements.panel.hidden = true;
@@ -336,25 +336,16 @@
     if (mode === 'login') {
       triggerConditionalPasskeyLogin();
     } else {
-      await cancelConditionalPasskeyLogin();
+      cancelConditionalPasskeyLogin();
     }
   }
 
-  async function cancelConditionalPasskeyLogin() {
+  function cancelConditionalPasskeyLogin() {
     if (passkeyConditionalAbortController) {
       passkeyConditionalAbortController.abort();
       passkeyConditionalAbortController = null;
     }
-    if (passkeyConditionalPromise) {
-      const p = passkeyConditionalPromise;
-      passkeyConditionalPromise = null;
-      try {
-        await p;
-      } catch (e) {
-        // Ignored - expected AbortError
-      }
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
+    passkeyConditionalPromise = null;
   }
 
   async function triggerConditionalPasskeyLogin() {
@@ -1363,7 +1354,8 @@
       let spkiBuffer = null;
       if (typeof credential.response.getPublicKey === 'function') {
         spkiBuffer = credential.response.getPublicKey();
-      } else if (credential.response.attestationObject) {
+      }
+      if (!spkiBuffer && credential.response.attestationObject) {
         // Fallback for WebKit browsers or authenticators that don't expose getPublicKey directly
         spkiBuffer = credential.response.attestationObject;
       }
