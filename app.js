@@ -1133,15 +1133,41 @@
     }
   });
 
+  let currentBackupCodes = [];
+
   $('#totp-verify-form').addEventListener('submit', async event => {
     event.preventDefault();
     try {
-      await apiRequest('/api/account/totp/verify', { method: 'POST', body: JSON.stringify({ code: $('#totp-verify-code').value }) });
+      const response = await apiRequest('/api/account/totp/verify', { method: 'POST', body: JSON.stringify({ code: $('#totp-verify-code').value }) });
       $('#totp-verify-area').hidden = true;
       $('#totp-verify-code').value = '';
+      if (response.backupCodes && response.backupCodes.length) {
+        currentBackupCodes = response.backupCodes;
+        const listEl = $('#backup-codes-list');
+        if (listEl) {
+          listEl.replaceChildren(...response.backupCodes.map(code => {
+            const item = document.createElement('div');
+            item.textContent = code;
+            return item;
+          }));
+        }
+        $('#backup-codes-display-area').hidden = false;
+      }
       await refresh2faStatus();
     } catch (error) {
       alert(error.message);
+    }
+  });
+
+  $('#copy-backup-codes-btn')?.addEventListener('click', async event => {
+    const button = event.currentTarget;
+    const textToCopy = currentBackupCodes.join('\n');
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      button.textContent = t('admin.invites.copied');
+      window.setTimeout(() => { button.textContent = t('topbar.2fa.copyBackupCodes'); }, 1600);
+    } catch {
+      alert(textToCopy);
     }
   });
 

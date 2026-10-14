@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.63'
+VERSION = '0.1.5.64'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -199,6 +199,32 @@ def compute_totp_code(secret_b32, time_step=30, counter=None):
     code = binary % 1_000_000
     return f'{code:06d}'
 
+def safe_b64decode(val):
+    if not val:
+        return b''
+    val_str = str(val).strip().replace('-', '+').replace('_', '/')
+    missing_padding = len(val_str) % 4
+    if missing_padding:
+        val_str += '=' * (4 - missing_padding)
+    return base64.b64decode(val_str)
+
+SPKI_P256_HEADER = bytes.fromhex('3059301306072a8648ce3d020106082a8648ce3d03010703420004')
+
+def extract_spki_der(pub_bytes):
+    if not pub_bytes:
+        return None
+    if len(pub_bytes) == 91 and pub_bytes.startswith(SPKI_P256_HEADER):
+        return pub_bytes
+
+    idx_x = pub_bytes.find(b'\x21\x58\x20')
+    idx_y = pub_bytes.find(b'\x22\x58\x20')
+    if idx_x != -1 and idx_y != -1:
+        x = pub_bytes[idx_x + 3 : idx_x + 35]
+        y = pub_bytes[idx_y + 3 : idx_y + 35]
+        if len(x) == 32 and len(y) == 32:
+            return SPKI_P256_HEADER + x + y
+    return None
+
 def verify_totp_code(secret_b32, code, time_step=30, window=1):
     code = str(code or '').strip()
     if not code.isdigit() or len(code) != 6:
@@ -366,6 +392,8 @@ def initialize_database():
             connection.execute("ALTER TABLE users ADD COLUMN labels_json TEXT NOT NULL DEFAULT '[]'")
         if 'totp_secret' not in columns:
             connection.execute("ALTER TABLE users ADD COLUMN totp_secret TEXT")
+        if 'backup_codes_json' not in columns:
+            connection.execute("ALTER TABLE users ADD COLUMN backup_codes_json TEXT")
 
 
 def hash_password(password):
@@ -864,7 +892,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def build_snapshot(self):
         with database() as connection:
             connection.execute('BEGIN')
-            users = connection.execute('SELECT id, email, password_hash, role, created_at, avatar, labels_json, totp_secret FROM users ORDER BY id').fetchall()
+            users = connection.execute('SELECT id, email, password_hash, role, created_at, avatar, labels_json, totp_secret, backup_codes_json FROM users ORDER BY id').fetchall()
             notes = connection.execute('SELECT * FROM notes ORDER BY user_id, sort_order DESC').fetchall()
             invites = connection.execute('SELECT * FROM invites ORDER BY created_at').fetchall()
             shares = connection.execute('SELECT * FROM note_shares ORDER BY note_id, user_id').fetchall()
@@ -878,7 +906,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 {'id': row['id'], 'email': row['email'], 'passwordHash': row['password_hash'], 'role': row['role'],
                  'createdAt': row['created_at'], 'avatar': row['avatar'],
                  'labels': json.loads(row['labels_json']) if 'labels_json' in row.keys() and row['labels_json'] else [],
-                 'totpSecret': row['totp_secret'] if 'totp_secret' in row.keys() else None}
+                 'totpSecret': row['totp_secret'] if 'totp_secret' in row.keys() else None,
+                 'backupCodes': json.loads(row['backup_codes_json']) if 'backup_codes_json' in row.keys() and row['backup_codes_json'] else []}
                 for row in users
             ],
             'notes': [
@@ -1009,7 +1038,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             row = connection.execute('SELECT id FROM users WHERE id = ?', (user_id,)).fetchone()
             if not row:
                 raise APIError('User not found.', 404)
-            connection.execute('UPDATE users SET totp_secret = NULL WHERE id = ?', (user_id,))
+            connection.execute('UPDATE users SET totp_secret = NULL, backup_codes_json = NULL WHERE id = ?', (user_id,))
             connection.execute('DELETE FROM passkeys WHERE user_id = ?', (user_id,))
         self.send_json({'reset': user_id})
 
@@ -1192,11 +1221,13 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 totp_secret = str(totp_secret)
                 if len(totp_secret) > 256:
                     totp_secret = None
+            backup_codes = user.get('backupCodes')
+            backup_codes_json = json.dumps(backup_codes) if isinstance(backup_codes, list) else None
             user_ids.add(user_id)
             emails.add(email)
             labels = user.get('labels')
             labels_json = json.dumps(labels if isinstance(labels, list) else [])
-            prepared_users.append((user_id, email, password_hash, role, self.snapshot_date(user.get('createdAt')), avatar, labels_json, totp_secret))
+            prepared_users.append((user_id, email, password_hash, role, self.snapshot_date(user.get('createdAt')), avatar, labels_json, totp_secret, backup_codes_json))
         if not any(user[3] == 'admin' for user in prepared_users):
             raise APIError('The snapshot must contain an administrator account.')
 
@@ -1311,7 +1342,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 connection.execute('DELETE FROM settings')
                 connection.execute('DELETE FROM users')
             connection.executemany(
-                'INSERT INTO users (id, email, password_hash, role, created_at, avatar, labels_json, totp_secret) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO users (id, email, password_hash, role, created_at, avatar, labels_json, totp_secret, backup_codes_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 prepared_users,
             )
             connection.executemany('''
@@ -1432,7 +1463,19 @@ class NotkiHandler(BaseHTTPRequestHandler):
             if not row:
                 raise APIError('User not found.', 404)
             secret = row['totp_secret'] if 'totp_secret' in row.keys() else None
-            if not secret or secret.startswith('pending:') or not verify_totp_code(secret, totp_code):
+            backup_raw = row['backup_codes_json'] if 'backup_codes_json' in row.keys() else None
+            backup_codes = json.loads(backup_raw) if backup_raw else []
+
+            clean_code = str(totp_code or '').replace('-', '').replace(' ', '').strip().upper()
+            totp_valid = secret and not secret.startswith('pending:') and verify_totp_code(secret, totp_code)
+            backup_valid = False
+
+            if not totp_valid and clean_code and clean_code in backup_codes:
+                backup_valid = True
+                backup_codes.remove(clean_code)
+                connection.execute('UPDATE users SET backup_codes_json = ? WHERE id = ?', (json.dumps(backup_codes), user_id))
+
+            if not totp_valid and not backup_valid:
                 raise APIError('Invalid two-factor code.', 401)
         token = self.new_session(user_id)
         self.send_json({'user': public_user(row)}, extra_headers=self.session_headers(token))
@@ -1463,9 +1506,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
             if not pk_row or not row:
                 raise APIError('Passkey not found.', 401)
         try:
-            auth_bytes = base64.b64decode(auth_data_b64)
-            client_bytes = base64.b64decode(client_data_b64)
-            sig_bytes = base64.b64decode(sig_b64)
+            auth_bytes = safe_b64decode(auth_data_b64)
+            client_bytes = safe_b64decode(client_data_b64)
+            sig_bytes = safe_b64decode(sig_b64)
             client_hash = hashlib.sha256(client_bytes).digest()
             signed_data = auth_bytes + client_hash
         except Exception as err:
@@ -1497,13 +1540,17 @@ class NotkiHandler(BaseHTTPRequestHandler):
             secret = totp_secret.removeprefix('pending:') if totp_secret.startswith('pending:') else totp_secret
             if not verify_totp_code(secret, code):
                 raise APIError('Invalid two-factor code.', 400)
-            connection.execute('UPDATE users SET totp_secret = ? WHERE id = ?', (secret, user['id']))
-        self.send_json({'verified': True})
+
+            backup_codes_display = [f"{secrets.token_hex(2).upper()}-{secrets.token_hex(2).upper()}" for _ in range(8)]
+            backup_codes_store = [c.replace('-', '') for c in backup_codes_display]
+
+            connection.execute('UPDATE users SET totp_secret = ?, backup_codes_json = ? WHERE id = ?', (secret, json.dumps(backup_codes_store), user['id']))
+        self.send_json({'verified': True, 'backupCodes': backup_codes_display})
 
     def remove_totp(self):
         user = self.require_user()
         with database() as connection:
-            connection.execute('UPDATE users SET totp_secret = NULL WHERE id = ?', (user['id'],))
+            connection.execute('UPDATE users SET totp_secret = NULL, backup_codes_json = NULL WHERE id = ?', (user['id'],))
         self.send_json({'removed': True})
 
     def add_passkey(self, payload):
@@ -1514,7 +1561,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
         if not key_id or not pub_b64:
             raise APIError('Invalid key data.', 400)
         try:
-            spki_bytes = base64.b64decode(pub_b64)
+            raw_bytes = safe_b64decode(pub_b64)
+            spki_bytes = extract_spki_der(raw_bytes)
+            if not spki_bytes:
+                raise ValueError("Could not parse public key")
             pem = f"-----BEGIN PUBLIC KEY-----\n{base64.b64encode(spki_bytes).decode('utf-8')}\n-----END PUBLIC KEY-----\n"
         except Exception as err:
             raise APIError('Invalid key data.', 400) from err
