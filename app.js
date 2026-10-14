@@ -654,17 +654,20 @@
   }
 
   async function restoreBackup(backupTarget) {
-    const filename = typeof backupTarget === 'string' ? backupTarget : backupTarget.filename;
+    const filename = typeof backupTarget === 'string' ? backupTarget : (backupTarget && backupTarget.filename) ? backupTarget.filename : '';
+    if (!filename) return;
 
     const confirmed = window.confirm(t('admin.backups.confirmRestore', { filename }));
     if (!confirmed) return;
 
+    setBackupMessage(t('admin.backups.restoring'));
     try {
       await apiRequest(`/api/admin/backups/${encodeURIComponent(filename)}/restore`, {
         method: 'POST',
         body: '{}'
       });
-      window.location.replace('/');
+      setBackupMessage(t('admin.backups.restored'));
+      setTimeout(() => window.location.reload(), 1000);
     } catch (error) {
       setBackupMessage(error.message, true);
     }
@@ -755,13 +758,16 @@
       if (!window.isSecureContext || !navigator?.credentials?.get) {
         throw new Error(t('topbar.2fa.passkeyNotSupported'));
       }
-      const assertion = await navigator.credentials.get({
-        publicKey: {
-          challenge: new Uint8Array(32), // dummy challenge since server uses short-lived tokens and we verify against the token session
-          rpId: window.location.hostname,
-          userVerification: "preferred"
-        }
-      });
+      const hostname = window.location.hostname;
+      const isDomain = Boolean(hostname && !/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) && hostname !== 'localhost');
+      const publicKeyOptions = {
+        challenge: new Uint8Array(32),
+        userVerification: "preferred"
+      };
+      if (isDomain) {
+        publicKeyOptions.rpId = hostname;
+      }
+      const assertion = await navigator.credentials.get({ publicKey: publicKeyOptions });
       const { user } = await apiRequest('/api/login/passkey', {
         method: 'POST',
         body: JSON.stringify({
@@ -774,8 +780,10 @@
       });
       await showApp(user);
     } catch (error) {
-      elements.authMessage.textContent = error.message;
-      elements.authMessage.hidden = false;
+      if (error.name !== 'NotAllowedError' && error.name !== 'AbortError') {
+        elements.authMessage.textContent = error.message;
+        elements.authMessage.hidden = false;
+      }
     }
   });
   elements.registerForm.addEventListener('submit', async event => {
@@ -1075,14 +1083,18 @@
       if (!window.isSecureContext || !navigator?.credentials?.create) {
         throw new Error(t('topbar.2fa.passkeyNotSupported'));
       }
-      const name = prompt(t('topbar.2fa.passkeyPromptName'), t('topbar.2fa.passkeyDefaultName'));
-      if (name === null) return;
-      const keyName = name.trim() || t('topbar.2fa.passkeyDefaultName');
+
+      const hostname = window.location.hostname;
+      const isDomain = Boolean(hostname && !/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) && hostname !== 'localhost');
+      const rpConfig = { name: 'Notki' };
+      if (isDomain) {
+        rpConfig.id = hostname;
+      }
 
       const credential = await navigator.credentials.create({
         publicKey: {
           challenge: new Uint8Array(32),
-          rp: { name: 'Notki', id: window.location.hostname },
+          rp: rpConfig,
           user: {
             id: new TextEncoder().encode(currentUser?.email || 'user'),
             name: currentUser?.email || 'user',
@@ -1099,22 +1111,30 @@
         },
       });
 
-      if (!credential || !credential.response || !credential.response.getPublicKey) {
+      if (!credential || !credential.response) {
         throw new Error(t('topbar.2fa.passkeyNotSupported'));
       }
 
-      const spkiBuffer = credential.response.getPublicKey();
+      let spkiBuffer = null;
+      if (typeof credential.response.getPublicKey === 'function') {
+        spkiBuffer = credential.response.getPublicKey();
+      } else if (credential.response.attestationObject) {
+        // Fallback for WebKit browsers or authenticators that don't expose getPublicKey directly
+        spkiBuffer = credential.response.attestationObject;
+      }
+
       if (!spkiBuffer) {
         throw new Error(t('topbar.2fa.passkeyNotSupported'));
       }
 
       const pubKeyB64 = btoa(String.fromCharCode(...new Uint8Array(spkiBuffer)));
+      const defaultName = (typeof WebAssembly === 'object' && /iPad|iPhone|iPod/.test(navigator.userAgent)) ? 'iOS Device' : t('topbar.2fa.passkeyDefaultName');
 
       await apiRequest('/api/account/passkey', {
         method: 'POST',
         body: JSON.stringify({
           id: credential.id,
-          name: keyName,
+          name: defaultName,
           publicKey: pubKeyB64,
         }),
       });
