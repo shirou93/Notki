@@ -2,6 +2,7 @@
   const STORAGE_KEY = 'notki.notes.v1';
   const MIGRATION_KEY = 'notki.server-migrated.v1';
   const COLORS = ['default', 'mint', 'lemon', 'peach', 'lilac', 'sky', 'rose', 'sand', 'sage', 'plum'];
+  const TASK_DRAG_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>';
   const t = (key, params) => window.i18n.t(key, params);
   const pluralText = (key, count) => window.i18n.plural(key, count);
   const VIEW_KEYS = { all: 'view.all', pinned: 'view.pinned', archive: 'view.archive', trash: 'view.trash', shared: 'view.shared' };
@@ -1457,7 +1458,7 @@
   function sanitizeRichHtml(html) {
     const template = document.createElement('template');
     template.innerHTML = String(html || '');
-    const allowedTags = new Set(['A', 'B', 'BLOCKQUOTE', 'BR', 'DIV', 'EM', 'H2', 'H3', 'I', 'INPUT', 'LI', 'OL', 'P', 'S', 'SPAN', 'STRONG', 'U', 'UL']);
+    const allowedTags = new Set(['A', 'B', 'BLOCKQUOTE', 'BR', 'DIV', 'EM', 'FONT', 'H2', 'H3', 'I', 'INPUT', 'LI', 'OL', 'P', 'S', 'SPAN', 'STRONG', 'U', 'UL']);
     const output = document.createElement('div');
     const copySafeNode = (parent, node) => {
       if (node.nodeType === Node.TEXT_NODE) {
@@ -1481,6 +1482,9 @@
         return;
       }
       const safeNode = document.createElement(node.tagName.toLowerCase());
+      if (node.tagName === 'FONT' && node.hasAttribute('size')) {
+        safeNode.setAttribute('size', node.getAttribute('size'));
+      }
       if (node.tagName === 'UL' && node.classList.contains('task-list')) {
         safeNode.className = node.classList.contains('task-list-completed') ? 'task-list task-list-completed' : 'task-list';
       }
@@ -1495,7 +1499,9 @@
         safeNode.contentEditable = 'false';
         safeNode.setAttribute('aria-label', t('card.drag'));
         safeNode.title = t('card.dragTitle');
-        safeNode.textContent = '⠟';
+        safeNode.innerHTML = TASK_DRAG_SVG;
+        parent.append(safeNode);
+        return;
       }
       if (node.tagName === 'SPAN' && (node.classList.contains('task-text')
           || (!node.classList.contains('task-drag-handle') && node.parentElement?.matches('li') && node.parentElement.querySelector('input[type="checkbox"]')))) {
@@ -1572,10 +1578,12 @@
         dragHandle = document.createElement('span');
         dragHandle.className = 'task-drag-handle';
         dragHandle.contentEditable = 'false';
-        dragHandle.textContent = '⠿';
+        dragHandle.innerHTML = TASK_DRAG_SVG;
         dragHandle.setAttribute('aria-label', t('card.drag'));
         dragHandle.title = t('card.dragTitle');
         item.insertBefore(dragHandle, checkbox);
+      } else if (dragHandle.innerHTML !== TASK_DRAG_SVG) {
+        dragHandle.innerHTML = TASK_DRAG_SVG;
       }
       let text = item.querySelector(':scope > .task-text');
       const strayNodes = [...item.childNodes].filter(node => node !== checkbox && node !== text && node !== dragHandle);
@@ -1754,7 +1762,7 @@
     const dragHandle = document.createElement('span');
     dragHandle.className = 'task-drag-handle';
     dragHandle.contentEditable = 'false';
-    dragHandle.textContent = '⠿';
+    dragHandle.innerHTML = TASK_DRAG_SVG;
     dragHandle.setAttribute('aria-label', t('card.drag'));
     dragHandle.title = t('card.dragTitle');
 
@@ -2535,7 +2543,7 @@
       cardTaskDragPreview.style.width = `${itemRect.width}px`;
       const isChecked = item.querySelector('.task-checkbox')?.checked;
       const cDownContent = item.querySelector('.task-text')?.textContent || '';
-      cardTaskDragPreview.innerHTML = `<span class="task-drag-handle">⠿</span><input type="checkbox" class="task-checkbox"${isChecked ? ' checked' : ''} disabled><span class="task-text">${cDownContent}</span>`;
+      cardTaskDragPreview.innerHTML = `<span class="task-drag-handle">${TASK_DRAG_SVG}</span><input type="checkbox" class="task-checkbox"${isChecked ? ' checked' : ''} disabled><span class="task-text">${cDownContent}</span>`;
       cardTaskDragPreview.style.transform = `translate3d(${event.clientX - cardTaskOffsetX}px, ${event.clientY - cardTaskOffsetY}px, 0)`;
       document.body.append(cardTaskDragPreview);
 
@@ -3058,9 +3066,9 @@
       restoreEditorRange();
       const previousRange = editorRange?.cloneRange();
       if (button.hasAttribute('data-insert-checklist')) {
-        document.execCommand('insertHTML', false, `<ul class="task-list"><li><span class="task-drag-handle" contenteditable="false" aria-label="Drag task" title="Drag to reorder">⠿</span><input type="checkbox" class="task-checkbox" contenteditable="false" aria-label="${t('editor.checkboxAria')}"><span class="task-text" tabindex="0">&#8203;</span></li></ul>`);
+        document.execCommand('insertHTML', false, `<ul class="task-list"><li><span class="task-drag-handle" contenteditable="false" aria-label="Drag task" title="Drag to reorder">${TASK_DRAG_SVG}</span><input type="checkbox" class="task-checkbox" contenteditable="false" aria-label="${t('editor.checkboxAria')}"><span class="task-text" tabindex="0">&#8203;</span></li></ul>`);
       } else if (button.dataset.command) {
-        document.execCommand(button.dataset.command, false, null);
+        document.execCommand(button.dataset.command, false, button.dataset.value || null);
       }
       if (['insertUnorderedList', 'insertOrderedList'].includes(button.dataset.command) && previousRange && elements.noteBody.contains(previousRange.startContainer)) {
         const selection = window.getSelection();
@@ -3200,7 +3208,7 @@
     taskDragPreview.style.width = `${itemRect.width}px`;
     const isChecked = item.querySelector('.task-checkbox')?.checked;
     const dragStartTextContent = item.querySelector('.task-text')?.textContent || '';
-    taskDragPreview.innerHTML = `<span class="task-drag-handle">⠿</span><input type="checkbox" class="task-checkbox"${isChecked ? ' checked' : ''} disabled><span class="task-text">${dragStartTextContent}</span>`;
+    taskDragPreview.innerHTML = `<span class="task-drag-handle">${TASK_DRAG_SVG}</span><input type="checkbox" class="task-checkbox"${isChecked ? ' checked' : ''} disabled><span class="task-text">${dragStartTextContent}</span>`;
     taskDragPreview.style.transform = `translate3d(${event.clientX - taskOffsetX}px, ${event.clientY - taskOffsetY}px, 0)`;
     document.body.append(taskDragPreview);
     const emptyImage = new Image();
@@ -3261,7 +3269,7 @@
     taskDragPreview.style.width = `${itemRect.width}px`;
     const isChecked = item.querySelector('.task-checkbox')?.checked;
     const pDownContent = item.querySelector('.task-text')?.textContent || '';
-    taskDragPreview.innerHTML = `<span class="task-drag-handle">⠿</span><input type="checkbox" class="task-checkbox"${isChecked ? ' checked' : ''} disabled><span class="task-text">${pDownContent}</span>`;
+    taskDragPreview.innerHTML = `<span class="task-drag-handle">${TASK_DRAG_SVG}</span><input type="checkbox" class="task-checkbox"${isChecked ? ' checked' : ''} disabled><span class="task-text">${pDownContent}</span>`;
     taskDragPreview.style.transform = `translate3d(${event.clientX - taskOffsetX}px, ${event.clientY - taskOffsetY}px, 0)`;
     document.body.append(taskDragPreview);
 

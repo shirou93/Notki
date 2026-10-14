@@ -196,6 +196,8 @@ window.notkiTranslations.ja = {
   'editor.titlePlaceholder': 'タイトル',
   'editor.bodyLabel': 'ノートの本文',
   'editor.toolbar': 'ノートの書式設定',
+  'editor.fontSizeSmall': '小テキスト',
+  'editor.fontSizeLarge': '大テキスト',
   'editor.bold': '太字',
   'editor.italic': '斜体',
   'editor.underline': '下線',
