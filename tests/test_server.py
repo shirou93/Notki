@@ -513,7 +513,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.58', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.58'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.59', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.59'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -537,7 +537,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_urlopen.return_value = mock_cm
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.58'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.59'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
@@ -719,12 +719,68 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(res['user']['email'], 'user2fa@example.com')
 
-        # 4. Passkey Registration (Removed/Disabled)
+        # 4. Passkey Registration and Login Flow
+        # Test missing public key
         passkey_id = 'test-passkey-id-123'
         status, res = self.request(user_client, 'POST', '/api/account/passkey', {
-            'id': passkey_id, 'name': 'My Laptop', 'publicKey': 'test'
+            'id': passkey_id, 'name': 'My Laptop', 'publicKey': ''
         })
         self.assertEqual(status, 400)
+
+        # Generate EC key pair for passkey test
+        with tempfile.NamedTemporaryFile('wb', delete=False) as key_file:
+            key_path = key_file.name
+
+        subprocess.run(['openssl', 'ecparam', '-name', 'prime256v1', '-genkey', '-noout', '-out', key_path], check=True)
+        spki_der = subprocess.run(['openssl', 'ec', '-in', key_path, '-pubout', '-outform', 'DER'], capture_output=True, check=True).stdout
+        pub_b64 = base64.b64encode(spki_der).decode('utf-8')
+
+        # Register valid passkey
+        status, res = self.request(user_client, 'POST', '/api/account/passkey', {
+            'id': passkey_id, 'name': 'My Laptop', 'publicKey': pub_b64
+        })
+        self.assertIn(status, (200, 201))
+        self.assertTrue(res.get('added'))
+
+        # Check status
+        status, res = self.request(user_client, 'GET', '/api/account/2fa')
+        self.assertEqual(status, 200)
+        self.assertEqual(len(res['passkeys']), 1)
+        self.assertEqual(res['passkeys'][0]['id'], passkey_id)
+
+        # Test login via passkey
+        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa@example.com', 'password': 'user-passphrase-123'})
+        self.assertEqual(status, 200)
+        self.assertTrue(res['hasPasskey'])
+        temp_token = res['tempToken']
+
+        auth_data = b'authenticator_data_32bytes_sample_padding_1234567890'
+        client_data = b'{"type":"webauthn.get","challenge":""}'
+        client_hash = hashlib.sha256(client_data).digest()
+        signed_data = auth_data + client_hash
+
+        with tempfile.NamedTemporaryFile('wb', delete=False) as data_file:
+            data_file.write(signed_data)
+            data_file_path = data_file.name
+
+        sig_der = subprocess.run(['openssl', 'dgst', '-sha256', '-sign', key_path, data_file_path], capture_output=True, check=True).stdout
+
+        status, res = self.request(unauth_client, 'POST', '/api/login/passkey', {
+            'tempToken': temp_token,
+            'id': passkey_id,
+            'authenticatorData': base64.b64encode(auth_data).decode('utf-8'),
+            'clientDataJSON': base64.b64encode(client_data).decode('utf-8'),
+            'signature': base64.b64encode(sig_der).decode('utf-8')
+        })
+        self.assertEqual(status, 200)
+        self.assertEqual(res['user']['email'], 'user2fa@example.com')
+
+        # Delete passkey
+        status, res = self.request(user_client, 'DELETE', f'/api/account/passkey/{passkey_id}')
+        self.assertEqual(status, 200)
+
+        status, res = self.request(user_client, 'GET', '/api/account/2fa')
+        self.assertEqual(res['passkeys'], [])
 
         # 6. Verify Admin Summary and Admin Reset 2FA
         status, summary = self.request(self.admin, 'GET', '/api/admin/summary')
