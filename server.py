@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.69'
+VERSION = '0.1.5.70'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -157,6 +157,59 @@ POLISH_MESSAGES = {
 
 TEMP_2FA_TOKENS = {}
 TEMP_2FA_LOCK = threading.Lock()
+FAILED_AUTH_ATTEMPTS = {}
+FAILED_AUTH_LOCK = threading.Lock()
+
+def record_failed_auth(ip):
+    now = time.time()
+    with FAILED_AUTH_LOCK:
+        attempts = [t for t in FAILED_AUTH_ATTEMPTS.get(ip, []) if now - t < 60]
+        attempts.append(now)
+        FAILED_AUTH_ATTEMPTS[ip] = attempts
+
+def is_rate_limited(ip, max_failed=15, window_seconds=60):
+    now = time.time()
+    with FAILED_AUTH_LOCK:
+        attempts = [t for t in FAILED_AUTH_ATTEMPTS.get(ip, []) if now - t < window_seconds]
+        FAILED_AUTH_ATTEMPTS[ip] = attempts
+        return len(attempts) >= max_failed
+
+def parse_header_params(header_str):
+    if not header_str:
+        return '', {}
+    parts = header_str.split(';')
+    main_val = parts[0].strip().lower()
+    params = {}
+    for part in parts[1:]:
+        if '=' in part:
+            k, v = part.split('=', 1)
+            params[k.strip().lower()] = v.strip().strip('"\'')
+    return main_val, params
+
+def parse_multipart_data(rfile, boundary, content_length):
+    if isinstance(boundary, str):
+        boundary = boundary.encode('utf-8')
+    data = rfile.read(content_length)
+    fields = {}
+    delimiter = b'--' + boundary
+    parts = data.split(delimiter)
+    for part in parts:
+        if not part or part.startswith(b'--'):
+            continue
+        if b'\r\n\r\n' in part:
+            header_bytes, body = part.split(b'\r\n\r\n', 1)
+            if body.endswith(b'\r\n'):
+                body = body[:-2]
+            header_str = header_bytes.decode('utf-8', errors='ignore')
+            name = None
+            for line in header_str.split('\r\n'):
+                if line.lower().startswith('content-disposition:'):
+                    _, params = parse_header_params(line)
+                    name = params.get('name')
+                    break
+            if name:
+                fields.setdefault(name, []).append(body)
+    return fields
 
 def create_temp_2fa_token(user_id):
     token = secrets.token_urlsafe(32)
@@ -239,23 +292,29 @@ def verify_totp_code(secret_b32, code, time_step=30, window=1):
     return False
 
 def verify_passkey_signature(public_key_pem, sig_bytes, signed_data):
+    pub_file = tempfile.NamedTemporaryFile('wb', delete=False)
+    sig_file = tempfile.NamedTemporaryFile('wb', delete=False)
+    data_file = tempfile.NamedTemporaryFile('wb', delete=False)
     try:
-        with tempfile.NamedTemporaryFile('wb') as pub_file, \
-             tempfile.NamedTemporaryFile('wb') as sig_file, \
-             tempfile.NamedTemporaryFile('wb') as data_file:
-            pub_file.write(public_key_pem.encode('utf-8'))
-            pub_file.flush()
-            sig_file.write(sig_bytes)
-            sig_file.flush()
-            data_file.write(signed_data)
-            data_file.flush()
-            proc = subprocess.run(
-                ['openssl', 'dgst', '-sha256', '-verify', pub_file.name, '-signature', sig_file.name, data_file.name],
-                capture_output=True
-            )
-            return proc.returncode == 0
+        pub_file.write(public_key_pem.encode('utf-8'))
+        pub_file.close()
+        sig_file.write(sig_bytes)
+        sig_file.close()
+        data_file.write(signed_data)
+        data_file.close()
+        proc = subprocess.run(
+            ['openssl', 'dgst', '-sha256', '-verify', pub_file.name, '-signature', sig_file.name, data_file.name],
+            capture_output=True
+        )
+        return proc.returncode == 0
     except Exception:
         return False
+    finally:
+        for path in (pub_file.name, sig_file.name, data_file.name):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
 
 
 def parse_version(version_str):
@@ -326,6 +385,8 @@ def database():
 
 def initialize_database():
     with database() as connection:
+        connection.execute('PRAGMA journal_mode = WAL')
+        connection.execute('PRAGMA synchronous = NORMAL')
         connection.executescript('''
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY,
@@ -384,6 +445,7 @@ def initialize_database():
                 name TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+            CREATE INDEX IF NOT EXISTS passkeys_user_idx ON passkeys(user_id);
         ''')
         columns = {row['name'] for row in connection.execute('PRAGMA table_info(users)')}
         if 'avatar' not in columns:
@@ -744,16 +806,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
             self.send_error_json(str(error), 400)
 
     def read_archive_from_request(self):
-        import cgi
-        ctype, pdict = cgi.parse_header(self.headers.get('Content-Type', ''))
+        ctype, params = parse_header_params(self.headers.get('Content-Type', ''))
         if ctype == 'multipart/form-data':
-            boundary = pdict.get('boundary')
+            boundary = params.get('boundary')
             if not boundary:
                 raise APIError('Invalid request data.', 400)
             try:
-                pdict['boundary'] = boundary.encode('utf-8') if isinstance(boundary, str) else boundary
-                pdict['CONTENT-LENGTH'] = int(self.headers.get('Content-Length', 0))
-                fields = cgi.parse_multipart(self.rfile, pdict)
+                content_length = int(self.headers.get('Content-Length', 0))
+                fields = parse_multipart_data(self.rfile, boundary, content_length)
             except Exception:
                 fields = {}
             archive_list = fields.get('archive') or fields.get('file') or []
@@ -777,6 +837,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
         try:
             self.check_origin()
             path = urlsplit(self.path).path
+            if path in ('/api/login', '/api/login/2fa', '/api/login/passkey'):
+                client_ip = self.headers.get('X-Forwarded-For', '').split(',')[0].strip() or self.client_address[0]
+                if is_rate_limited(client_ip):
+                    raise APIError('Too many failed attempts. Please try again later.', 429)
             if path == '/api/setup/import-backup':
                 archive_bytes = self.read_archive_from_request()
                 self.import_snapshot_archive(archive_bytes)
@@ -1100,7 +1164,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     self.send_json({'updateAvailable': False, 'currentVersion': VERSION})
                     return
 
-                valid_tags = [t for t in tags if re.match(r'^[0-9.]+$', t.get('name', ''))]
+                valid_tags = [t for t in tags if isinstance(t, dict) and re.match(r'^v?[0-9.]+$', t.get('name', ''))]
                 if not valid_tags:
                     self.send_json({'updateAvailable': False, 'currentVersion': VERSION})
                     return
@@ -1457,6 +1521,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             password_hash = row['password_hash'] if row else DUMMY_PASSWORD_HASH
             valid_password = verify_password(password, password_hash)
             if not row or not valid_password:
+                client_ip = self.headers.get('X-Forwarded-For', '').split(',')[0].strip() or self.client_address[0]
+                record_failed_auth(client_ip)
                 self.send_error_json('Invalid e-mail or password.', 401)
                 return
             totp_secret = row['totp_secret'] if 'totp_secret' in row.keys() else None
@@ -1497,6 +1563,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 connection.execute('UPDATE users SET backup_codes_json = ? WHERE id = ?', (json.dumps(backup_codes), user_id))
 
             if not totp_valid and not backup_valid:
+                client_ip = self.headers.get('X-Forwarded-For', '').split(',')[0].strip() or self.client_address[0]
+                record_failed_auth(client_ip)
                 raise APIError('Invalid two-factor code.', 401)
         token = self.new_session(user_id)
         self.send_json({'user': public_user(row)}, extra_headers=self.session_headers(token))
@@ -1536,6 +1604,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('Invalid key data.', 400) from err
 
         if not verify_passkey_signature(pk_row['public_key_pem'], sig_bytes, signed_data):
+            client_ip = self.headers.get('X-Forwarded-For', '').split(',')[0].strip() or self.client_address[0]
+            record_failed_auth(client_ip)
             raise APIError('Invalid passkey signature.', 401)
 
         token = self.new_session(user_id)
