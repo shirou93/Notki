@@ -154,4 +154,11 @@
     getLanguage, setLanguage, applyTranslations, onChange,
     supportedLanguages: [...SUPPORTED_LANGUAGES],
   };
+
+  // Expose internals for testing
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      normalizeLanguage
+    };
+  }
 })();
