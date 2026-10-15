@@ -1297,25 +1297,25 @@ class VerifyTOTPCodeTests(unittest.TestCase):
         self.base_time = 1600000000.0  # arbitrary timestamp
         self.base_counter = int(self.base_time // self.time_step)
 
-    @unittest.mock.patch('time.time')
+    @unittest.mock.patch('server.time.time')
     def test_valid_code_exact_match(self, mock_time):
         mock_time.return_value = self.base_time
         code = server.compute_totp_code(self.secret, self.time_step, self.base_counter)
         self.assertTrue(server.verify_totp_code(self.secret, code, self.time_step))
 
-    @unittest.mock.patch('time.time')
+    @unittest.mock.patch('server.time.time')
     def test_valid_code_previous_window(self, mock_time):
         mock_time.return_value = self.base_time
         code = server.compute_totp_code(self.secret, self.time_step, self.base_counter - 1)
         self.assertTrue(server.verify_totp_code(self.secret, code, self.time_step, window=1))
 
-    @unittest.mock.patch('time.time')
+    @unittest.mock.patch('server.time.time')
     def test_valid_code_next_window(self, mock_time):
         mock_time.return_value = self.base_time
         code = server.compute_totp_code(self.secret, self.time_step, self.base_counter + 1)
         self.assertTrue(server.verify_totp_code(self.secret, code, self.time_step, window=1))
 
-    @unittest.mock.patch('time.time')
+    @unittest.mock.patch('server.time.time')
     def test_invalid_code_outside_window(self, mock_time):
         mock_time.return_value = self.base_time
         code = server.compute_totp_code(self.secret, self.time_step, self.base_counter - 2)
@@ -1333,7 +1333,7 @@ class VerifyTOTPCodeTests(unittest.TestCase):
         self.assertFalse(server.verify_totp_code(self.secret, "123a56"))   # non-digit
         self.assertFalse(server.verify_totp_code(self.secret, 12345))      # int with wrong digits length
 
-    @unittest.mock.patch('time.time')
+    @unittest.mock.patch('server.time.time')
     def test_invalid_secret_exception_handling(self, mock_time):
         mock_time.return_value = self.base_time
         # Secret with invalid base32 chars will throw inside compute_totp_code -> base64.b32decode
@@ -1342,6 +1342,71 @@ class VerifyTOTPCodeTests(unittest.TestCase):
         code = "123456"
         self.assertFalse(server.verify_totp_code(invalid_secret, code, self.time_step, window=1))
 
+
+
+class RateLimitTests(unittest.TestCase):
+    def setUp(self):
+        server.FAILED_AUTH_ATTEMPTS.clear()
+
+    def tearDown(self):
+        server.FAILED_AUTH_ATTEMPTS.clear()
+
+    def test_below_limit(self):
+        ip = "127.0.0.1"
+        for _ in range(14):
+            server.record_failed_auth(ip)
+        self.assertFalse(server.is_rate_limited(ip))
+
+    def test_exceeds_limit(self):
+        ip = "127.0.0.1"
+        for _ in range(15):
+            server.record_failed_auth(ip)
+        self.assertTrue(server.is_rate_limited(ip))
+
+    @unittest.mock.patch('server.time.time')
+    def test_expiration_window(self, mock_time):
+        ip = "127.0.0.2"
+        base_time = 1000.0
+        mock_time.return_value = base_time
+
+        for _ in range(15):
+            server.record_failed_auth(ip)
+
+        self.assertTrue(server.is_rate_limited(ip))
+
+        # Advance time by 59s
+        mock_time.return_value = base_time + 59.0
+        self.assertTrue(server.is_rate_limited(ip))
+
+        # Advance time by 61s
+        mock_time.return_value = base_time + 61.0
+        self.assertFalse(server.is_rate_limited(ip))
+
+    def test_independent_ips(self):
+        ip1 = "192.168.0.1"
+        ip2 = "192.168.0.2"
+
+        for _ in range(15):
+            server.record_failed_auth(ip1)
+        self.assertTrue(server.is_rate_limited(ip1))
+
+        for _ in range(5):
+            server.record_failed_auth(ip2)
+        self.assertFalse(server.is_rate_limited(ip2))
+
+    @unittest.mock.patch('server.time.time')
+    def test_custom_parameters(self, mock_time):
+        ip = "10.0.0.1"
+        base_time = 2000.0
+        mock_time.return_value = base_time
+
+        server.FAILED_AUTH_ATTEMPTS[ip] = [base_time] * 5
+
+        self.assertTrue(server.is_rate_limited(ip, max_failed=5, window_seconds=10))
+
+        # Advance time by 11s
+        mock_time.return_value = base_time + 11.0
+        self.assertFalse(server.is_rate_limited(ip, max_failed=5, window_seconds=10))
 
 if __name__ == '__main__':
     unittest.main()
