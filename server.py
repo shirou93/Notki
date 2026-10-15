@@ -287,9 +287,24 @@ def verify_totp_code(secret_b32, code, time_step=30, window=1):
     if not code.isdigit() or len(code) != 6:
         return False
     current_counter = int(time.time() // time_step)
+
+    try:
+        secret_b32 = str(secret_b32 or '').strip().upper()
+        missing_padding = len(secret_b32) % 8
+        if missing_padding:
+            secret_b32 += '=' * (8 - missing_padding)
+        key = base64.b32decode(secret_b32, casefold=True)
+    except Exception:
+        return False
+
     for i in range(-window, window + 1):
         try:
-            if hmac.compare_digest(compute_totp_code(secret_b32, time_step, current_counter + i), code):
+            msg = struct.pack('>Q', current_counter + i)
+            hmac_hash = hmac.new(key, msg, hashlib.sha1).digest()
+            offset = hmac_hash[-1] & 0x0f
+            binary = struct.unpack('>I', hmac_hash[offset:offset+4])[0] & 0x7fffffff
+            generated_code = f'{binary % 1_000_000:06d}'
+            if hmac.compare_digest(generated_code, code):
                 return True
         except Exception:
             pass
