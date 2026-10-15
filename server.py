@@ -1273,17 +1273,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('Snapshot import is available only locally.', 403)
         self.restore_snapshot(payload.get('snapshot'), replace_existing=False)
 
-    def restore_snapshot(self, snapshot, replace_existing=False):
-        if not isinstance(snapshot, dict) or snapshot.get('format') != 'notki-server-snapshot' or snapshot.get('version') != 1:
-            raise APIError('The file is not a valid Notki server snapshot.')
-        users = snapshot.get('users')
-        notes = snapshot.get('notes')
-        invites = snapshot.get('invites')
-        if not isinstance(users, list) or not isinstance(notes, list) or not isinstance(invites, list):
-            raise APIError('The snapshot does not contain a complete list of accounts, notes, and invitations.')
-        if not users or len(users) > 10_000 or len(notes) > 100_000 or len(invites) > 100_000:
-            raise APIError('The snapshot is empty or exceeds the data limit.')
-
+    def _prepare_snapshot_users(self, users):
         user_ids = set()
         emails = set()
         prepared_users = []
@@ -1319,7 +1309,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
             prepared_users.append((user_id, email, password_hash, role, self.snapshot_date(user.get('createdAt')), avatar, labels_json, totp_secret, backup_codes_json))
         if not any(user[3] == 'admin' for user in prepared_users):
             raise APIError('The snapshot must contain an administrator account.')
+        return user_ids, emails, prepared_users
 
+    def _prepare_snapshot_notes(self, notes, user_ids):
         prepared_notes = []
         note_ids = set()
         for note in notes:
@@ -1353,7 +1345,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 int(pinned), int(archived), int(deleted),
                 self.snapshot_date(note.get('createdAt')), self.snapshot_date(note.get('updatedAt')), sort_order,
             ))
+        return note_ids, prepared_notes
 
+    def _prepare_snapshot_invites(self, invites, user_ids):
         prepared_invites = []
         invite_hashes = set()
         for invite in invites:
@@ -1371,10 +1365,12 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 token, created_by, self.snapshot_date(invite.get('createdAt')),
                 self.snapshot_date(invite.get('expiresAt')), self.snapshot_date(invite['usedAt']) if invite.get('usedAt') else None,
             ))
+        return prepared_invites
 
+    def _prepare_snapshot_shares(self, shares, user_ids, note_ids):
         prepared_shares = []
         share_keys = set()
-        for share in snapshot.get('shares') or []:
+        for share in shares:
             if not isinstance(share, dict):
                 raise APIError('Nieprawidłowe udostępnienie w snapshocie.')
             note_id = str(share.get('noteId') or '')
@@ -1387,10 +1383,12 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 raise APIError('Nieprawidłowe udostępnienie w snapshocie.')
             share_keys.add((note_id, user_id))
             prepared_shares.append((note_id, user_id, permission, self.snapshot_date(share.get('createdAt'))))
+        return prepared_shares
 
+    def _prepare_snapshot_passkeys(self, passkeys, user_ids):
         prepared_passkeys = []
         passkey_ids = set()
-        for pk in snapshot.get('passkeys') or []:
+        for pk in passkeys:
             if not isinstance(pk, dict):
                 raise APIError('Nieprawidłowy klucz zabezpieczeń w snapshocie.')
             pk_id = str(pk.get('id') or '')
@@ -1401,10 +1399,12 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 raise APIError('Nieprawidłowy klucz zabezpieczeń w snapshocie.')
             passkey_ids.add(pk_id)
             prepared_passkeys.append((pk_id, user_id, pub_pem, name, self.snapshot_date(pk.get('createdAt'))))
+        return prepared_passkeys
 
+    def _prepare_snapshot_settings(self, settings):
         prepared_settings = []
         setting_keys = set()
-        for st in snapshot.get('settings') or []:
+        for st in settings:
             if not isinstance(st, dict):
                 raise APIError('Nieprawidłowe ustawienie w snapshocie.')
             key = str(st.get('key') or '')
@@ -1413,7 +1413,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 raise APIError('Nieprawidłowe ustawienie w snapshocie.')
             setting_keys.add(key)
             prepared_settings.append((key, value))
+        return prepared_settings
 
+    def _apply_snapshot_data(self, prepared_users, prepared_notes, prepared_invites, prepared_shares, prepared_passkeys, prepared_settings, replace_existing):
         with database() as connection:
             connection.execute('BEGIN IMMEDIATE')
             has_existing_data = any(
@@ -1457,6 +1459,30 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
                     prepared_settings,
                 )
+
+    def restore_snapshot(self, snapshot, replace_existing=False):
+        if not isinstance(snapshot, dict) or snapshot.get('format') != 'notki-server-snapshot' or snapshot.get('version') != 1:
+            raise APIError('The file is not a valid Notki server snapshot.')
+        users = snapshot.get('users')
+        notes = snapshot.get('notes')
+        invites = snapshot.get('invites')
+        if not isinstance(users, list) or not isinstance(notes, list) or not isinstance(invites, list):
+            raise APIError('The snapshot does not contain a complete list of accounts, notes, and invitations.')
+        if not users or len(users) > 10_000 or len(notes) > 100_000 or len(invites) > 100_000:
+            raise APIError('The snapshot is empty or exceeds the data limit.')
+
+        user_ids, _, prepared_users = self._prepare_snapshot_users(users)
+        note_ids, prepared_notes = self._prepare_snapshot_notes(notes, user_ids)
+        prepared_invites = self._prepare_snapshot_invites(invites, user_ids)
+        prepared_shares = self._prepare_snapshot_shares(snapshot.get('shares') or [], user_ids, note_ids)
+        prepared_passkeys = self._prepare_snapshot_passkeys(snapshot.get('passkeys') or [], user_ids)
+        prepared_settings = self._prepare_snapshot_settings(snapshot.get('settings') or [])
+
+        self._apply_snapshot_data(
+            prepared_users, prepared_notes, prepared_invites, prepared_shares,
+            prepared_passkeys, prepared_settings, replace_existing
+        )
+
         result = {
             'users': len(prepared_users),
             'notes': len(prepared_notes),
