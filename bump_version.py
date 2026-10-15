@@ -4,7 +4,7 @@ for file in files:
     try:
         with open(file, "r") as f:
             content = f.read()
-        content = content.replace("0.1.5.80", "0.1.5.81")
+        content = content.replace("0.1.5.81", "0.1.5.82")
         with open(file, "w") as f:
             f.write(content)
     except FileNotFoundError:
