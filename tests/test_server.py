@@ -1290,5 +1290,26 @@ class ParseLanguageTests(unittest.TestCase):
 
 
 
+class UtilityTests(unittest.TestCase):
+    def test_generate_totp_secret(self):
+        secret = server.generate_totp_secret()
+        self.assertIsInstance(secret, str)
+        self.assertEqual(len(secret), 16)
+
+        alphabet = set('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567')
+        for char in secret:
+            self.assertIn(char, alphabet)
+
+        # Generate multiple to ensure constraints hold and there's randomness
+        secrets = set()
+        for _ in range(100):
+            s = server.generate_totp_secret()
+            self.assertEqual(len(s), 16)
+            self.assertTrue(all(c in alphabet for c in s))
+            secrets.add(s)
+
+        # Extremely unlikely to get same 16-char string twice from strong RNG
+        self.assertEqual(len(secrets), 100)
+
 if __name__ == '__main__':
     unittest.main()
