@@ -1418,10 +1418,15 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def _apply_snapshot_data(self, prepared_users, prepared_notes, prepared_invites, prepared_shares, prepared_passkeys, prepared_settings, replace_existing):
         with database() as connection:
             connection.execute('BEGIN IMMEDIATE')
-            has_existing_data = any(
-                connection.execute(f'SELECT 1 FROM {table} LIMIT 1').fetchone()
-                for table in ('users', 'notes', 'invites', 'sessions', 'passkeys', 'settings')
-            )
+            has_existing_data = bool(connection.execute(
+                'SELECT 1 WHERE '
+                'EXISTS(SELECT 1 FROM users) OR '
+                'EXISTS(SELECT 1 FROM notes) OR '
+                'EXISTS(SELECT 1 FROM invites) OR '
+                'EXISTS(SELECT 1 FROM sessions) OR '
+                'EXISTS(SELECT 1 FROM passkeys) OR '
+                'EXISTS(SELECT 1 FROM settings)'
+            ).fetchone())
             if has_existing_data and not replace_existing:
                 raise APIError('Import is possible only into a completely empty database.', 409)
             if replace_existing:
