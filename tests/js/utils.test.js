@@ -28,7 +28,37 @@ window.i18n = {
 };
 
 // require the module
-const { bufferToBase64, getTaskStatsFromHtml } = require('../../app.js');
+const { bufferToBase64, getTaskStatsFromHtml, tableCell } = require('../../app.js');
+
+describe('tableCell', () => {
+  it('should create a <td> element', () => {
+    const cell = tableCell('content');
+    expect(cell.tagName.toLowerCase()).toBe('td');
+  });
+
+  it('should set text content correctly for a string', () => {
+    const cell = tableCell('test string');
+    expect(cell.textContent).toBe('test string');
+  });
+
+  it('should set text content correctly for a number', () => {
+    const cell = tableCell(42);
+    expect(cell.textContent).toBe('42');
+  });
+
+  it('should set empty text content for an empty string', () => {
+    const cell = tableCell('');
+    expect(cell.textContent).toBe('');
+  });
+
+  it('should safely escape HTML strings preventing XSS', () => {
+    const htmlContent = '<script>alert("xss")</script>';
+    const cell = tableCell(htmlContent);
+    // Since textContent is used, the literal string is stored, not parsed as HTML.
+    expect(cell.textContent).toBe(htmlContent);
+    expect(cell.innerHTML).toBe('&lt;script&gt;alert("xss")&lt;/script&gt;');
+  });
+});
 
 describe('getTaskStatsFromHtml', () => {
   it('should return zeros for null, undefined, or empty string', () => {
