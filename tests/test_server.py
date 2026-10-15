@@ -1217,5 +1217,33 @@ class FirstRunSetupTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn('error', error)
 
+
+class UtilitiesTests(unittest.TestCase):
+    def test_parse_header_params(self):
+        # Empty string
+        self.assertEqual(server.parse_header_params(''), ('', {}))
+
+        # Main value only
+        self.assertEqual(server.parse_header_params('multipart/form-data'), ('multipart/form-data', {}))
+
+        # Main value with one parameter
+        self.assertEqual(server.parse_header_params('multipart/form-data; boundary=something'), ('multipart/form-data', {'boundary': 'something'}))
+
+        # Parameters with quotes
+        self.assertEqual(server.parse_header_params('multipart/form-data; boundary="something"'), ('multipart/form-data', {'boundary': 'something'}))
+        self.assertEqual(server.parse_header_params("multipart/form-data; boundary='something'"), ('multipart/form-data', {'boundary': 'something'}))
+
+        # Multiple parameters
+        self.assertEqual(server.parse_header_params('multipart/form-data; boundary="something"; charset=utf-8'), ('multipart/form-data', {'boundary': 'something', 'charset': 'utf-8'}))
+
+        # Parameters with spaces around = or ;
+        self.assertEqual(server.parse_header_params('multipart/form-data ;  boundary = something '), ('multipart/form-data', {'boundary': 'something'}))
+
+        # Missing equals sign in part
+        self.assertEqual(server.parse_header_params('multipart/form-data; invalidpart; boundary=something'), ('multipart/form-data', {'boundary': 'something'}))
+
+        # Different casing
+        self.assertEqual(server.parse_header_params('MULTIPART/FORM-DATA; BOUNDARY=something'), ('multipart/form-data', {'boundary': 'something'}))
+
 if __name__ == '__main__':
     unittest.main()
