@@ -1217,5 +1217,16 @@ class FirstRunSetupTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn('error', error)
 
+class UtilityTests(unittest.TestCase):
+    def test_parse_version(self):
+        self.assertEqual(server.parse_version("1.0.0"), (1, 0, 0))
+        self.assertEqual(server.parse_version("v2.10.5"), (2, 10, 5))
+        self.assertEqual(server.parse_version("3.0.0-beta1"), (3, 0, 0, 1))
+        self.assertEqual(server.parse_version("1.0"), (1, 0))
+        self.assertEqual(server.parse_version("abc"), ())
+        self.assertEqual(server.parse_version(""), ())
+        self.assertEqual(server.parse_version(None), ())
+        self.assertEqual(server.parse_version("1.2.3.4.5"), (1, 2, 3, 4, 5))
+
 if __name__ == '__main__':
     unittest.main()
