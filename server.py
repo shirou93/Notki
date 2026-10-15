@@ -1264,8 +1264,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                         snapshot_file = archive.extractfile(snapshot_member)
                         if snapshot_file:
                             return json.loads(snapshot_file.read(MAX_SNAPSHOT_BYTES + 1).decode('utf-8-sig'))
-            except Exception:
-                pass
+            except Exception as e:
+                add_log('ERROR', f'Failed to extract backup archive: {e}')
             raise APIError('The backup archive cannot be read.')
 
     def import_snapshot(self, payload):
