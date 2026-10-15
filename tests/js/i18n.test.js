@@ -56,3 +56,76 @@ describe('normalizeLanguage', () => {
     expect(normalizeLanguage(false)).toBe('');
   });
 });
+
+describe('applyTranslations', () => {
+  beforeEach(() => {
+    jest.resetModules();
+    document.body.innerHTML = '';
+    window.notkiTranslations = {
+      en: {
+        'test.textContent': 'Text Content',
+        'test.placeholder': 'Placeholder',
+        'test.dataPlaceholder': 'Data Placeholder',
+        'test.ariaLabel': 'Aria Label',
+        'test.title': 'Title',
+        'test.content': 'Content'
+      }
+    };
+    require('../../i18n.js');
+    window.i18n.setLanguage('en', { persist: false });
+  });
+
+  it('should translate textContent for elements with data-i18n', () => {
+    document.body.innerHTML = '<div data-i18n="test.textContent"></div>';
+    window.i18n.applyTranslations();
+    expect(document.body.querySelector('div').textContent).toBe('Text Content');
+  });
+
+  it('should translate placeholder for elements with data-i18n-placeholder', () => {
+    document.body.innerHTML = '<input data-i18n-placeholder="test.placeholder" />';
+    window.i18n.applyTranslations();
+    expect(document.body.querySelector('input').getAttribute('placeholder')).toBe('Placeholder');
+  });
+
+  it('should translate data-placeholder for elements with data-i18n-data-placeholder', () => {
+    document.body.innerHTML = '<div data-i18n-data-placeholder="test.dataPlaceholder"></div>';
+    window.i18n.applyTranslations();
+    expect(document.body.querySelector('div').getAttribute('data-placeholder')).toBe('Data Placeholder');
+  });
+
+  it('should translate aria-label for elements with data-i18n-aria-label', () => {
+    document.body.innerHTML = '<button data-i18n-aria-label="test.ariaLabel"></button>';
+    window.i18n.applyTranslations();
+    expect(document.body.querySelector('button').getAttribute('aria-label')).toBe('Aria Label');
+  });
+
+  it('should translate title for elements with data-i18n-title', () => {
+    document.body.innerHTML = '<a data-i18n-title="test.title"></a>';
+    window.i18n.applyTranslations();
+    expect(document.body.querySelector('a').getAttribute('title')).toBe('Title');
+  });
+
+  it('should translate content for elements with data-i18n-content', () => {
+    document.body.innerHTML = '<meta data-i18n-content="test.content" />';
+    window.i18n.applyTranslations();
+    expect(document.body.querySelector('meta').getAttribute('content')).toBe('Content');
+  });
+
+  it('should scope translations to a specific root element if provided', () => {
+    document.body.innerHTML = `
+      <div id="root1">
+        <span data-i18n="test.textContent"></span>
+      </div>
+      <div id="root2">
+        <span data-i18n="test.textContent"></span>
+      </div>
+    `;
+    const root1 = document.getElementById('root1');
+    const root2 = document.getElementById('root2');
+
+    window.i18n.applyTranslations(root1);
+
+    expect(root1.querySelector('span').textContent).toBe('Text Content');
+    expect(root2.querySelector('span').textContent).toBe(''); // Should remain unchanged
+  });
+});
