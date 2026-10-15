@@ -162,28 +162,17 @@ def evaluate_penalty(matrix, size):
 
     return penalty
 
-def generate_qr_matrix(text):
-    data_bytes = text.encode('utf-8')
-    data_len = len(data_bytes)
-
-    # Find suitable QR version
-    spec = None
+def _find_qr_spec(data_len):
     for s in QR_SPECS_M:
         version, size, blocks_spec = s
         total_data_bytes = sum(count * dcnt for count, tcnt, dcnt in blocks_spec)
         len_bits = 16 if version >= 10 else 8
         needed_bytes = (4 + len_bits + data_len * 8 + 7) // 8
         if needed_bytes <= total_data_bytes:
-            spec = s
-            break
+            return s
+    return None
 
-    if not spec:
-        raise QRError("Data too long for QR generator")
-
-    version, size, blocks_spec = spec
-    total_data_bytes = sum(count * dcnt for count, tcnt, dcnt in blocks_spec)
-
-    # Build bit buffer
+def _build_bit_buffer(data_bytes, data_len, version, total_data_bytes):
     bits = []
     def add_bits(val, count):
         for i in range(count - 1, -1, -1):
@@ -218,8 +207,9 @@ def generate_qr_matrix(text):
         for b in bits[i:i+8]:
             val = (val << 1) | b
         raw_data.append(val)
+    return raw_data
 
-    # Divide data into blocks and compute EC
+def _compute_error_correction(raw_data, blocks_spec):
     data_blocks = []
     ec_blocks = []
     offset = 0
@@ -230,8 +220,9 @@ def generate_qr_matrix(text):
             offset += dcnt
             data_blocks.append(block)
             ec_blocks.append(rs_encode(block, ec_per_block))
+    return data_blocks, ec_blocks
 
-    # Interleave codewords
+def _interleave_codewords(data_blocks, ec_blocks):
     final_codewords = []
     max_data_len = max(len(b) for b in data_blocks)
     for i in range(max_data_len):
@@ -243,8 +234,9 @@ def generate_qr_matrix(text):
         for b in ec_blocks:
             if i < len(b):
                 final_codewords.append(b[i])
+    return final_codewords
 
-    # Build matrix grid
+def _build_matrix_grid(size, version):
     # grid: -1 = unassigned, 0 = white, 1 = black
     grid = [[-1] * size for _ in range(size)]
     reserved = [[False] * size for _ in range(size)]
@@ -311,7 +303,9 @@ def generate_qr_matrix(text):
             set_module(i // 3, i % 3 + size - 11, mod)
             set_module(i % 3 + size - 11, i // 3, mod)
 
-    # Place data bits
+    return grid, reserved
+
+def _place_data_bits(grid, reserved, size, final_codewords):
     bit_index = 0
     total_bits = len(final_codewords) * 8
 
@@ -335,7 +329,7 @@ def generate_qr_matrix(text):
         col -= 2
         upward = not upward
 
-    # Evaluate 8 mask patterns and pick the one with lowest penalty score
+def _apply_best_mask(grid, reserved, size):
     best_matrix = None
     best_penalty = float('inf')
 
@@ -375,6 +369,39 @@ def generate_qr_matrix(text):
         if score < best_penalty:
             best_penalty = score
             best_matrix = mat
+
+    return best_matrix
+
+def generate_qr_matrix(text):
+    data_bytes = text.encode('utf-8')
+    data_len = len(data_bytes)
+
+    # Find suitable QR version
+    spec = _find_qr_spec(data_len)
+
+    if not spec:
+        raise QRError("Data too long for QR generator")
+
+    version, size, blocks_spec = spec
+    total_data_bytes = sum(count * dcnt for count, tcnt, dcnt in blocks_spec)
+
+    # Build bit buffer
+    raw_data = _build_bit_buffer(data_bytes, data_len, version, total_data_bytes)
+
+    # Divide data into blocks and compute EC
+    data_blocks, ec_blocks = _compute_error_correction(raw_data, blocks_spec)
+
+    # Interleave codewords
+    final_codewords = _interleave_codewords(data_blocks, ec_blocks)
+
+    # Build matrix grid
+    grid, reserved = _build_matrix_grid(size, version)
+
+    # Place data bits
+    _place_data_bits(grid, reserved, size, final_codewords)
+
+    # Evaluate 8 mask patterns and pick the one with lowest penalty score
+    best_matrix = _apply_best_mask(grid, reserved, size)
 
     return best_matrix
 
