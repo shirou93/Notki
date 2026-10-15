@@ -24,11 +24,12 @@ window.i18n = {
   t: jest.fn(),
   plural: jest.fn(),
   onChange: jest.fn(),
-  applyTranslations: jest.fn()
+  applyTranslations: jest.fn(),
+  formatDateTime: jest.fn()
 };
 
 // require the module
-const { bufferToBase64, getTaskStatsFromHtml, tableCell, createIconSvg } = require('../../app.js');
+const { bufferToBase64, getTaskStatsFromHtml, tableCell, createIconSvg, formatDate } = require('../../app.js');
 
 describe('createIconSvg', () => {
   it('should return an SVGSVGElement', () => {
@@ -172,5 +173,29 @@ describe('bufferToBase64', () => {
   it('should work with ArrayBuffer inputs from standard JS types', () => {
     const arr = new Uint8Array([1, 2, 3]);
     expect(bufferToBase64(arr.buffer)).toBe("AQID");
+  });
+});
+
+describe('formatDate', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should return an empty string for falsy inputs', () => {
+    expect(formatDate(null)).toBe('');
+    expect(formatDate(undefined)).toBe('');
+    expect(formatDate('')).toBe('');
+    expect(window.i18n.formatDateTime).not.toHaveBeenCalled();
+  });
+
+  it('should call window.i18n.formatDateTime and return its result', () => {
+    const isoString = '2023-10-15T12:00:00Z';
+    const formatted = 'Oct 15, 2023, 12:00 PM';
+    window.i18n.formatDateTime.mockReturnValue(formatted);
+
+    const result = formatDate(isoString);
+
+    expect(window.i18n.formatDateTime).toHaveBeenCalledWith(isoString);
+    expect(result).toBe(formatted);
   });
 });
