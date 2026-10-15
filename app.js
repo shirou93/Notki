@@ -2209,19 +2209,7 @@
     }
   }
 
-  function makeCard(note) {
-    const card = $('#note-template').content.firstElementChild.cloneNode(true);
-    card.dataset.id = note.id;
-    card.classList.add(`color-${COLORS.includes(note.color) ? note.color : 'default'}`);
-    if (skipCardAnimation) card.style.animation = 'none';
-    const shared = Boolean(note.ownerEmail);
-    const readOnly = shared && note.permission !== 'write';
-    if (shared) card.classList.add('is-shared');
-    if (readOnly) card.classList.add('is-read-only');
-    $('.card-date', card).textContent = window.i18n.formatDate(note.updatedAt);
-    const cardTitle = $('.card-title', card);
-    cardTitle.textContent = note.title || t('editor.untitled');
-
+  function setupCardProgress(card, note) {
     const taskStats = getTaskStats(note);
     if (taskStats.total > 0) {
       const progressEl = document.createElement('div');
@@ -2232,15 +2220,23 @@
         </div>
         <span class="card-progress-text">${taskStats.completed}/${taskStats.total} (${taskStats.percent}%)</span>
       `;
-      cardTitle.after(progressEl);
+      const cardTitle = $('.card-title', card);
+      if (cardTitle) cardTitle.after(progressEl);
     }
+  }
 
+  function setupCardBody(card, note) {
     const cardBody = $('.card-body', card);
-    if (note.bodyFormat === 1 && note.body) {
-      cardBody.innerHTML = sanitizeRichHtml(note.body);
-    } else {
-      cardBody.textContent = noteText(note) || t('editor.emptyNote');
+    if (cardBody) {
+      if (note.bodyFormat === 1 && note.body) {
+        cardBody.innerHTML = sanitizeRichHtml(note.body);
+      } else {
+        cardBody.textContent = noteText(note) || t('editor.emptyNote');
+      }
     }
+  }
+
+  function setupCardShare(card, note, shared) {
     const shareBtn = $('.card-share', card);
     const isSharedOut = Boolean(note.shareCount && note.shareCount > 0);
     if (shareBtn) {
@@ -2256,7 +2252,9 @@
         openShare(note.id);
       });
     }
+  }
 
+  function setupCardPin(card, note, shared) {
     const pin = $('.card-pin', card);
     pin.classList.toggle('is-pinned', note.pinned);
     pin.setAttribute('aria-label', t(note.pinned ? 'editor.unpin' : 'editor.pin'));
@@ -2271,6 +2269,10 @@
       persist();
       render();
     });
+    return pin;
+  }
+
+  function setupCardDrag(card, note, shared, pin) {
     const dragHandle = $('.card-drag', card);
     dragHandle.setAttribute('aria-label', t('card.drag'));
     dragHandle.title = t('card.dragTitle');
@@ -2298,9 +2300,13 @@
       }
     });
     if (shared) {
-      // A recipient cannot re-share or reorder someone else's note.
       dragHandle.hidden = true;
-      pin.hidden = true;
+      if (pin) pin.hidden = true;
+    }
+  }
+
+  function setupCardTags(card, note, shared, readOnly) {
+    if (shared) {
       const badge = document.createElement('span');
       badge.className = `card-owner${readOnly ? ' is-read-only' : ''}`;
       badge.textContent = readOnly ? t('share.readOnlyBadge') : t('share.writeBadge');
@@ -2314,6 +2320,9 @@
       label.textContent = tag;
       tags.append(label);
     });
+  }
+
+  function setupCardSwipe(card, note, readOnly) {
     const swipeBgRight = $('.card-swipe-right', card);
     const swipeBgLeft = $('.card-swipe-left', card);
     const labelRight = $('.card-swipe-label-right', card);
@@ -2487,7 +2496,9 @@
       if (event.target.closest('.card-drag, .card-pin')) return;
       openEditor(note.id);
     });
+  }
 
+  function setupCardTaskDrag(card, note, shared, readOnly) {
     let cardTaskDragItem = null;
     let cardTaskPointerId = null;
     let cardTaskDragPreview = null;
@@ -2575,13 +2586,7 @@
         }
         const cardDate = $('.card-date', card);
         if (cardDate) cardDate.textContent = window.i18n.formatDate(note.updatedAt);
-        if (cardBody) {
-          if (note.bodyFormat === 1 && note.body) {
-            cardBody.innerHTML = sanitizeRichHtml(note.body);
-          } else {
-            cardBody.textContent = noteText(note) || t('editor.emptyNote');
-          }
-        }
+        setupCardBody(card, note);
       };
 
       window.addEventListener('pointermove', onCardPointerMove);
@@ -2590,7 +2595,9 @@
 
       try { handle.setPointerCapture(event.pointerId); } catch {}
     });
+  }
 
+  function setupCardCheckboxes(card, note, shared, readOnly) {
     card.addEventListener('change', event => {
       if (event.target.matches('input[type="checkbox"]')) {
         event.stopPropagation();
@@ -2637,17 +2644,39 @@
             progressEl.remove();
           }
 
-          const cardBody = $('.card-body', card);
-          if (cardBody) {
-            if (note.bodyFormat === 1 && note.body) {
-              cardBody.innerHTML = sanitizeRichHtml(note.body);
-            } else {
-              cardBody.textContent = noteText(note) || t('editor.emptyNote');
-            }
-          }
+          setupCardBody(card, note);
         }
       }
     });
+  }
+
+
+  function makeCard(note) {
+    const card = $('#note-template').content.firstElementChild.cloneNode(true);
+    card.dataset.id = note.id;
+    card.classList.add(`color-${COLORS.includes(note.color) ? note.color : 'default'}`);
+    if (skipCardAnimation) card.style.animation = 'none';
+
+    const shared = Boolean(note.ownerEmail);
+    const readOnly = shared && note.permission !== 'write';
+    if (shared) card.classList.add('is-shared');
+    if (readOnly) card.classList.add('is-read-only');
+
+    $('.card-date', card).textContent = window.i18n.formatDate(note.updatedAt);
+    const cardTitle = $('.card-title', card);
+    cardTitle.textContent = note.title || t('editor.untitled');
+
+    setupCardProgress(card, note);
+    setupCardBody(card, note);
+    setupCardShare(card, note, shared);
+
+    const pin = setupCardPin(card, note, shared);
+    setupCardDrag(card, note, shared, pin);
+    setupCardTags(card, note, shared, readOnly);
+    setupCardSwipe(card, note, readOnly);
+    setupCardTaskDrag(card, note, shared, readOnly);
+    setupCardCheckboxes(card, note, shared, readOnly);
+
     return card;
   }
 
