@@ -1244,5 +1244,51 @@ class FirstRunSetupTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn('error', error)
 
+
+
+class ParseLanguageTests(unittest.TestCase):
+    def test_empty_or_none(self):
+        self.assertEqual(server.parse_language(None), server.DEFAULT_LANGUAGE)
+        self.assertEqual(server.parse_language(''), server.DEFAULT_LANGUAGE)
+        self.assertEqual(server.parse_language('   '), server.DEFAULT_LANGUAGE)
+
+    def test_single_supported_language(self):
+        self.assertEqual(server.parse_language('pl'), 'pl')
+        self.assertEqual(server.parse_language('es'), 'es')
+
+    def test_strips_region_from_language(self):
+        self.assertEqual(server.parse_language('en-US'), 'en')
+        self.assertEqual(server.parse_language('fr-CA'), 'fr')
+
+    def test_unsupported_language_returns_default(self):
+        self.assertEqual(server.parse_language('xx'), server.DEFAULT_LANGUAGE)
+        self.assertEqual(server.parse_language('xx-YY'), server.DEFAULT_LANGUAGE)
+
+    def test_respects_quality_values(self):
+        self.assertEqual(server.parse_language('en-US;q=0.5,en;q=0.8,pl;q=0.9'), 'pl')
+        self.assertEqual(server.parse_language('fr;q=0.7, de;q=0.8, es;q=0.9'), 'es')
+
+    def test_skips_asterisk_and_unsupported(self):
+        self.assertEqual(server.parse_language('*'), server.DEFAULT_LANGUAGE)
+        self.assertEqual(server.parse_language('xx, *;q=0.9'), server.DEFAULT_LANGUAGE)
+        self.assertEqual(server.parse_language('*, pl'), 'pl')
+
+    def test_handles_malformed_quality(self):
+        # Malformed q is treated as 0.0 and skipped
+        self.assertEqual(server.parse_language('pl;q=invalid, en'), 'en')
+
+    def test_handles_zero_quality(self):
+        self.assertEqual(server.parse_language('pl;q=0.0, en'), 'en')
+        self.assertEqual(server.parse_language('pl;q=-0.1, en'), 'en')
+
+    def test_ignores_extra_parameters(self):
+        self.assertEqual(server.parse_language('es;foo=bar;q=0.9, en;q=0.8'), 'es')
+        self.assertEqual(server.parse_language('ja; q=0.9 ; foo=bar, en;q=0.8'), 'ja')
+
+    def test_whitespace_handling(self):
+        self.assertEqual(server.parse_language('  fr  ;  q=0.9  ,  de ; q=0.8 '), 'fr')
+
+
+
 if __name__ == '__main__':
     unittest.main()
