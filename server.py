@@ -676,14 +676,18 @@ class NotkiHandler(BaseHTTPRequestHandler):
         return user
 
     def get_session_days(self):
+        if hasattr(self, '_session_days'):
+            return self._session_days
         try:
             with database() as connection:
                 row = connection.execute("SELECT value FROM settings WHERE key = 'sessionDays'").fetchone()
                 if row and row['value']:
-                    return max(1, min(3650, int(row['value'])))
+                    self._session_days = max(1, min(3650, int(row['value'])))
+                    return self._session_days
         except Exception:
             pass
-        return SESSION_DAYS
+        self._session_days = SESSION_DAYS
+        return self._session_days
 
     def session_headers(self, token, max_age=None):
         if max_age is None:
