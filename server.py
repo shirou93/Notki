@@ -725,104 +725,143 @@ class NotkiHandler(BaseHTTPRequestHandler):
             )
         return token
 
+    def handle_setup_get(self, path):
+        if path == '/api/setup/status':
+            self.send_json({'needsSetup': not self.has_admin()})
+            return True
+        elif path in ('/setup', '/setup.html'):
+            if self.has_admin():
+                self.send_redirect('/')
+            elif not self.is_local_setup_request():
+                self.send_error_json('The first-time setup can only be completed locally.', 403)
+            else:
+                self.serve_static('setup.html')
+
+    def handle_account_get(self, path):
+        if path == '/api/session':
+            self.send_json({'user': self.current_user()})
+            return True
+        elif path == '/api/account/2fa':
+            user = self.require_user()
+            with database() as connection:
+                row = connection.execute('SELECT totp_secret FROM users WHERE id = ?', (user['id'],)).fetchone()
+                pk_rows = connection.execute('SELECT id, name, created_at FROM passkeys WHERE user_id = ? ORDER BY created_at DESC', (user['id'],)).fetchall()
+            has_totp = bool(row and row['totp_secret'] and not row['totp_secret'].startswith('pending:'))
+            passkeys = [{'id': r['id'], 'name': r['name'], 'createdAt': r['created_at']} for r in pk_rows]
+            self.send_json({'hasTotp': has_totp, 'passkeys': passkeys})
+            return True
+        elif path == '/api/users':
+            user = self.require_user()
+            self.send_json({'users': self.directory(user['id'])})
+            return True
+        return False
+
+    def handle_notes_get(self, path):
+        if path == '/api/notes':
+            user = self.require_user()
+            with database() as connection:
+                rows = connection.execute('''
+                    SELECT notes.*, (SELECT COUNT(*) FROM note_shares WHERE note_shares.note_id = notes.id) AS share_count
+                    FROM notes WHERE user_id = ? ORDER BY sort_order DESC
+                ''', (user['id'],)).fetchall()
+            self.send_json({'notes': [self.note_from_row(row) for row in rows]})
+            return True
+        elif path == '/api/shared':
+            user = self.require_user()
+            self.send_json({'notes': self.shared_notes(user['id'])})
+            return True
+        elif path.startswith('/api/notes/') and path.endswith('/shares'):
+            user = self.require_user()
+            note_id = path[len('/api/notes/'):-len('/shares')]
+            self.send_json({'shares': self.list_shares(user, note_id)})
+            return True
+        return False
+
+    def handle_admin_get(self, path):
+        if path == '/api/admin/settings':
+            self.get_settings()
+            return True
+        elif path == '/api/admin/logs':
+            self.get_logs()
+            return True
+        elif path == '/api/admin/summary':
+            self.require_user(admin=True)
+            with database() as connection:
+                stats = connection.execute('''
+                    SELECT
+                        (SELECT COUNT(*) FROM users) AS users,
+                        COUNT(*) AS notes,
+                        SUM(CASE WHEN deleted = 0 AND archived = 0 THEN 1 ELSE 0 END) AS active,
+                        SUM(CASE WHEN deleted = 0 AND archived = 1 THEN 1 ELSE 0 END) AS archived,
+                        SUM(CASE WHEN deleted = 1 THEN 1 ELSE 0 END) AS trash
+                    FROM notes
+                ''').fetchone()
+                users = connection.execute('''
+                    SELECT users.id, users.email, users.role, users.created_at, users.totp_secret,
+                           COUNT(DISTINCT notes.id) AS note_count,
+                           (SELECT COUNT(*) FROM passkeys WHERE passkeys.user_id = users.id) AS passkey_count
+                    FROM users LEFT JOIN notes ON notes.user_id = users.id
+                    GROUP BY users.id ORDER BY users.created_at DESC
+                ''').fetchall()
+                invites = connection.execute('''
+                    SELECT token_hash, created_at, expires_at, used_at FROM invites ORDER BY created_at DESC LIMIT 30
+                ''').fetchall()
+                pending = connection.execute(
+                    'SELECT COUNT(*) FROM invites WHERE used_at IS NULL AND expires_at > ?', (iso_time(),)
+                ).fetchone()[0]
+            self.send_json({
+                'stats': {key: stats[key] or 0 for key in ('users', 'notes', 'active', 'archived', 'trash')}
+                          | {'pendingInvites': pending},
+                'users': [{
+                    'id': row['id'], 'email': row['email'], 'role': row['role'], 'createdAt': row['created_at'], 'notes': row['note_count'],
+                    'has2FA': bool((row['totp_secret'] and not row['totp_secret'].startswith('pending:')) or row['passkey_count'] > 0)
+                } for row in users],
+                'invites': [{'tokenHash': row['token_hash'], 'createdAt': row['created_at'], 'expiresAt': row['expires_at'], 'usedAt': row['used_at']} for row in invites],
+            })
+            return True
+        elif path == '/api/admin/backups':
+            self.list_server_backups()
+            return True
+        elif path.startswith('/api/admin/backups/'):
+            filename = path.removeprefix('/api/admin/backups/')
+            self.download_server_backup(filename)
+            return True
+        elif path == '/api/admin/update/check':
+            self.check_update()
+            return True
+        return False
+
+    def handle_static_get(self, path):
+        if path in ('/', '/index.html') and not self.has_admin():
+            if not self.is_local_setup_request():
+                self.send_error_json('Creating the first administrator requires local access.', 403)
+                return True
+            self.send_redirect('/setup')
+            return True
+        filename = 'index.html' if path in ('/', '/admin', '/admin.html') else path.lstrip('/')
+        self.serve_static(filename)
+        return True
+
     def do_GET(self):
         path = unquote(urlsplit(self.path).path)
         try:
-            if path == '/api/setup/status':
-                self.send_json({'needsSetup': not self.has_admin()})
-            elif path in ('/setup', '/setup.html'):
-                if self.has_admin():
-                    self.send_redirect('/')
-                elif not self.is_local_setup_request():
-                    self.send_error_json('The first-time setup can only be completed locally.', 403)
-                else:
-                    self.serve_static('setup.html')
-            elif path == '/api/session':
-                self.send_json({'user': self.current_user()})
-            elif path == '/api/account/2fa':
-                user = self.require_user()
-                with database() as connection:
-                    row = connection.execute('SELECT totp_secret FROM users WHERE id = ?', (user['id'],)).fetchone()
-                    pk_rows = connection.execute('SELECT id, name, created_at FROM passkeys WHERE user_id = ? ORDER BY created_at DESC', (user['id'],)).fetchall()
-                has_totp = bool(row and row['totp_secret'] and not row['totp_secret'].startswith('pending:'))
-                passkeys = [{'id': r['id'], 'name': r['name'], 'createdAt': r['created_at']} for r in pk_rows]
-                self.send_json({'hasTotp': has_totp, 'passkeys': passkeys})
-            elif path == '/api/notes':
-                user = self.require_user()
-                with database() as connection:
-                    rows = connection.execute('''
-                        SELECT notes.*, (SELECT COUNT(*) FROM note_shares WHERE note_shares.note_id = notes.id) AS share_count
-                        FROM notes WHERE user_id = ? ORDER BY sort_order DESC
-                    ''', (user['id'],)).fetchall()
-                self.send_json({'notes': [self.note_from_row(row) for row in rows]})
-            elif path == '/api/shared':
-                user = self.require_user()
-                self.send_json({'notes': self.shared_notes(user['id'])})
-            elif path == '/api/users':
-                user = self.require_user()
-                self.send_json({'users': self.directory(user['id'])})
-            elif path.startswith('/api/notes/') and path.endswith('/shares'):
-                user = self.require_user()
-                note_id = path[len('/api/notes/'):-len('/shares')]
-                self.send_json({'shares': self.list_shares(user, note_id)})
-            elif path == '/api/admin/settings':
-                self.get_settings()
-            elif path == '/api/admin/logs':
-                self.get_logs()
-            elif path == '/api/admin/summary':
-                self.require_user(admin=True)
-                with database() as connection:
-                    stats = connection.execute('''
-                        SELECT
-                            (SELECT COUNT(*) FROM users) AS users,
-                            COUNT(*) AS notes,
-                            SUM(CASE WHEN deleted = 0 AND archived = 0 THEN 1 ELSE 0 END) AS active,
-                            SUM(CASE WHEN deleted = 0 AND archived = 1 THEN 1 ELSE 0 END) AS archived,
-                            SUM(CASE WHEN deleted = 1 THEN 1 ELSE 0 END) AS trash
-                        FROM notes
-                    ''').fetchone()
-                    users = connection.execute('''
-                        SELECT users.id, users.email, users.role, users.created_at, users.totp_secret,
-                               COUNT(DISTINCT notes.id) AS note_count,
-                               (SELECT COUNT(*) FROM passkeys WHERE passkeys.user_id = users.id) AS passkey_count
-                        FROM users LEFT JOIN notes ON notes.user_id = users.id
-                        GROUP BY users.id ORDER BY users.created_at DESC
-                    ''').fetchall()
-                    invites = connection.execute('''
-                        SELECT token_hash, created_at, expires_at, used_at FROM invites ORDER BY created_at DESC LIMIT 30
-                    ''').fetchall()
-                    pending = connection.execute(
-                        'SELECT COUNT(*) FROM invites WHERE used_at IS NULL AND expires_at > ?', (iso_time(),)
-                    ).fetchone()[0]
-                self.send_json({
-                    'stats': {key: stats[key] or 0 for key in ('users', 'notes', 'active', 'archived', 'trash')}
-                              | {'pendingInvites': pending},
-                    'users': [{
-                        'id': row['id'], 'email': row['email'], 'role': row['role'], 'createdAt': row['created_at'], 'notes': row['note_count'],
-                        'has2FA': bool((row['totp_secret'] and not row['totp_secret'].startswith('pending:')) or row['passkey_count'] > 0)
-                    } for row in users],
-                    'invites': [{'tokenHash': row['token_hash'], 'createdAt': row['created_at'], 'expiresAt': row['expires_at'], 'usedAt': row['used_at']} for row in invites],
-                })
-            elif path == '/api/admin/backups':
-                self.list_server_backups()
-            elif path.startswith('/api/admin/backups/'):
-                filename = path.removeprefix('/api/admin/backups/')
-                self.download_server_backup(filename)
-            elif path == '/api/admin/update/check':
-                self.check_update()
+            handled = False
+            if path == '/api/setup/status' or path in ('/setup', '/setup.html'):
+                handled = self.handle_setup_get(path)
+            elif path.startswith('/api/admin/'):
+                handled = self.handle_admin_get(path)
+            elif path.startswith('/api/notes') or path == '/api/shared':
+                handled = self.handle_notes_get(path)
+            elif path in ('/api/session', '/api/account/2fa', '/api/users'):
+                handled = self.handle_account_get(path)
             elif path in ('/', '/index.html', '/admin', '/admin.html') or path.lstrip('/') in STATIC_FILES or path.lstrip('/') in TRANSLATION_FILES:
-                if path in ('/', '/index.html') and not self.has_admin():
-                    if not self.is_local_setup_request():
-                        self.send_error_json('Creating the first administrator requires local access.', 403)
-                        return
-                    self.send_redirect('/setup')
-                    return
-                filename = 'index.html' if path in ('/', '/admin', '/admin.html') else path.lstrip('/')
-                self.serve_static(filename)
-            elif path.startswith('/api/'):
-                self.send_error_json('Endpoint not found.', 404)
-            else:
-                self.send_error_json('Page not found.', 404)
+                handled = self.handle_static_get(path)
+
+            if not handled:
+                if path.startswith('/api/'):
+                    self.send_error_json('Endpoint not found.', 404)
+                else:
+                    self.send_error_json('Page not found.', 404)
         except APIError as error:
             self.send_error_json(str(error), error.status)
         except ValueError as error:
