@@ -3828,7 +3828,8 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       bufferToBase64,
-      getTaskStatsFromHtml
+      getTaskStatsFromHtml,
+      tableCell
     };
   }
 })();
