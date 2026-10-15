@@ -1558,5 +1558,62 @@ class PerformUpdateHelperTests(unittest.TestCase):
         mock_archive.extract.assert_called_once_with(mock_member1, path=mock_root, filter='data')
 
 
+class GetForwardedProtoTests(unittest.TestCase):
+    def setUp(self):
+        class DummyHandler(server.NotkiHandler):
+            def __init__(self):
+                pass
+        self.handler = DummyHandler()
+        self.handler.headers = {}
+
+    def test_x_forwarded_proto_single(self):
+        self.handler.headers = {'X-Forwarded-Proto': 'https'}
+        self.assertEqual(self.handler.get_forwarded_proto(), 'https')
+
+    def test_x_forwarded_proto_multiple(self):
+        self.handler.headers = {'X-Forwarded-Proto': 'https, http'}
+        self.assertEqual(self.handler.get_forwarded_proto(), 'https')
+
+        self.handler.headers = {'X-Forwarded-Proto': 'http, https'}
+        self.assertEqual(self.handler.get_forwarded_proto(), 'http')
+
+    def test_x_forwarded_proto_invalid(self):
+        self.handler.headers = {'X-Forwarded-Proto': 'invalid', 'Host': 'example.com'}
+        self.assertEqual(self.handler.get_forwarded_proto(), 'http')
+
+        self.handler.headers = {'X-Forwarded-Proto': 'invalid'}
+        self.assertEqual(self.handler.get_forwarded_proto(), '')
+
+    def test_x_forwarded_scheme(self):
+        self.handler.headers = {'X-Forwarded-Scheme': 'https'}
+        self.assertEqual(self.handler.get_forwarded_proto(), 'https')
+
+    def test_x_url_scheme(self):
+        self.handler.headers = {'X-Url-Scheme': 'https'}
+        self.assertEqual(self.handler.get_forwarded_proto(), 'https')
+
+    def test_front_end_https(self):
+        for val in ('on', '1', 'true', 'ON', 'True'):
+            with self.subTest(val=val):
+                self.handler.headers = {'Front-End-Https': val}
+                self.assertEqual(self.handler.get_forwarded_proto(), 'https')
+
+    def test_front_end_https_off(self):
+        self.handler.headers = {'Front-End-Https': 'off', 'Host': 'example.com'}
+        self.assertEqual(self.handler.get_forwarded_proto(), 'http')
+
+    def test_x_forwarded_ssl(self):
+        self.handler.headers = {'X-Forwarded-Ssl': 'on'}
+        self.assertEqual(self.handler.get_forwarded_proto(), 'https')
+
+    def test_no_headers_with_host(self):
+        self.handler.headers = {'Host': 'example.com'}
+        self.assertEqual(self.handler.get_forwarded_proto(), 'http')
+
+    def test_no_headers_no_host(self):
+        self.handler.headers = {}
+        self.assertEqual(self.handler.get_forwarded_proto(), '')
+
+
 if __name__ == '__main__':
     unittest.main()
