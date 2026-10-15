@@ -1421,40 +1421,43 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('The snapshot must contain an administrator account.')
         return user_ids, emails, prepared_users
 
+    def _prepare_snapshot_note(self, note, user_ids, note_ids):
+        if not isinstance(note, dict):
+            raise APIError('Invalid note in the snapshot.')
+        note_id = str(note.get('id') or '')
+        user_id = note.get('userId')
+        title = str(note.get('title') or '')
+        body = str(note.get('body') or '')
+        tags = note.get('tags') if isinstance(note.get('tags'), list) else []
+        if (not note_id or len(note_id) > 200 or note_id in note_ids or isinstance(user_id, bool)
+                or not isinstance(user_id, int) or user_id not in user_ids):
+            raise APIError('Invalid note or owner in the snapshot.')
+        if len(title) > 160 or len(body) > 1_000_000:
+            raise APIError('A note in the snapshot exceeds the size limit.')
+        try:
+            sort_order = float(note.get('order') or 0)
+        except (TypeError, ValueError) as error:
+            raise APIError('Invalid note order in the snapshot.') from error
+        if not math.isfinite(sort_order):
+            raise APIError('Invalid note order in the snapshot.')
+        note_ids.add(note_id)
+        color = note.get('color')
+        archived = bool(note.get('archived'))
+        deleted = bool(note.get('deleted'))
+        pinned = False if (archived or deleted) else bool(note.get('pinned'))
+        return (
+            note_id, user_id, title, body, 1 if note.get('bodyFormat') == 1 else 0,
+            color if isinstance(color, str) and color in NOTE_COLORS else 'default',
+            json.dumps([str(tag)[:80] for tag in tags[:64]], ensure_ascii=False),
+            int(pinned), int(archived), int(deleted),
+            self.snapshot_date(note.get('createdAt')), self.snapshot_date(note.get('updatedAt')), sort_order,
+        )
+
     def _prepare_snapshot_notes(self, notes, user_ids):
         prepared_notes = []
         note_ids = set()
         for note in notes:
-            if not isinstance(note, dict):
-                raise APIError('Invalid note in the snapshot.')
-            note_id = str(note.get('id') or '')
-            user_id = note.get('userId')
-            title = str(note.get('title') or '')
-            body = str(note.get('body') or '')
-            tags = note.get('tags') if isinstance(note.get('tags'), list) else []
-            if (not note_id or len(note_id) > 200 or note_id in note_ids or isinstance(user_id, bool)
-                    or not isinstance(user_id, int) or user_id not in user_ids):
-                raise APIError('Invalid note or owner in the snapshot.')
-            if len(title) > 160 or len(body) > 1_000_000:
-                raise APIError('A note in the snapshot exceeds the size limit.')
-            try:
-                sort_order = float(note.get('order') or 0)
-            except (TypeError, ValueError) as error:
-                raise APIError('Invalid note order in the snapshot.') from error
-            if not math.isfinite(sort_order):
-                raise APIError('Invalid note order in the snapshot.')
-            note_ids.add(note_id)
-            color = note.get('color')
-            archived = bool(note.get('archived'))
-            deleted = bool(note.get('deleted'))
-            pinned = False if (archived or deleted) else bool(note.get('pinned'))
-            prepared_notes.append((
-                note_id, user_id, title, body, 1 if note.get('bodyFormat') == 1 else 0,
-                color if isinstance(color, str) and color in NOTE_COLORS else 'default',
-                json.dumps([str(tag)[:80] for tag in tags[:64]], ensure_ascii=False),
-                int(pinned), int(archived), int(deleted),
-                self.snapshot_date(note.get('createdAt')), self.snapshot_date(note.get('updatedAt')), sort_order,
-            ))
+            prepared_notes.append(self._prepare_snapshot_note(note, user_ids, note_ids))
         return note_ids, prepared_notes
 
     def _prepare_snapshot_invites(self, invites, user_ids):
