@@ -28,7 +28,41 @@ window.i18n = {
 };
 
 // require the module
-const { bufferToBase64, getTaskStatsFromHtml, tableCell, createIconSvg } = require('../../app.js');
+const { bufferToBase64, getTaskStatsFromHtml, tableCell, createIconSvg, applyTheme } = require('../../app.js');
+
+describe('applyTheme', () => {
+  let originalDatasetTheme;
+
+  beforeEach(() => {
+    window.notkiTheme = {
+      sync: jest.fn()
+    };
+    originalDatasetTheme = document.documentElement.dataset.theme;
+  });
+
+  afterEach(() => {
+    document.documentElement.dataset.theme = originalDatasetTheme;
+    delete window.notkiTheme;
+  });
+
+  it('should set theme to dark when passed "dark"', () => {
+    applyTheme('dark');
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(window.notkiTheme.sync).toHaveBeenCalledTimes(1);
+  });
+
+  it('should set theme to light when passed "light"', () => {
+    applyTheme('light');
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(window.notkiTheme.sync).toHaveBeenCalledTimes(1);
+  });
+
+  it('should default to light theme when passed an unknown theme', () => {
+    applyTheme('unknown');
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(window.notkiTheme.sync).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('createIconSvg', () => {
   it('should return an SVGSVGElement', () => {
