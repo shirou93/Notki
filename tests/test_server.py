@@ -1217,5 +1217,68 @@ class FirstRunSetupTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn('error', error)
 
+
+class PasswordHashingTests(unittest.TestCase):
+    def test_hash_format_and_length(self):
+        password = "my_secure_password"
+        hashed = server.hash_password(password)
+        parts = hashed.split('$')
+
+        self.assertEqual(len(parts), 4)
+        self.assertEqual(parts[0], 'pbkdf2_sha256')
+        self.assertEqual(int(parts[1]), server.PASSWORD_ITERATIONS)
+        self.assertEqual(len(parts[2]), 32)  # 16 bytes salt -> 32 hex chars
+        self.assertEqual(len(parts[3]), 64)  # 32 bytes hash -> 64 hex chars
+
+    def test_verify_correct_password(self):
+        password = "my_secure_password"
+        hashed = server.hash_password(password)
+        self.assertTrue(server.verify_password(password, hashed))
+
+    def test_verify_incorrect_password(self):
+        password = "my_secure_password"
+        hashed = server.hash_password(password)
+        self.assertFalse(server.verify_password("wrong_password", hashed))
+
+    def test_verify_malformed_hash(self):
+        password = "my_secure_password"
+
+        # Missing parts
+        self.assertFalse(server.verify_password(password, "pbkdf2_sha256$310000$salt"))
+
+        # Non-hex salt/hash
+        self.assertFalse(server.verify_password(password, "pbkdf2_sha256$310000$nothexsalt$nothexhash"))
+
+        # Wrong algorithm
+        self.assertFalse(server.verify_password(password, "bcrypt$31000$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000"))
+
+        # Invalid iterations
+        self.assertFalse(server.verify_password(password, "pbkdf2_sha256$notanint$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000"))
+
+        # Empty hash string
+        self.assertFalse(server.verify_password(password, ""))
+
+    def test_hash_unique_salts(self):
+        password = "my_secure_password"
+        hashed1 = server.hash_password(password)
+        hashed2 = server.hash_password(password)
+
+        self.assertNotEqual(hashed1, hashed2)
+
+        parts1 = hashed1.split('$')
+        parts2 = hashed2.split('$')
+
+        # Salts should be different
+        self.assertNotEqual(parts1[2], parts2[2])
+
+        # Hashes should be different
+        self.assertNotEqual(parts1[3], parts2[3])
+
+    def test_hash_empty_password(self):
+        password = ""
+        hashed = server.hash_password(password)
+        self.assertTrue(server.verify_password(password, hashed))
+        self.assertFalse(server.verify_password("notempty", hashed))
+
 if __name__ == '__main__':
     unittest.main()
