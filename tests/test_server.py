@@ -1468,5 +1468,95 @@ class ParseMultipartDataTests(unittest.TestCase):
         self.assertEqual(fields2, {})
 
 
+class PerformUpdateHelperTests(unittest.TestCase):
+    def setUp(self):
+        # Create a mock connection and request to avoid AttributeError in socketserver setup
+        mock_request = unittest.mock.MagicMock()
+        mock_client_address = ('127.0.0.1', 12345)
+        mock_server = unittest.mock.MagicMock()
+
+        # We subclass to bypass the __init__ of BaseHTTPRequestHandler which calls setup()
+        class DummyHandler(server.NotkiHandler):
+            def __init__(self):
+                pass
+
+        self.handler = DummyHandler()
+
+    @unittest.mock.patch('server.urllib.request.urlopen')
+    def test_download_update_archive_success(self, mock_urlopen):
+        mock_response = unittest.mock.MagicMock()
+        mock_response.read.return_value = b'archive_data'
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        result = self.handler._download_update_archive('http://example.com/tarball')
+        self.assertEqual(result, b'archive_data')
+
+    @unittest.mock.patch('server.urllib.request.urlopen')
+    def test_download_update_archive_error(self, mock_urlopen):
+        mock_urlopen.side_effect = Exception("Network error")
+        with self.assertRaises(server.APIError) as cm:
+            self.handler._download_update_archive('http://example.com/tarball')
+        self.assertEqual(cm.exception.status, 500)
+        self.assertEqual(cm.exception.args[0], 'An error occurred while downloading the archive.')
+
+    def test_verify_update_version_success(self):
+        mock_archive = unittest.mock.MagicMock()
+        mock_member = unittest.mock.MagicMock()
+        mock_member.name = 'Notki-master/server.py'
+
+        mock_extracted_file = unittest.mock.MagicMock()
+        # Set a version higher than current VERSION to pass validation
+        future_version = '99.99.99'
+        mock_extracted_file.read.return_value = f"VERSION = '{future_version}'".encode('utf-8')
+        mock_archive.extractfile.return_value = mock_extracted_file
+
+        # Should not raise
+        self.handler._verify_update_version(mock_archive, [mock_member])
+
+    def test_verify_update_version_no_newer_version(self):
+        mock_archive = unittest.mock.MagicMock()
+        mock_member = unittest.mock.MagicMock()
+        mock_member.name = 'Notki-master/server.py'
+
+        mock_extracted_file = unittest.mock.MagicMock()
+        # Set a version equal or lower than current VERSION to trigger error
+        mock_extracted_file.read.return_value = f"VERSION = '{server.VERSION}'".encode('utf-8')
+        mock_archive.extractfile.return_value = mock_extracted_file
+
+        with self.assertRaises(server.APIError) as cm:
+            self.handler._verify_update_version(mock_archive, [mock_member])
+        self.assertEqual(cm.exception.status, 400)
+        self.assertEqual(cm.exception.args[0], 'No newer version available.')
+
+    @unittest.mock.patch('server.ROOT')
+    @unittest.mock.patch('server.tarfile')
+    def test_extract_update_archive(self, mock_tarfile, mock_root):
+        mock_archive = unittest.mock.MagicMock()
+
+        mock_member1 = unittest.mock.MagicMock()
+        mock_member1.name = 'Notki-master/file1.py'
+
+        mock_member2 = unittest.mock.MagicMock()
+        mock_member2.name = 'Notki-master/'
+
+        # Test path traversal prevention
+        mock_member3 = unittest.mock.MagicMock()
+        mock_member3.name = 'Notki-master/../etc/passwd'
+
+        members = [mock_member1, mock_member2, mock_member3]
+
+        mock_target_path = unittest.mock.MagicMock()
+        mock_target_path.is_relative_to.return_value = True
+        mock_root.__truediv__.return_value.resolve.return_value = mock_target_path
+
+        mock_tarfile.data_filter = True # Simulate Python 3.12+
+
+        self.handler._extract_update_archive(mock_archive, members)
+
+        # Should only extract file1.py
+        self.assertEqual(mock_member1.name, 'file1.py')
+        mock_archive.extract.assert_called_once_with(mock_member1, path=mock_root, filter='data')
+
+
 if __name__ == '__main__':
     unittest.main()

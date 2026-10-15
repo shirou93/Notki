@@ -1292,19 +1292,55 @@ class NotkiHandler(BaseHTTPRequestHandler):
         except Exception:
             raise APIError('Could not fetch update information.', 500)
 
+    def _download_update_archive(self, tarball_url):
+        req = urllib.request.Request(tarball_url)
+        req.add_header('User-Agent', 'Notki-App')
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                return response.read()
+        except Exception:
+            raise APIError('An error occurred while downloading the archive.', 500)
+
+    def _verify_update_version(self, archive, members):
+        server_member = None
+        for member in members:
+            parts = member.name.split('/', 1)
+            rel_name = parts[1] if len(parts) > 1 else member.name
+            if rel_name == 'server.py':
+                server_member = member
+                break
+
+        if server_member:
+            extracted_file = archive.extractfile(server_member)
+            if extracted_file:
+                content = extracted_file.read().decode('utf-8', errors='ignore')
+                match = re.search(r"^VERSION\s*=\s*['\"]([^'\"]+)['\"]", content, re.MULTILINE)
+                if match:
+                    new_version = match.group(1)
+                    if parse_version(new_version) <= parse_version(VERSION):
+                        raise APIError('No newer version available.', 400)
+
+    def _extract_update_archive(self, archive, members):
+        for member in members:
+            parts = member.name.split('/', 1)
+            if len(parts) > 1:
+                member.name = parts[1]
+                if not member.name or member.name.startswith('/') or '..' in member.name:
+                    continue
+                target_path = (ROOT / member.name).resolve()
+                if target_path.is_relative_to(ROOT):
+                    if hasattr(tarfile, 'data_filter'):
+                        archive.extract(member, path=ROOT, filter='data')
+                    else:
+                        archive.extract(member, path=ROOT)
+
     def perform_update(self, payload):
         self.require_user(admin=True)
         tarball_url = payload.get('tarballUrl')
         if not tarball_url or not tarball_url.startswith('https://api.github.com/repos/shirou93/Notki/tarball/'):
             raise APIError('Invalid download URL.', 400)
 
-        req = urllib.request.Request(tarball_url)
-        req.add_header('User-Agent', 'Notki-App')
-        try:
-            with urllib.request.urlopen(req, timeout=30) as response:
-                archive_bytes = response.read()
-        except Exception:
-            raise APIError('An error occurred while downloading the archive.', 500)
+        archive_bytes = self._download_update_archive(tarball_url)
 
         try:
             with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode='r:gz') as archive:
@@ -1312,36 +1348,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 if not members:
                     raise ValueError("Empty archive")
 
-                server_member = None
-                for member in members:
-                    parts = member.name.split('/', 1)
-                    rel_name = parts[1] if len(parts) > 1 else member.name
-                    if rel_name == 'server.py':
-                        server_member = member
-                        break
-
-                if server_member:
-                    extracted_file = archive.extractfile(server_member)
-                    if extracted_file:
-                        content = extracted_file.read().decode('utf-8', errors='ignore')
-                        match = re.search(r"^VERSION\s*=\s*['\"]([^'\"]+)['\"]", content, re.MULTILINE)
-                        if match:
-                            new_version = match.group(1)
-                            if parse_version(new_version) <= parse_version(VERSION):
-                                raise APIError('No newer version available.', 400)
-
-                for member in members:
-                    parts = member.name.split('/', 1)
-                    if len(parts) > 1:
-                        member.name = parts[1]
-                        if not member.name or member.name.startswith('/') or '..' in member.name:
-                            continue
-                        target_path = (ROOT / member.name).resolve()
-                        if target_path.is_relative_to(ROOT):
-                            if hasattr(tarfile, 'data_filter'):
-                                archive.extract(member, path=ROOT, filter='data')
-                            else:
-                                archive.extract(member, path=ROOT)
+                self._verify_update_version(archive, members)
+                self._extract_update_archive(archive, members)
         except APIError:
             raise
         except Exception:
