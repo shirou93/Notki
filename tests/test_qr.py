@@ -63,6 +63,75 @@ class TestQRGenerator(unittest.TestCase):
         with self.assertRaises(qr.QRError):
             qr.generate_qr_matrix(huge_text)
 
+    def test_evaluate_penalty(self):
+        size = 12
+        def get_base_matrix():
+            # A checkerboard pattern has 50% dark modules, no consecutive 5+, no 2x2 blocks, and no rule 3 patterns.
+            # Thus, its penalty should be 0.
+            return [[(r + c) % 2 for c in range(size)] for r in range(size)]
+
+        # Base case
+        base = get_base_matrix()
+        self.assertEqual(qr.evaluate_penalty(base, size), 0)
+
+        # Rule 1: 5 or more same color modules in a row/col
+        # Row with 5 consecutive
+        m = get_base_matrix()
+        m[0][:6] = [1, 1, 1, 1, 1, 0]
+        self.assertEqual(qr.evaluate_penalty(m, size), 3)
+
+        # Row with 6 consecutive
+        m = get_base_matrix()
+        m[0][:7] = [1, 1, 1, 1, 1, 1, 0]
+        self.assertEqual(qr.evaluate_penalty(m, size), 4)
+
+        # Col with 6 consecutive
+        m = get_base_matrix()
+        for r in range(6):
+            m[r][0] = 1
+        m[6][0] = 0
+        self.assertEqual(qr.evaluate_penalty(m, size), 4)
+
+        # Rule 2: 2x2 blocks of same color
+        m = get_base_matrix()
+        m[0][0] = 1; m[0][1] = 1
+        m[1][0] = 1; m[1][1] = 1
+        self.assertEqual(qr.evaluate_penalty(m, size), 3)
+
+        # Rule 3: 1:1:3:1:1 finder-like pattern with 4 light modules before or after
+        # Row, light before
+        m = get_base_matrix()
+        m[0][:11] = [0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1]
+        self.assertEqual(qr.evaluate_penalty(m, size), 40)
+
+        # Row, light after
+        m = get_base_matrix()
+        m[0][:11] = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0]
+        self.assertEqual(qr.evaluate_penalty(m, size), 40)
+
+        # Col, light before
+        m = get_base_matrix()
+        pattern = [0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1]
+        for r in range(11):
+            m[r][0] = pattern[r]
+        self.assertEqual(qr.evaluate_penalty(m, size), 40)
+
+        # Rule 4: Proportion of dark modules
+        # 100% dark modules. diff = abs(100 - 50) // 5 = 10, penalty = 10 * 10 = 100
+        # However, 100% dark also triggers Rule 1 and Rule 2 massively. Let's just check the formula
+        # for a specific case with known rules or just rely on the overall score.
+        # Let's create a matrix with mostly 0s to trigger Rule 4 without triggering 1, 2, 3 as much
+        m = [[0 for _ in range(size)] for _ in range(size)]
+        # All zeros triggers Rule 1 and 2 heavily.
+        # A 12x12 all 0 matrix:
+        # Rule 1 rows: 12 * (3 + 7) = 120
+        # Rule 1 cols: 12 * (3 + 7) = 120
+        # Rule 2: 11 * 11 * 3 = 363
+        # Rule 4: 0% dark, diff = 50. penalty = (50 // 5) * 10 = 100
+        # Total = 120 + 120 + 363 + 100 = 703
+        self.assertEqual(qr.evaluate_penalty(m, size), 703)
+
+
     def test_get_mask_bit(self):
         # Test a few coordinates for each pattern to ensure accuracy of the logic
         test_cases = [
