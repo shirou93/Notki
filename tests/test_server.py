@@ -19,6 +19,33 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener, urlopen
 import server
 
 
+class ServerUnitTests(unittest.TestCase):
+    def test_normalize_email_valid(self):
+        self.assertEqual(server.normalize_email('user@example.com'), 'user@example.com')
+        self.assertEqual(server.normalize_email('  user@example.com  '), 'user@example.com')
+        self.assertEqual(server.normalize_email('USER@EXAMPLE.COM'), 'user@example.com')
+        self.assertEqual(server.normalize_email('u.ser+tag@sub.example.co.uk'), 'u.ser+tag@sub.example.co.uk')
+
+    def test_normalize_email_invalid(self):
+        invalid_emails = [
+            None,
+            '',
+            ' ',
+            'userexample.com',
+            'user@example@com',
+            '@example.com',
+            'user@',
+            'user@example',
+            'user @example.com',
+            'user@ example.com',
+            'a' * 245 + '@example.com',  # Length 245 + 12 = 257 > 254
+        ]
+        for email in invalid_emails:
+            with self.subTest(email=email):
+                with self.assertRaises(ValueError, msg=f'Expected ValueError for: {email}'):
+                    server.normalize_email(email)
+
+
 class ServerFlowTests(unittest.TestCase):
     avatar_data = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
