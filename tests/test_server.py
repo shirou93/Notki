@@ -1343,5 +1343,24 @@ class VerifyTOTPCodeTests(unittest.TestCase):
         self.assertFalse(server.verify_totp_code(invalid_secret, code, self.time_step, window=1))
 
 
+class ExtractSpkiDerTests(unittest.TestCase):
+    def test_none_or_empty(self):
+        self.assertIsNone(server.extract_spki_der(None))
+        self.assertIsNone(server.extract_spki_der(b''))
+
+    def test_valid_91_bytes_spki(self):
+        valid_spki = server.SPKI_P256_HEADER + b'\x00' * 64
+        self.assertEqual(server.extract_spki_der(valid_spki), valid_spki)
+
+    def test_valid_65_bytes_uncompressed(self):
+        pub_bytes = b'\x04' + b'\x00' * 64
+        expected = server.SPKI_P256_HEADER[:-1] + pub_bytes
+        self.assertEqual(server.extract_spki_der(pub_bytes), expected)
+
+    def test_invalid_length(self):
+        self.assertIsNone(server.extract_spki_der(b'\x00' * 10))
+        self.assertIsNone(server.extract_spki_der(b'\x00' * 100))
+
+
 if __name__ == '__main__':
     unittest.main()
