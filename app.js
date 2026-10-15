@@ -3829,7 +3829,8 @@
     module.exports = {
       bufferToBase64,
       getTaskStatsFromHtml,
-      tableCell
+      tableCell,
+      createIconSvg
     };
   }
 })();

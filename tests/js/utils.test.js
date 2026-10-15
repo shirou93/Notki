@@ -28,7 +28,41 @@ window.i18n = {
 };
 
 // require the module
-const { bufferToBase64, getTaskStatsFromHtml, tableCell } = require('../../app.js');
+const { bufferToBase64, getTaskStatsFromHtml, tableCell, createIconSvg } = require('../../app.js');
+
+describe('createIconSvg', () => {
+  it('should return an SVGSVGElement', () => {
+    const svg = createIconSvg('<path d="M1 1"/>');
+    expect(svg.tagName.toLowerCase()).toBe('svg');
+    expect(svg.namespaceURI).toBe('http://www.w3.org/2000/svg');
+  });
+
+  it('should set default attributes correctly', () => {
+    const svg = createIconSvg('<path d="M1 1"/>');
+    expect(svg.getAttribute('viewBox')).toBe('0 0 24 24');
+    expect(svg.getAttribute('width')).toBe('1em');
+    expect(svg.getAttribute('height')).toBe('1em');
+    expect(svg.getAttribute('fill')).toBe('none');
+    expect(svg.getAttribute('stroke')).toBe('currentColor');
+    expect(svg.getAttribute('stroke-width')).toBe('1.7');
+    expect(svg.getAttribute('stroke-linecap')).toBe('round');
+    expect(svg.getAttribute('stroke-linejoin')).toBe('round');
+    expect(svg.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('should inject innerHTML correctly', () => {
+    const innerHTML = '<path d="M3 6h18"/>';
+    const svg = createIconSvg(innerHTML);
+    // jsdom (and browsers) may parse and reserialize self-closing tags, so it might output <path d="M3 6h18"></path>
+    expect(svg.innerHTML.replace(/><\/path>/g, '/>')).toBe(innerHTML);
+  });
+
+  it('should handle empty string innerHTML correctly', () => {
+    const svg = createIconSvg('');
+    expect(svg.innerHTML).toBe('');
+    expect(svg.tagName.toLowerCase()).toBe('svg');
+  });
+});
 
 describe('tableCell', () => {
   it('should create a <td> element', () => {
