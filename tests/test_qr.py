@@ -4,9 +4,14 @@ import qr
 class TestQRGenerator(unittest.TestCase):
 
     def test_format_info(self):
-        # Format info for mask 0 and EC level M (00)
-        fmt = qr.get_format_info(0)
-        self.assertEqual(fmt, 0x5412)
+        # Expected format info for EC Level M (00) and mask patterns 0-7
+        expected_outputs = [
+            0x5412, 0x5125, 0x5E7C, 0x5B4B,
+            0x45F9, 0x40CE, 0x4F97, 0x4AA0
+        ]
+        for pattern, expected in enumerate(expected_outputs):
+            with self.subTest(pattern=pattern):
+                self.assertEqual(qr.get_format_info(pattern), expected)
 
     def test_version_info(self):
         # Version info for Version 7
