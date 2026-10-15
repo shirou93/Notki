@@ -1670,5 +1670,20 @@ class VerifyPasskeySignatureTests(unittest.TestCase):
             mock_unlink.assert_has_calls(calls, any_order=True)
 
 
+class TranslateMessageTests(unittest.TestCase):
+    def test_translate_message_polish(self):
+        # Known message in POLISH_MESSAGES
+        self.assertEqual(server.translate_message('Enter a valid e-mail address.', 'pl'), 'Podaj poprawny adres e-mail.')
+
+        # Unknown message, should return the original
+        self.assertEqual(server.translate_message('Some unknown message', 'pl'), 'Some unknown message')
+
+    def test_translate_message_other_languages(self):
+        # Even if the message exists in POLISH_MESSAGES, shouldn't translate to Polish if language is not 'pl'
+        self.assertEqual(server.translate_message('Enter a valid e-mail address.', 'en'), 'Enter a valid e-mail address.')
+        self.assertEqual(server.translate_message('Enter a valid e-mail address.', 'de'), 'Enter a valid e-mail address.')
+        self.assertEqual(server.translate_message('Enter a valid e-mail address.', 'es'), 'Enter a valid e-mail address.')
+
+
 if __name__ == '__main__':
     unittest.main()
