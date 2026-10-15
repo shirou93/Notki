@@ -1290,5 +1290,58 @@ class ParseLanguageTests(unittest.TestCase):
 
 
 
+class VerifyTOTPCodeTests(unittest.TestCase):
+    def setUp(self):
+        self.secret = server.generate_totp_secret()
+        self.time_step = 30
+        self.base_time = 1600000000.0  # arbitrary timestamp
+        self.base_counter = int(self.base_time // self.time_step)
+
+    @unittest.mock.patch('time.time')
+    def test_valid_code_exact_match(self, mock_time):
+        mock_time.return_value = self.base_time
+        code = server.compute_totp_code(self.secret, self.time_step, self.base_counter)
+        self.assertTrue(server.verify_totp_code(self.secret, code, self.time_step))
+
+    @unittest.mock.patch('time.time')
+    def test_valid_code_previous_window(self, mock_time):
+        mock_time.return_value = self.base_time
+        code = server.compute_totp_code(self.secret, self.time_step, self.base_counter - 1)
+        self.assertTrue(server.verify_totp_code(self.secret, code, self.time_step, window=1))
+
+    @unittest.mock.patch('time.time')
+    def test_valid_code_next_window(self, mock_time):
+        mock_time.return_value = self.base_time
+        code = server.compute_totp_code(self.secret, self.time_step, self.base_counter + 1)
+        self.assertTrue(server.verify_totp_code(self.secret, code, self.time_step, window=1))
+
+    @unittest.mock.patch('time.time')
+    def test_invalid_code_outside_window(self, mock_time):
+        mock_time.return_value = self.base_time
+        code = server.compute_totp_code(self.secret, self.time_step, self.base_counter - 2)
+        self.assertFalse(server.verify_totp_code(self.secret, code, self.time_step, window=1))
+
+        code = server.compute_totp_code(self.secret, self.time_step, self.base_counter + 2)
+        self.assertFalse(server.verify_totp_code(self.secret, code, self.time_step, window=1))
+
+    def test_invalid_code_formats(self):
+        self.assertFalse(server.verify_totp_code(self.secret, None))
+        self.assertFalse(server.verify_totp_code(self.secret, ""))
+        self.assertFalse(server.verify_totp_code(self.secret, "   "))
+        self.assertFalse(server.verify_totp_code(self.secret, "12345"))  # length 5
+        self.assertFalse(server.verify_totp_code(self.secret, "1234567"))  # length 7
+        self.assertFalse(server.verify_totp_code(self.secret, "123a56"))   # non-digit
+        self.assertFalse(server.verify_totp_code(self.secret, 12345))      # int with wrong digits length
+
+    @unittest.mock.patch('time.time')
+    def test_invalid_secret_exception_handling(self, mock_time):
+        mock_time.return_value = self.base_time
+        # Secret with invalid base32 chars will throw inside compute_totp_code -> base64.b32decode
+        # Verify that it's caught and handled gracefully (returning False)
+        invalid_secret = "12345678"  # Base32 shouldn't have '1' or '8' unless padded
+        code = "123456"
+        self.assertFalse(server.verify_totp_code(invalid_secret, code, self.time_step, window=1))
+
+
 if __name__ == '__main__':
     unittest.main()
