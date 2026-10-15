@@ -841,7 +841,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         try:
             self.check_origin()
             path = urlsplit(self.path).path
-            if path in ('/api/login', '/api/login/2fa', '/api/login/passkey'):
+            if path in ('/api/login', '/api/login/2fa', '/api/login/passkey', '/api/account/password'):
                 client_ip = self.headers.get('X-Forwarded-For', '').split(',')[0].strip() or self.client_address[0]
                 if is_rate_limited(client_ip):
                     raise APIError('Too many failed attempts. Please try again later.', 429)
@@ -1746,6 +1746,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
         with database() as connection:
             row = connection.execute('SELECT password_hash FROM users WHERE id = ?', (user['id'],)).fetchone()
             if not row or not verify_password(current, row['password_hash']):
+                client_ip = self.headers.get('X-Forwarded-For', '').split(',')[0].strip() or self.client_address[0]
+                record_failed_auth(client_ip)
                 raise APIError('The current password is incorrect.', 403)
             connection.execute('UPDATE users SET password_hash = ? WHERE id = ?', (hash_password(password), user['id']))
             connection.execute('DELETE FROM sessions WHERE user_id = ?', (user['id'],))

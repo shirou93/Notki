@@ -72,6 +72,8 @@ class ServerFlowTests(unittest.TestCase):
         self.thread.join(timeout=2)
         server.DB_PATH = self.original_db_path
         self.temp_dir.cleanup()
+        server.FAILED_AUTH_ATTEMPTS.clear()
+        server.TEMP_2FA_TOKENS.clear()
 
     @staticmethod
     def new_client():
@@ -364,6 +366,17 @@ class ServerFlowTests(unittest.TestCase):
 
         status, result = self.request(self.admin, 'DELETE', f'/api/admin/invites/{token_hash}')
         self.assertEqual(status, 404)
+
+    def test_password_change_rate_limiting(self):
+        for _ in range(15):
+            status, _ = self.request(self.admin, 'POST', '/api/account/password', {
+                'currentPassword': 'wrong-passphrase', 'newPassword': 'brand-new-passphrase-1',
+            })
+            self.assertEqual(status, 403)
+        status, result = self.request(self.admin, 'POST', '/api/account/password', {
+            'currentPassword': 'wrong-passphrase', 'newPassword': 'brand-new-passphrase-1',
+        })
+        self.assertEqual(status, 429)
 
     def test_password_change_requires_current_password_and_keeps_session(self):
         status, _ = self.request(self.admin, 'POST', '/api/account/password', {
