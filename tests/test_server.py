@@ -1,4 +1,5 @@
 import base64
+from datetime import datetime, timedelta, timezone
 import hashlib
 import os
 import http.cookiejar
@@ -1341,6 +1342,74 @@ class VerifyTOTPCodeTests(unittest.TestCase):
         invalid_secret = "12345678"  # Base32 shouldn't have '1' or '8' unless padded
         code = "123456"
         self.assertFalse(server.verify_totp_code(invalid_secret, code, self.time_step, window=1))
+
+
+class Temp2FATokenTests(unittest.TestCase):
+    def setUp(self):
+        server.TEMP_2FA_TOKENS.clear()
+
+    def tearDown(self):
+        server.TEMP_2FA_TOKENS.clear()
+
+    def test_create_and_consume_token(self):
+        user_id = 42
+        token = server.create_temp_2fa_token(user_id)
+
+        self.assertIsNotNone(token)
+        self.assertIsInstance(token, str)
+        self.assertIn(token, server.TEMP_2FA_TOKENS)
+
+        consumed_user_id = server.consume_temp_2fa_token(token)
+        self.assertEqual(consumed_user_id, user_id)
+        self.assertNotIn(token, server.TEMP_2FA_TOKENS)
+
+    def test_consume_invalid_token(self):
+        self.assertIsNone(server.consume_temp_2fa_token(None))
+        self.assertIsNone(server.consume_temp_2fa_token(""))
+        self.assertIsNone(server.consume_temp_2fa_token("invalid_token_xyz"))
+
+    @unittest.mock.patch('server.utc_now')
+    def test_consume_expired_token(self, mock_utc_now):
+        # Initial time
+        base_time = datetime.now(timezone.utc).replace(microsecond=0)
+        mock_utc_now.return_value = base_time
+
+        user_id = 123
+        token = server.create_temp_2fa_token(user_id)
+
+        # Advance time by 6 minutes (past the 5-minute expiration)
+        mock_utc_now.return_value = base_time + timedelta(minutes=6)
+
+        # Consuming should fail because it's expired
+        consumed_user_id = server.consume_temp_2fa_token(token)
+        self.assertIsNone(consumed_user_id)
+
+        # Token should still be removed from the dictionary by pop
+        self.assertNotIn(token, server.TEMP_2FA_TOKENS)
+
+    @unittest.mock.patch('server.utc_now')
+    def test_create_cleans_up_expired_tokens(self, mock_utc_now):
+        base_time = datetime.now(timezone.utc).replace(microsecond=0)
+        mock_utc_now.return_value = base_time
+
+        # Create a token that will expire
+        token_expired = server.create_temp_2fa_token(111)
+
+        # Advance time by 3 minutes (not expired yet)
+        mock_utc_now.return_value = base_time + timedelta(minutes=3)
+        token_valid = server.create_temp_2fa_token(222)
+
+        # Advance time by 3 more minutes (total 6 minutes since base_time)
+        # token_expired is now expired (6 > 5 mins)
+        # token_valid is NOT expired (3 < 5 mins)
+        mock_utc_now.return_value = base_time + timedelta(minutes=6)
+
+        # Creating a new token should trigger cleanup
+        token_new = server.create_temp_2fa_token(333)
+
+        self.assertNotIn(token_expired, server.TEMP_2FA_TOKENS)
+        self.assertIn(token_valid, server.TEMP_2FA_TOKENS)
+        self.assertIn(token_new, server.TEMP_2FA_TOKENS)
 
 
 if __name__ == '__main__':
