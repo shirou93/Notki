@@ -378,6 +378,24 @@ class ServerFlowTests(unittest.TestCase):
         })
         self.assertEqual(status, 429)
 
+    def test_verify_totp_rate_limiting(self):
+        # Trigger TOTP setup so we have a secret to fail against
+        status, _ = self.request(self.admin, 'POST', '/api/account/totp')
+        self.assertEqual(status, 200)
+
+        # 15 failed attempts should return 400
+        for _ in range(15):
+            status, _ = self.request(self.admin, 'POST', '/api/account/totp/verify', {
+                'code': '000000'
+            })
+            self.assertEqual(status, 400)
+
+        # The 16th attempt should be rate limited and return 429
+        status, _ = self.request(self.admin, 'POST', '/api/account/totp/verify', {
+            'code': '000000'
+        })
+        self.assertEqual(status, 429)
+
     def test_password_change_requires_current_password_and_keeps_session(self):
         status, _ = self.request(self.admin, 'POST', '/api/account/password', {
             'currentPassword': 'wrong-passphrase', 'newPassword': 'brand-new-passphrase-1',
