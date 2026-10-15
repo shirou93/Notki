@@ -522,7 +522,7 @@
       await apiRequest(`/api/admin/users/${userId}`, { method: 'DELETE' });
       await refreshAdmin();
     } catch (error) {
-      alert(error.message);
+      showToast(error.message);
     }
   }
 
@@ -553,7 +553,7 @@
       await apiRequest(`/api/admin/users/${userId}/2fa`, { method: 'DELETE' });
       await refreshAdmin();
     } catch (error) {
-      alert(error.message);
+      showToast(error.message);
     }
   }
 
@@ -601,7 +601,7 @@
       await apiRequest(`/api/admin/invites/${encodeURIComponent(tokenHash)}`, { method: 'DELETE' });
       await refreshAdmin();
     } catch (error) {
-      alert(error.message);
+      showToast(error.message);
     }
   }
 
@@ -711,7 +711,7 @@
         body: JSON.stringify({ require2FA, sessionDays })
       });
     } catch (e) {
-      alert(e.message);
+      showToast(e.message);
     }
   }
 
@@ -1217,7 +1217,7 @@
       $('#totp-verify-area').hidden = false;
       $('#setup-totp-btn').hidden = true;
     } catch (error) {
-      alert(error.message);
+      showToast(error.message);
     }
   });
 
@@ -1243,7 +1243,7 @@
       }
       await refresh2faStatus();
     } catch (error) {
-      alert(error.message);
+      showToast(error.message);
     }
   });
 
@@ -1255,7 +1255,7 @@
       button.textContent = t('admin.invites.copied');
       window.setTimeout(() => { button.textContent = t('topbar.2fa.copyBackupCodes'); }, 1600);
     } catch {
-      alert(textToCopy);
+      showToast(textToCopy);
     }
   });
 
@@ -1267,7 +1267,7 @@
       if ($('#backup-codes-display-area')) $('#backup-codes-display-area').hidden = true;
       await refresh2faStatus();
     } catch (error) {
-      alert(error.message);
+      showToast(error.message);
     }
   });
 
@@ -1340,7 +1340,7 @@
       await refresh2faStatus();
     } catch (error) {
       if (error.name !== 'NotAllowedError' && error.name !== 'AbortError') {
-        alert(error.message);
+        showToast(error.message);
       }
     }
   });
