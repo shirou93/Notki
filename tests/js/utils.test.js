@@ -24,11 +24,12 @@ window.i18n = {
   t: jest.fn(),
   plural: jest.fn(),
   onChange: jest.fn(),
-  applyTranslations: jest.fn()
+  applyTranslations: jest.fn(),
+  getLanguage: jest.fn().mockReturnValue('en-US')
 };
 
 // require the module
-const { bufferToBase64, getTaskStatsFromHtml, tableCell, createIconSvg } = require('../../app.js');
+const { bufferToBase64, getTaskStatsFromHtml, tableCell, createIconSvg, apiRequest } = require('../../app.js');
 
 describe('createIconSvg', () => {
   it('should return an SVGSVGElement', () => {
@@ -172,5 +173,99 @@ describe('bufferToBase64', () => {
   it('should work with ArrayBuffer inputs from standard JS types', () => {
     const arr = new Uint8Array([1, 2, 3]);
     expect(bufferToBase64(arr.buffer)).toBe("AQID");
+  });
+});
+
+describe('apiRequest', () => {
+  let originalFetch;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+    global.fetch = jest.fn();
+    window.i18n.t.mockImplementation(key => `translated:${key}`);
+
+    // Since apiRequest updates elements.storageNote internally via setOnlineStatus->updateStorageIndicator
+    // We need to ensure the document has this element so it doesn't crash during DOM operations
+    if (!document.querySelector('.storage-note')) {
+      const el = document.createElement('div');
+      el.className = 'storage-note';
+      document.body.appendChild(el);
+    }
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    jest.clearAllMocks();
+  });
+
+  it('should make a successful fetch request and return json payload', async () => {
+    const mockPayload = { data: 'success' };
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: jest.fn().mockResolvedValueOnce(mockPayload)
+    });
+
+    const result = await apiRequest('/api/test');
+
+    expect(global.fetch).toHaveBeenCalledWith('/api/test', expect.objectContaining({
+      cache: 'no-store',
+      credentials: 'same-origin',
+      headers: expect.any(Headers)
+    }));
+
+    expect(result).toEqual(mockPayload);
+  });
+
+  it('should set Content-Type to application/json when body is provided', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: jest.fn().mockResolvedValueOnce({})
+    });
+
+    await apiRequest('/api/test', { method: 'POST', body: JSON.stringify({ a: 1 }) });
+
+    const callArgs = global.fetch.mock.calls[0];
+    const headers = callArgs[1].headers;
+    expect(headers.get('Content-Type')).toBe('application/json');
+    expect(headers.get('Accept-Language')).toBe('en-US');
+  });
+
+  it('should preserve provided Content-Type header', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: jest.fn().mockResolvedValueOnce({})
+    });
+
+    const customHeaders = new Headers({ 'Content-Type': 'text/plain' });
+    await apiRequest('/api/test', { method: 'POST', body: 'some text', headers: customHeaders });
+
+    const callArgs = global.fetch.mock.calls[0];
+    const headers = callArgs[1].headers;
+    expect(headers.get('Content-Type')).toBe('text/plain');
+  });
+
+  it('should throw payload.error if response is not ok', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: false,
+      json: jest.fn().mockResolvedValueOnce({ error: 'custom server error' })
+    });
+
+    await expect(apiRequest('/api/test')).rejects.toThrow('custom server error');
+  });
+
+  it('should throw fallback translated error if response is not ok and no payload error is present', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: false,
+      json: jest.fn().mockRejectedValueOnce(new Error('JSON parse error'))
+    });
+
+    await expect(apiRequest('/api/test')).rejects.toThrow('translated:error.server');
+  });
+
+  it('should handle network fetch failure', async () => {
+    const networkError = new TypeError('Failed to fetch');
+    global.fetch.mockRejectedValueOnce(networkError);
+
+    await expect(apiRequest('/api/test')).rejects.toThrow(networkError);
   });
 });
