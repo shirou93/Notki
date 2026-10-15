@@ -1343,5 +1343,41 @@ class VerifyTOTPCodeTests(unittest.TestCase):
         self.assertFalse(server.verify_totp_code(invalid_secret, code, self.time_step, window=1))
 
 
+
+class ConsumeTemp2FATokenTests(unittest.TestCase):
+    def setUp(self):
+        with server.TEMP_2FA_LOCK:
+            server.TEMP_2FA_TOKENS.clear()
+
+    def test_consume_valid_token(self):
+        user_id = 123
+        token = server.create_temp_2fa_token(user_id)
+        self.assertEqual(server.consume_temp_2fa_token(token), user_id)
+        self.assertIsNone(server.consume_temp_2fa_token(token))
+
+    def test_consume_none_token(self):
+        self.assertIsNone(server.consume_temp_2fa_token(None))
+        self.assertIsNone(server.consume_temp_2fa_token(""))
+
+    def test_consume_invalid_token(self):
+        self.assertIsNone(server.consume_temp_2fa_token("invalid_token"))
+
+    @unittest.mock.patch('server.utc_now')
+    def test_consume_expired_token(self, mock_utc_now):
+        from datetime import datetime, timedelta
+        base_time = datetime(2023, 1, 1, 12, 0, 0)
+        mock_utc_now.return_value = base_time
+
+        user_id = 456
+        token = server.create_temp_2fa_token(user_id)
+
+        mock_utc_now.return_value = base_time + timedelta(minutes=6)
+
+        self.assertIsNone(server.consume_temp_2fa_token(token))
+
+        with server.TEMP_2FA_LOCK:
+            self.assertNotIn(token, server.TEMP_2FA_TOKENS)
+
+
 if __name__ == '__main__':
     unittest.main()
