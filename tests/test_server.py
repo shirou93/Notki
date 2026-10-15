@@ -1217,5 +1217,49 @@ class FirstRunSetupTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn('error', error)
 
+
+class TestTOTPUtils(unittest.TestCase):
+    def test_compute_totp_code_basic(self):
+        # Known secret and counter value that produces a known result
+        # 'JBSWY3DPEHPK3PXP' -> base32 decoded
+        secret = "JBSWY3DPEHPK3PXP"
+        counter = 0
+        code = server.compute_totp_code(secret, counter=counter)
+        self.assertEqual(code, "282760")
+
+        # Test another known value for a different counter
+        code = server.compute_totp_code(secret, counter=1)
+        self.assertEqual(code, "996554")
+
+    def test_compute_totp_code_padding(self):
+        # Base32 secret without '=' padding
+        # B32 string for b"Hello padding!": JBSWY3DPEBYGCZDENFXGOII=
+        # The unpadded length is 23 (requires 1 padding character)
+        secret_padded = "JBSWY3DPEBYGCZDENFXGOII="
+        secret_unpadded = "JBSWY3DPEBYGCZDENFXGOII"
+        code1 = server.compute_totp_code(secret_unpadded, counter=0)
+        code2 = server.compute_totp_code(secret_padded, counter=0)
+        self.assertEqual(code1, code2)
+
+    def test_compute_totp_code_current_time(self):
+        secret = "JBSWY3DPEHPK3PXP"
+        # Since time.time() is used, the exact code is unknown but it must be 6 digits
+        with unittest.mock.patch('time.time', return_value=123456.0):
+            # counter = 123456 // 30 = 4115
+            code = server.compute_totp_code(secret)
+            self.assertEqual(len(code), 6)
+            self.assertTrue(code.isdigit())
+
+            # verify it matches exact counter calculation
+            expected_code = server.compute_totp_code(secret, counter=4115)
+            self.assertEqual(code, expected_code)
+
+    def test_compute_totp_code_lowercase_and_whitespace(self):
+        secret = " JbswY3dpEhpK3pXP \n"
+        counter = 0
+        code = server.compute_totp_code(secret, counter=counter)
+        self.assertEqual(code, "282760")
+
+
 if __name__ == '__main__':
     unittest.main()
