@@ -29,7 +29,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.82'
+VERSION = '0.1.5.83'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -1945,7 +1945,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         }
         try:
             note['shareCount'] = row['share_count']
-        except IndexError:
+        except (IndexError, KeyError):
             pass
         return note
 
