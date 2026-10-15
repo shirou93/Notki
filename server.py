@@ -841,7 +841,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         try:
             self.check_origin()
             path = urlsplit(self.path).path
-            if path in ('/api/login', '/api/login/2fa', '/api/login/passkey', '/api/account/password'):
+            if path in ('/api/login', '/api/login/2fa', '/api/login/passkey', '/api/account/password', '/api/account/totp/verify'):
                 client_ip = self.headers.get('X-Forwarded-For', '').split(',')[0].strip() or self.client_address[0]
                 if is_rate_limited(client_ip):
                     raise APIError('Too many failed attempts. Please try again later.', 429)
@@ -1665,6 +1665,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             totp_secret = row['totp_secret']
             secret = totp_secret.removeprefix('pending:') if totp_secret.startswith('pending:') else totp_secret
             if not verify_totp_code(secret, code):
+                client_ip = self.headers.get('X-Forwarded-For', '').split(',')[0].strip() or self.client_address[0]
+                record_failed_auth(client_ip)
                 raise APIError('Invalid two-factor code.', 400)
 
             backup_codes_display = [f"{secrets.token_hex(2).upper()}-{secrets.token_hex(2).upper()}" for _ in range(8)]
