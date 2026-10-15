@@ -28,7 +28,52 @@ window.i18n = {
 };
 
 // require the module
-const { bufferToBase64 } = require('../../app.js');
+const { bufferToBase64, getTaskStatsFromHtml } = require('../../app.js');
+
+describe('getTaskStatsFromHtml', () => {
+  it('should return zeros for null, undefined, or empty string', () => {
+    expect(getTaskStatsFromHtml(null)).toEqual({ total: 0, completed: 0, percent: 0 });
+    expect(getTaskStatsFromHtml(undefined)).toEqual({ total: 0, completed: 0, percent: 0 });
+    expect(getTaskStatsFromHtml('')).toEqual({ total: 0, completed: 0, percent: 0 });
+  });
+
+  it('should return zeros when HTML contains no checkboxes', () => {
+    expect(getTaskStatsFromHtml('<div>Hello World</div>')).toEqual({ total: 0, completed: 0, percent: 0 });
+  });
+
+  it('should correctly parse HTML with multiple checkboxes', () => {
+    const html = `
+      <div>
+        <input type="checkbox" checked />
+        <input type="checkbox" />
+        <input type="checkbox" checked="checked" />
+        <input type="checkbox" />
+      </div>
+    `;
+    expect(getTaskStatsFromHtml(html)).toEqual({ total: 4, completed: 2, percent: 50 });
+  });
+
+  it('should calculate percent correctly with rounding', () => {
+    const html = `
+      <div>
+        <input type="checkbox" checked />
+        <input type="checkbox" />
+        <input type="checkbox" />
+      </div>
+    `;
+    expect(getTaskStatsFromHtml(html)).toEqual({ total: 3, completed: 1, percent: 33 });
+  });
+
+  it('should handle all checked checkboxes', () => {
+    const html = `
+      <div>
+        <input type="checkbox" checked />
+        <input type="checkbox" checked />
+      </div>
+    `;
+    expect(getTaskStatsFromHtml(html)).toEqual({ total: 2, completed: 2, percent: 100 });
+  });
+});
 
 describe('bufferToBase64', () => {
   it('should return empty string for null or undefined', () => {
