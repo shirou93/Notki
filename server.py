@@ -1877,39 +1877,43 @@ class NotkiHandler(BaseHTTPRequestHandler):
         scheme = 'https' if (proto == 'https' or os.environ.get('NOTKI_PUBLIC_HTTPS') == '1') else 'http'
         self.send_json({'url': f'{scheme}://{host}/?invite={token}', 'expiresAt': iso_time(expires)}, 201)
 
+    @staticmethod
+    def _prepare_note_for_db(note, user_id, seen):
+        if not isinstance(note, dict):
+            raise APIError('Invalid note.')
+        note_id = str(note.get('id') or '')
+        title = str(note.get('title') or '')
+        body = str(note.get('body') or '')
+        tags = note.get('tags') if isinstance(note.get('tags'), list) else []
+        if not note_id or len(note_id) > 200 or note_id in seen or len(title) > 160 or len(body) > 1_000_000:
+            raise APIError('The note data is invalid or too large.')
+        seen.add(note_id)
+        created = str(note.get('createdAt') or iso_time())[:64]
+        updated = str(note.get('updatedAt') or created)[:64]
+        try:
+            sort_order = float(note.get('order') or 0)
+        except (TypeError, ValueError) as error:
+            raise APIError('Invalid note order.') from error
+        if not math.isfinite(sort_order):
+            raise APIError('Invalid note order.')
+        archived = bool(note.get('archived'))
+        deleted = bool(note.get('deleted'))
+        pinned = False if (archived or deleted) else bool(note.get('pinned'))
+        return (
+            note_id, user_id, title, body, 1 if note.get('bodyFormat') == 1 else 0,
+            note.get('color') if note.get('color') in NOTE_COLORS else 'default',
+            json.dumps([str(tag)[:80] for tag in tags[:64]], ensure_ascii=False),
+            int(pinned), int(archived), int(deleted),
+            created, updated, sort_order,
+        )
+
     def save_notes(self, user_id, notes):
         if not isinstance(notes, list) or len(notes) > 10_000:
             raise APIError('Invalid note list.')
         prepared = []
         seen = set()
         for note in notes:
-            if not isinstance(note, dict):
-                raise APIError('Invalid note.')
-            note_id = str(note.get('id') or '')
-            title = str(note.get('title') or '')
-            body = str(note.get('body') or '')
-            tags = note.get('tags') if isinstance(note.get('tags'), list) else []
-            if not note_id or len(note_id) > 200 or note_id in seen or len(title) > 160 or len(body) > 1_000_000:
-                raise APIError('The note data is invalid or too large.')
-            seen.add(note_id)
-            created = str(note.get('createdAt') or iso_time())[:64]
-            updated = str(note.get('updatedAt') or created)[:64]
-            try:
-                sort_order = float(note.get('order') or 0)
-            except (TypeError, ValueError) as error:
-                raise APIError('Invalid note order.') from error
-            if not math.isfinite(sort_order):
-                raise APIError('Invalid note order.')
-            archived = bool(note.get('archived'))
-            deleted = bool(note.get('deleted'))
-            pinned = False if (archived or deleted) else bool(note.get('pinned'))
-            prepared.append((
-                note_id, user_id, title, body, 1 if note.get('bodyFormat') == 1 else 0,
-                note.get('color') if note.get('color') in NOTE_COLORS else 'default',
-                json.dumps([str(tag)[:80] for tag in tags[:64]], ensure_ascii=False),
-                int(pinned), int(archived), int(deleted),
-                created, updated, sort_order,
-            ))
+            prepared.append(NotkiHandler._prepare_note_for_db(note, user_id, seen))
         with database() as connection:
             if seen:
                 placeholders = ','.join('?' for _ in seen)
