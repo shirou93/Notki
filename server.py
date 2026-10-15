@@ -505,16 +505,22 @@ def normalize_email(value):
 
 
 def public_user(row):
-    keys = row.keys()
     labels = []
-    if 'labels_json' in keys and row['labels_json']:
-        try:
+    try:
+        if row['labels_json']:
             labels = json.loads(row['labels_json'])
-        except json.JSONDecodeError:
-            pass
+    except (IndexError, KeyError, json.JSONDecodeError):
+        pass
+
+    avatar = None
+    try:
+        avatar = row['avatar']
+    except (IndexError, KeyError):
+        pass
+
     return {
         'id': row['id'], 'email': row['email'], 'isAdmin': row['role'] == 'admin',
-        'createdAt': row['created_at'], 'avatar': row['avatar'] if 'avatar' in keys else None,
+        'createdAt': row['created_at'], 'avatar': avatar,
         'labels': labels
     }
 
@@ -1047,9 +1053,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
             'users': [
                 {'id': row['id'], 'email': row['email'], 'passwordHash': row['password_hash'], 'role': row['role'],
                  'createdAt': row['created_at'], 'avatar': row['avatar'],
-                 'labels': json.loads(row['labels_json']) if 'labels_json' in row.keys() and row['labels_json'] else [],
-                 'totpSecret': row['totp_secret'] if 'totp_secret' in row.keys() else None,
-                 'backupCodes': json.loads(row['backup_codes_json']) if 'backup_codes_json' in row.keys() and row['backup_codes_json'] else []}
+                 'labels': json.loads(row['labels_json']) if row['labels_json'] else [],
+                 'totpSecret': row['totp_secret'],
+                 'backupCodes': json.loads(row['backup_codes_json']) if row['backup_codes_json'] else []}
                 for row in users
             ],
             'notes': [
@@ -1618,7 +1624,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 record_failed_auth(client_ip)
                 self.send_error_json('Invalid e-mail or password.', 401)
                 return
-            totp_secret = row['totp_secret'] if 'totp_secret' in row.keys() else None
+            totp_secret = row['totp_secret']
             has_totp = bool(totp_secret and not totp_secret.startswith('pending:'))
             pk_count = connection.execute('SELECT COUNT(*) FROM passkeys WHERE user_id = ?', (row['id'],)).fetchone()[0]
             has_passkey = pk_count > 0
@@ -1642,8 +1648,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             row = connection.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
             if not row:
                 raise APIError('User not found.', 404)
-            secret = row['totp_secret'] if 'totp_secret' in row.keys() else None
-            backup_raw = row['backup_codes_json'] if 'backup_codes_json' in row.keys() else None
+            secret = row['totp_secret']
+            backup_raw = row['backup_codes_json']
             backup_codes = json.loads(backup_raw) if backup_raw else []
 
             clean_code = str(totp_code or '').replace('-', '').replace(' ', '').strip().upper()
@@ -1937,8 +1943,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
             'archived': bool(row['archived']), 'deleted': bool(row['deleted']), 'createdAt': row['created_at'],
             'updatedAt': row['updated_at'], 'order': row['sort_order'],
         }
-        if 'share_count' in row.keys():
+        try:
             note['shareCount'] = row['share_count']
+        except IndexError:
+            pass
         return note
 
     def owned_note(self, connection, user_id, note_id):
