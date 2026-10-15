@@ -1615,5 +1615,60 @@ class GetForwardedProtoTests(unittest.TestCase):
         self.assertEqual(self.handler.get_forwarded_proto(), '')
 
 
+
+
+class VerifyPasskeySignatureTests(unittest.TestCase):
+    def setUp(self):
+        self.pub_key_pem = (
+            "-----BEGIN PUBLIC KEY-----\n"
+            "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEbat259HqQHD7fpD1SZc3o8IPZgGd\n"
+            "MIWw1g9xkdiLAzQgxGbPFZjHMToBtfwdswaZo8PnFdHQMm01tNAbHhhoHA==\n"
+            "-----END PUBLIC KEY-----\n"
+        )
+        self.sig_bytes = b'0E\x02!\x00\xfe\xeb\xe0\x8e+\x93\x1cMj\xbfl\xd2\r\xf1\xd8\x1c\x05q\xf6\xc2dx)\xa3\x82Pi^\x17.\x99\xcc\x02 \x08\xe0^\xa9u\xe8\xd7\x04L\xfc\xc5|n\x11t\xf9\x93\xe39|\x1a\xd5\xcdy\xb1\xef\x16\x16h\x16\xce\x89'
+        self.data_bytes = b'hello world'
+
+    def test_valid_signature(self):
+        self.assertTrue(server.verify_passkey_signature(self.pub_key_pem, self.sig_bytes, self.data_bytes))
+
+    def test_invalid_signature_wrong_data(self):
+        self.assertFalse(server.verify_passkey_signature(self.pub_key_pem, self.sig_bytes, b'wrong data'))
+
+    def test_invalid_signature_wrong_sig(self):
+        wrong_sig = b'0E\x02!\x00\xfe\xeb\xe0\x8e+\x93\x1cMj\xbfl\xd2\r\xf1\xd8\x1c\x05q\xf6\xc2dx)\xa3\x82Pi^\x17.\x99\xcc\x02 \x08\xe0^\xa9u\xe8\xd7\x04L\xfc\xc5|n\x11t\xf9\x93\xe39|\x1a\xd5\xcdy\xb1\xef\x16\x16h\x16\xce\x00'
+        self.assertFalse(server.verify_passkey_signature(self.pub_key_pem, wrong_sig, self.data_bytes))
+
+    @unittest.mock.patch('server.subprocess.run')
+    def test_subprocess_error(self, mock_run):
+        mock_run.return_value.returncode = 1
+        self.assertFalse(server.verify_passkey_signature(self.pub_key_pem, self.sig_bytes, self.data_bytes))
+
+    @unittest.mock.patch('server.subprocess.run')
+    def test_exception_handling(self, mock_run):
+        mock_run.side_effect = Exception("openssl not found")
+        self.assertFalse(server.verify_passkey_signature(self.pub_key_pem, self.sig_bytes, self.data_bytes))
+
+    @unittest.mock.patch('server.tempfile.NamedTemporaryFile')
+    def test_finally_cleanup_on_exception(self, mock_tempfile):
+        # mock writing to file to raise exception
+        mock_file1 = unittest.mock.MagicMock()
+        mock_file2 = unittest.mock.MagicMock()
+        mock_file3 = unittest.mock.MagicMock()
+        mock_file1.name = "pub_file"
+        mock_file2.name = "sig_file"
+        mock_file3.name = "data_file"
+
+        mock_tempfile.side_effect = [mock_file1, mock_file2, mock_file3]
+
+        mock_file1.write.side_effect = Exception("write failed")
+
+        with unittest.mock.patch('server.os.unlink') as mock_unlink:
+            self.assertFalse(server.verify_passkey_signature(self.pub_key_pem, self.sig_bytes, self.data_bytes))
+
+            # verify unlink was called on all 3 temp files despite exception
+            calls = [unittest.mock.call("pub_file"), unittest.mock.call("sig_file"), unittest.mock.call("data_file")]
+            mock_unlink.assert_has_calls(calls, any_order=True)
+
+
 if __name__ == '__main__':
     unittest.main()
