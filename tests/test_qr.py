@@ -63,6 +63,34 @@ class TestQRGenerator(unittest.TestCase):
         with self.assertRaises(qr.QRError):
             qr.generate_qr_matrix(huge_text)
 
+    def test_get_mask_bit(self):
+        # Test a few coordinates for each pattern to ensure accuracy of the logic
+        test_cases = [
+            # pattern 0: (r + c) % 2 == 0
+            (0, 0, 0, True), (0, 0, 1, False), (0, 1, 1, True),
+            # pattern 1: r % 2 == 0
+            (1, 0, 0, True), (1, 0, 1, True), (1, 1, 0, False),
+            # pattern 2: c % 3 == 0
+            (2, 0, 0, True), (2, 0, 1, False), (2, 0, 3, True), (2, 1, 3, True),
+            # pattern 3: (r + c) % 3 == 0
+            (3, 0, 0, True), (3, 0, 1, False), (3, 1, 2, True), (3, 2, 2, False),
+            # pattern 4: (r // 2 + c // 3) % 2 == 0
+            (4, 0, 0, True), (4, 1, 1, True), (4, 2, 0, False), (4, 0, 3, False), (4, 2, 3, True),
+            # pattern 5: ((r * c) % 2) + ((r * c) % 3) == 0
+            (5, 0, 0, True), (5, 1, 1, False), (5, 2, 3, True), (5, 2, 2, False),
+            # pattern 6: (((r * c) % 2) + ((r * c) % 3)) % 2 == 0
+            (6, 0, 0, True), (6, 1, 1, True), (6, 2, 3, True), (6, 2, 2, False),
+            # pattern 7: (((r + c) % 2) + ((r * c) % 3)) % 2 == 0
+            (7, 0, 0, True), (7, 1, 1, False), (7, 2, 3, False), (7, 2, 2, False), (7, 1, 2, False), (7, 0, 1, False)
+        ]
+
+        for pattern, r, c, expected in test_cases:
+            with self.subTest(pattern=pattern, r=r, c=c):
+                self.assertEqual(qr.get_mask_bit(pattern, r, c), expected)
+
+        # Test invalid pattern
+        self.assertFalse(qr.get_mask_bit(8, 0, 0))
+
 
 if __name__ == "__main__":
     unittest.main()
