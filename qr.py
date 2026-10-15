@@ -371,9 +371,6 @@ def generate_qr_matrix(text):
             else:
                 mat[8][size - 15 + idx] = mod
 
-        # Fixed dark module
-        mat[size - 8][8] = 1
-
         score = evaluate_penalty(mat, size)
         if score < best_penalty:
             best_penalty = score
