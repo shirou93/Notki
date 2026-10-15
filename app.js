@@ -3828,6 +3828,14 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       bufferToBase64,
+      setOnlineStatus,
+      getIsOffline: () => isOffline,
+      setIsOffline: (val) => { isOffline = val; },
+      setCurrentUser: (val) => { currentUser = val; },
+      getIsSyncing: () => isSyncing,
+      setIsSyncing: (val) => { isSyncing = val; },
+      getSyncPendingChanges: () => syncPendingChanges,
+      setSyncPendingChanges: (val) => { syncPendingChanges = val; },
       getTaskStatsFromHtml,
       tableCell
     };

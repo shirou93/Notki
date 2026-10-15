@@ -21,14 +21,14 @@ Object.defineProperty(window, 'matchMedia', {
 });
 
 window.i18n = {
-  t: jest.fn(),
+  t: jest.fn(key => key),
   plural: jest.fn(),
   onChange: jest.fn(),
   applyTranslations: jest.fn()
 };
 
 // require the module
-const { bufferToBase64, getTaskStatsFromHtml, tableCell } = require('../../app.js');
+const { bufferToBase64, getTaskStatsFromHtml, tableCell, setOnlineStatus } = require('../../app.js');
 
 describe('tableCell', () => {
   it('should create a <td> element', () => {
@@ -138,5 +138,100 @@ describe('bufferToBase64', () => {
   it('should work with ArrayBuffer inputs from standard JS types', () => {
     const arr = new Uint8Array([1, 2, 3]);
     expect(bufferToBase64(arr.buffer)).toBe("AQID");
+  });
+});
+
+
+describe('setOnlineStatus', () => {
+  let originalSyncPendingChanges;
+  let mockSyncPendingChanges;
+  let appModule;
+
+  beforeEach(() => {
+    appModule = require('../../app.js');
+
+    document.body.innerHTML = `
+      <div class="storage-note">
+        <div class="storage-dot"></div>
+        <span></span>
+      </div>
+      <button id="topbar-sync-button"></button>
+    `;
+
+    appModule.setIsOffline(false);
+    appModule.setCurrentUser(null);
+    appModule.setIsSyncing(false);
+
+    originalSyncPendingChanges = appModule.getSyncPendingChanges();
+    mockSyncPendingChanges = jest.fn();
+    appModule.setSyncPendingChanges(mockSyncPendingChanges);
+  });
+
+  afterEach(() => {
+    appModule.setSyncPendingChanges(originalSyncPendingChanges);
+  });
+
+  it('should update isOffline flag and UI when going offline', () => {
+    appModule.setIsOffline(false);
+
+    appModule.setOnlineStatus(false);
+
+    expect(appModule.getIsOffline()).toBe(true);
+
+    const dot = document.querySelector('.storage-dot');
+    const label = document.querySelector('.storage-note span:not(.storage-dot)');
+
+    expect(dot.style.background).toBe('rgb(229, 115, 115)'); // #e57373
+    expect(label.textContent).toBe('nav.storageOffline');
+  });
+
+  it('should update isOffline flag and UI when going online', () => {
+    appModule.setIsOffline(true);
+
+    appModule.setOnlineStatus(true);
+
+    expect(appModule.getIsOffline()).toBe(false);
+
+    const dot = document.querySelector('.storage-dot');
+    const label = document.querySelector('.storage-note span:not(.storage-dot)');
+
+    expect(dot.style.background).toBe('rgb(169, 211, 119)'); // #a9d377
+    expect(label.textContent).toBe('nav.storage');
+  });
+
+  it('should sync pending changes if status changed from offline to online and there is a current user', () => {
+    appModule.setIsOffline(true);
+    appModule.setCurrentUser({ id: 'test-user' });
+
+    appModule.setOnlineStatus(true);
+
+    expect(mockSyncPendingChanges).toHaveBeenCalled();
+  });
+
+  it('should not sync pending changes if status did not change', () => {
+    appModule.setIsOffline(false);
+    appModule.setCurrentUser({ id: 'test-user' });
+
+    appModule.setOnlineStatus(true); // Already online
+
+    expect(mockSyncPendingChanges).not.toHaveBeenCalled();
+  });
+
+  it('should not sync pending changes if going offline', () => {
+    appModule.setIsOffline(false);
+    appModule.setCurrentUser({ id: 'test-user' });
+
+    appModule.setOnlineStatus(false); // Going offline
+
+    expect(mockSyncPendingChanges).not.toHaveBeenCalled();
+  });
+
+  it('should not sync pending changes if there is no current user', () => {
+    appModule.setIsOffline(true);
+    appModule.setCurrentUser(null);
+
+    appModule.setOnlineStatus(true);
+
+    expect(mockSyncPendingChanges).not.toHaveBeenCalled();
   });
 });
