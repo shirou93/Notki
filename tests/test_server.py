@@ -1343,5 +1343,99 @@ class VerifyTOTPCodeTests(unittest.TestCase):
         self.assertFalse(server.verify_totp_code(invalid_secret, code, self.time_step, window=1))
 
 
+class ParseMultipartDataTests(unittest.TestCase):
+    def test_happy_path(self):
+        boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
+        body = (
+            b"------WebKitFormBoundary7MA4YWxkTrZu0gW\r\n"
+            b"Content-Disposition: form-data; name=\"username\"\r\n"
+            b"\r\n"
+            b"testuser\r\n"
+            b"------WebKitFormBoundary7MA4YWxkTrZu0gW\r\n"
+            b"Content-Disposition: form-data; name=\"password\"\r\n"
+            b"\r\n"
+            b"testpass\r\n"
+            b"------WebKitFormBoundary7MA4YWxkTrZu0gW--\r\n"
+        )
+        rfile = io.BytesIO(body)
+        fields = server.parse_multipart_data(rfile, boundary, len(body))
+        self.assertEqual(fields, {
+            'username': [b'testuser'],
+            'password': [b'testpass']
+        })
+
+    def test_boundary_types(self):
+        body = (
+            b"--boundary\r\n"
+            b"Content-Disposition: form-data; name=\"key\"\r\n"
+            b"\r\n"
+            b"value\r\n"
+            b"--boundary--\r\n"
+        )
+        # Test string boundary
+        rfile = io.BytesIO(body)
+        fields1 = server.parse_multipart_data(rfile, "boundary", len(body))
+        self.assertEqual(fields1, {'key': [b'value']})
+
+        # Test bytes boundary
+        rfile = io.BytesIO(body)
+        fields2 = server.parse_multipart_data(rfile, b"boundary", len(body))
+        self.assertEqual(fields2, {'key': [b'value']})
+
+    def test_array_fields(self):
+        body = (
+            b"--boundary\r\n"
+            b"Content-Disposition: form-data; name=\"tags\"\r\n"
+            b"\r\n"
+            b"tag1\r\n"
+            b"--boundary\r\n"
+            b"Content-Disposition: form-data; name=\"tags\"\r\n"
+            b"\r\n"
+            b"tag2\r\n"
+            b"--boundary--\r\n"
+        )
+        rfile = io.BytesIO(body)
+        fields = server.parse_multipart_data(rfile, "boundary", len(body))
+        self.assertEqual(fields, {'tags': [b'tag1', b'tag2']})
+
+    def test_binary_data(self):
+        binary_payload = b'\x00\x01\x02\r\n\x03\x04'
+        body = (
+            b"--boundary\r\n"
+            b"Content-Disposition: form-data; name=\"file\"; filename=\"test.bin\"\r\n"
+            b"Content-Type: application/octet-stream\r\n"
+            b"\r\n" +
+            binary_payload + b"\r\n"
+            b"--boundary--\r\n"
+        )
+        rfile = io.BytesIO(body)
+        fields = server.parse_multipart_data(rfile, "boundary", len(body))
+        self.assertEqual(fields, {'file': [binary_payload]})
+
+    def test_malformed_inputs(self):
+        # Missing \r\n\r\n
+        body1 = (
+            b"--boundary\r\n"
+            b"Content-Disposition: form-data; name=\"key\"\r\n"
+            b"value\r\n"
+            b"--boundary--\r\n"
+        )
+        rfile1 = io.BytesIO(body1)
+        fields1 = server.parse_multipart_data(rfile1, "boundary", len(body1))
+        self.assertEqual(fields1, {})
+
+        # Missing Content-Disposition
+        body2 = (
+            b"--boundary\r\n"
+            b"Content-Type: text/plain\r\n"
+            b"\r\n"
+            b"value\r\n"
+            b"--boundary--\r\n"
+        )
+        rfile2 = io.BytesIO(body2)
+        fields2 = server.parse_multipart_data(rfile2, "boundary", len(body2))
+        self.assertEqual(fields2, {})
+
+
 if __name__ == '__main__':
     unittest.main()
