@@ -28,7 +28,7 @@ window.i18n = {
 };
 
 // require the module
-const { bufferToBase64, getTaskStatsFromHtml, tableCell, createIconSvg } = require('../../app.js');
+const { bufferToBase64, getTaskStatsFromHtml, tableCell, createIconSvg, saveCachedUser, getCachedUser } = require('../../app.js');
 
 describe('createIconSvg', () => {
   it('should return an SVGSVGElement', () => {
@@ -172,5 +172,90 @@ describe('bufferToBase64', () => {
   it('should work with ArrayBuffer inputs from standard JS types', () => {
     const arr = new Uint8Array([1, 2, 3]);
     expect(bufferToBase64(arr.buffer)).toBe("AQID");
+  });
+});
+
+describe('saveCachedUser', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        setItem: jest.fn(),
+        removeItem: jest.fn(),
+        getItem: jest.fn(),
+      },
+      writable: true
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should call setItem with correct key and JSON string when a user object is provided', () => {
+    const user = { id: 'user123', email: 'test@example.com' };
+    saveCachedUser(user);
+    expect(localStorage.setItem).toHaveBeenCalledWith('notki.cache.user', JSON.stringify(user));
+  });
+
+  it('should call removeItem when user is null', () => {
+    saveCachedUser(null);
+    expect(localStorage.removeItem).toHaveBeenCalledWith('notki.cache.user');
+  });
+
+  it('should call removeItem when user is undefined', () => {
+    saveCachedUser(undefined);
+    expect(localStorage.removeItem).toHaveBeenCalledWith('notki.cache.user');
+  });
+
+  it('should silently handle setItem exceptions', () => {
+    localStorage.setItem.mockImplementation(() => {
+      throw new Error('Quota exceeded');
+    });
+    const user = { id: 'user123' };
+    expect(() => saveCachedUser(user)).not.toThrow();
+  });
+});
+
+describe('getCachedUser', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        setItem: jest.fn(),
+        removeItem: jest.fn(),
+        getItem: jest.fn(),
+      },
+      writable: true
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should parse and return the user object when it exists in localStorage', () => {
+    const user = { id: 'user456', email: 'found@example.com' };
+    localStorage.getItem.mockReturnValue(JSON.stringify(user));
+
+    const result = getCachedUser();
+
+    expect(localStorage.getItem).toHaveBeenCalledWith('notki.cache.user');
+    expect(result).toEqual(user);
+  });
+
+  it('should return null when localStorage returns null (not found)', () => {
+    localStorage.getItem.mockReturnValue(null);
+
+    const result = getCachedUser();
+
+    expect(localStorage.getItem).toHaveBeenCalledWith('notki.cache.user');
+    expect(result).toBeNull();
+  });
+
+  it('should return null and gracefully handle JSON parse errors (e.g. malformed JSON)', () => {
+    localStorage.getItem.mockReturnValue('invalid-json{}}');
+
+    const result = getCachedUser();
+
+    expect(result).toBeNull();
   });
 });

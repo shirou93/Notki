@@ -3830,7 +3830,9 @@
       bufferToBase64,
       getTaskStatsFromHtml,
       tableCell,
-      createIconSvg
+      createIconSvg,
+      saveCachedUser,
+      getCachedUser
     };
   }
 })();
