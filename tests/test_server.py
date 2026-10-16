@@ -669,14 +669,26 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertFalse(settings['require2FA'])
         self.assertEqual(settings['logLevel'], 'INFO')
+        self.assertEqual(settings['announcement'], '')
 
         # Admin POST settings
         status, updated = self.request(self.admin, 'POST', '/api/admin/settings', {
-            'require2FA': True, 'logLevel': 'DEBUG'
+            'require2FA': True, 'logLevel': 'DEBUG', 'announcement': 'Patching in progress...'
         })
         self.assertEqual(status, 200)
         self.assertTrue(updated['require2FA'])
         self.assertEqual(updated['logLevel'], 'DEBUG')
+        self.assertEqual(updated['announcement'], 'Patching in progress...')
+
+        # User session & notes include announcement
+        user_client = self.new_client()
+        status, session_info = self.request(self.admin, 'GET', '/api/session')
+        self.assertEqual(status, 200)
+        self.assertEqual(session_info.get('announcement'), 'Patching in progress...')
+
+        status, notes_info = self.request(self.admin, 'GET', '/api/notes')
+        self.assertEqual(status, 200)
+        self.assertEqual(notes_info.get('announcement'), 'Patching in progress...')
 
         # Admin POST settings invalid log level
         status, err = self.request(self.admin, 'POST', '/api/admin/settings', {
@@ -987,7 +999,7 @@ class ServerFlowTests(unittest.TestCase):
         status, restored = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {})
         self.assertEqual(status, 200)
         self.assertEqual(restored.get('passkeys'), 1)
-        self.assertEqual(restored.get('settings'), 3)
+        self.assertEqual(restored.get('settings'), 4)
 
         # Verify settings restored
         admin_client = self.new_client()

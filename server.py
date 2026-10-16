@@ -777,7 +777,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def handle_account_get(self, path):
         if path == '/api/session':
-            self.send_json({'user': self.current_user()})
+            with database() as connection:
+                row = connection.execute("SELECT value FROM settings WHERE key = 'announcement'").fetchone()
+                announcement = row['value'] if row and row['value'] else ''
+            self.send_json({'user': self.current_user(), 'announcement': announcement})
             return True
         elif path == '/api/account/2fa':
             user = self.require_user()
@@ -806,7 +809,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     GROUP BY notes.id
                     ORDER BY notes.sort_order DESC
                 ''', (user['id'],)).fetchall()
-            self.send_json({'notes': [self.note_from_row(row) for row in rows]})
+                ann_row = connection.execute("SELECT value FROM settings WHERE key = 'announcement'").fetchone()
+                announcement = ann_row['value'] if ann_row and ann_row['value'] else ''
+            self.send_json({'notes': [self.note_from_row(row) for row in rows], 'announcement': announcement})
             return True
         elif path == '/api/shared':
             user = self.require_user()
@@ -2138,11 +2143,12 @@ class NotkiHandler(BaseHTTPRequestHandler):
             settings_dict = {row['key']: row['value'] for row in rows}
         require_2fa = settings_dict.get('require2FA') == 'true'
         log_level = settings_dict.get('logLevel', 'INFO')
+        announcement = settings_dict.get('announcement', '')
         try:
             session_days = int(settings_dict.get('sessionDays', SESSION_DAYS))
         except (ValueError, TypeError):
             session_days = SESSION_DAYS
-        self.send_json({'require2FA': require_2fa, 'logLevel': log_level, 'sessionDays': session_days})
+        self.send_json({'require2FA': require_2fa, 'logLevel': log_level, 'sessionDays': session_days, 'announcement': announcement})
 
     def save_settings(self, payload):
         self.require_user(admin=True)
@@ -2150,6 +2156,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         log_level = str(payload.get('logLevel') or 'INFO').upper()
         if log_level not in ('INFO', 'WARNING', 'ERROR', 'DEBUG'):
             raise APIError('Invalid log level.')
+        announcement = str(payload.get('announcement', '') if payload.get('announcement') is not None else '')
         try:
             session_days = max(1, min(3650, int(payload.get('sessionDays', SESSION_DAYS))))
         except (ValueError, TypeError):
@@ -2158,7 +2165,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('require2FA', require_2fa))
             connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('logLevel', log_level))
             connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('sessionDays', str(session_days)))
-        self.send_json({'require2FA': require_2fa == 'true', 'logLevel': log_level, 'sessionDays': session_days})
+            connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('announcement', announcement))
+        self.send_json({'require2FA': require_2fa == 'true', 'logLevel': log_level, 'sessionDays': session_days, 'announcement': announcement})
 
     def get_logs(self):
         self.require_user(admin=True)

@@ -10,7 +10,7 @@
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const elements = {
-    allCount: $('#count-all'), pinnedCount: $('#count-pinned'), archiveCount: $('#count-archive'), trashCount: $('#count-trash'),
+    allCount: $('#count-all'), pinnedCount: $('#count-pinned'), archiveCount: $('#count-archive'), trashCount: $('#count-trash'), labelsCount: $('#count-labels'),
     nav: $$('.nav-item'), breadcrumb: $('#breadcrumb-view'), title: $('#page-title'), countLabel: $('#note-count-label'),
     pinnedLabel: $('#pinned-label'), pinnedGrid: $('#pinned-grid'), otherLabel: $('#other-label'), otherLabelText: $('#other-label-text'),
     grid: $('#notes-grid'), empty: $('#empty-state'), emptyTitle: $('#empty-title'), emptyCopy: $('#empty-copy'),
@@ -48,6 +48,8 @@
   let saveTimeout;
   let pendingSharedNote = null;
   let returnFocus = null;
+  let currentAnnouncement = '';
+  let currentSort = localStorage.getItem('notki.sort') || 'newest';
   let dragState = null;
   let dragFrame = null;
   let dragPoint = null;
@@ -429,6 +431,7 @@
       const [response, shared] = await Promise.all([apiRequest('/api/notes'), apiRequest('/api/shared')]);
       notes = response.notes;
       sharedNotes = shared.notes;
+      if (response.announcement !== undefined) currentAnnouncement = response.announcement;
       loadedFromOnline = true;
       saveLocalCache(user.id, { notes, sharedNotes, labels: userLabels });
     } catch (err) {
@@ -699,6 +702,7 @@
     if (settings) {
       if ($('#admin-require-2fa')) $('#admin-require-2fa').checked = settings.require2FA;
       if ($('#admin-session-days')) $('#admin-session-days').value = settings.sessionDays ?? 30;
+      if ($('#admin-announcement')) $('#admin-announcement').value = settings.announcement ?? '';
     }
   }
 
@@ -706,10 +710,15 @@
     try {
       const require2FA = $('#admin-require-2fa')?.checked ?? false;
       const sessionDays = parseInt($('#admin-session-days')?.value, 10) || 30;
-      await apiRequest('/api/admin/settings', {
+      const announcement = $('#admin-announcement')?.value || '';
+      const res = await apiRequest('/api/admin/settings', {
         method: 'POST',
-        body: JSON.stringify({ require2FA, sessionDays })
+        body: JSON.stringify({ require2FA, sessionDays, announcement })
       });
+      if (res && res.announcement !== undefined) {
+        currentAnnouncement = res.announcement;
+        renderAnnouncementBanner();
+      }
     } catch (e) {
       showToast(e.message);
     }
@@ -717,6 +726,7 @@
 
   $('#admin-require-2fa')?.addEventListener('change', saveAdminSettings);
   $('#admin-session-days')?.addEventListener('change', saveAdminSettings);
+  $('#admin-announcement')?.addEventListener('change', saveAdminSettings);
 
   function setBackupMessage(message, isError = false) {
     const element = document.querySelector('#backup-message');
@@ -2078,6 +2088,21 @@
     return !note.archived && !note.deleted;
   }
 
+  function sortNotesList(items) {
+    const sortVal = currentSort;
+    return items.sort((a, b) => {
+      if (sortVal === 'oldest') {
+        return (Date.parse(a.updatedAt) || a.order || 0) - (Date.parse(b.updatedAt) || b.order || 0);
+      } else if (sortVal === 'titleAsc') {
+        return (a.title || '').localeCompare(b.title || '', window.i18n.getLanguage());
+      } else if (sortVal === 'titleDesc') {
+        return (b.title || '').localeCompare(a.title || '', window.i18n.getLanguage());
+      }
+      // Default: newest first
+      return (Date.parse(b.updatedAt) || b.order || 0) - (Date.parse(a.updatedAt) || a.order || 0);
+    });
+  }
+
   function filteredNotes() {
     const q = query ? query.toLocaleLowerCase() : '';
     if (view === 'shared') {
@@ -2086,9 +2111,9 @@
         const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')} ${note.ownerEmail || ''}`.toLocaleLowerCase();
         return searchable.includes(q);
       });
-      return matches.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+      return sortNotesList(matches);
     }
-    return notes.filter(note => {
+    const filtered = notes.filter(note => {
       if (view === 'all' && !isActive(note)) return false;
       if (view === 'pinned' && (!isActive(note) || !note.pinned)) return false;
       if (view === 'archive' && (!note.archived || note.deleted)) return false;
@@ -2096,15 +2121,28 @@
       if (!q) return true;
       const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')}`.toLocaleLowerCase();
       return searchable.includes(q);
-    }).sort((a, b) => {
-      // In 'all' view without search, sort by pinned first, then by manual order
-      if (view === 'all' && !query) {
+    });
+
+    if (view === 'all' && !query && currentSort === 'newest') {
+      return filtered.sort((a, b) => {
         if (a.pinned !== b.pinned) return Number(b.pinned) - Number(a.pinned);
         return b.order - a.order;
-      }
-      // In other views or with search, maintain manual order
-      return b.order - a.order;
-    });
+      });
+    }
+
+    return sortNotesList(filtered);
+  }
+
+  function renderAnnouncementBanner() {
+    const banner = $('#announcement-banner');
+    const textEl = $('#announcement-text');
+    if (!banner || !textEl) return;
+    if (currentAnnouncement && currentAnnouncement.trim() && view !== 'admin') {
+      textEl.textContent = currentAnnouncement.trim();
+      banner.hidden = false;
+    } else {
+      banner.hidden = true;
+    }
   }
 
   function updateSidebarCounts() {
@@ -2116,6 +2154,7 @@
     elements.archiveCount.textContent = String(notes.filter(note => note.archived && !note.deleted).length);
     elements.trashCount.textContent = String(notes.filter(note => note.deleted).length);
     elements.sharedCount.textContent = String(sharedNotes.length + sharedByMeCount);
+    if (elements.labelsCount) elements.labelsCount.textContent = String(userLabels.length);
     elements.nav.forEach(button => button.classList.toggle('is-active', button.dataset.view === view));
     elements.navAdmin.classList.toggle('is-active', view === 'admin');
   }
@@ -2197,6 +2236,7 @@
 
   function render() {
     updateSidebarCounts();
+    renderAnnouncementBanner();
 
     if (view === 'admin') {
       renderAdminView();
@@ -3509,6 +3549,15 @@
     query = elements.search.value.trim();
     render();
   });
+  const sortSelectEl = $('#sort-select');
+  if (sortSelectEl) {
+    sortSelectEl.value = currentSort;
+    sortSelectEl.addEventListener('change', () => {
+      currentSort = sortSelectEl.value;
+      localStorage.setItem('notki.sort', currentSort);
+      render();
+    });
+  }
   [elements.noteTitle, elements.noteBody].forEach(input => input.addEventListener('input', event => {
     if (input === elements.noteBody) {
       normalizeChecklistItemMarkup();

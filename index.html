@@ -81,7 +81,7 @@
         <button class="nav-item" type="button" data-view="archive"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></span><span data-i18n="nav.archive">Archive</span><span class="nav-count" id="count-archive">0</span></button>
         <button class="nav-item" type="button" data-view="shared"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span data-i18n="nav.shared">Shared with me</span><span class="nav-count" id="count-shared">0</span></button>
         <button class="nav-item" type="button" data-view="trash"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></span><span data-i18n="nav.trash">Trash</span><span class="nav-count" id="count-trash">0</span></button>
-        <button class="nav-item" type="button" id="nav-labels"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></span><span data-i18n="nav.labels">Labels</span></button>
+        <button class="nav-item" type="button" id="nav-labels"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></span><span data-i18n="nav.labels">Labels</span><span class="nav-count" id="count-labels">0</span></button>
         <button class="nav-item" type="button" data-view="admin" id="nav-admin" hidden><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span data-i18n="nav.adminPanel">Admin panel</span></button>
       </nav>
       <div class="sidebar-bottom">
@@ -117,6 +117,13 @@
           <button class="button-secondary sync-button" id="topbar-sync-button" type="button" data-i18n="nav.syncNow" hidden>Synchronize</button>
           <label class="search-box" for="search-input"><span class="search-icon" aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="Search notes" autocomplete="off" data-i18n-placeholder="topbar.search"><kbd>⌘ K</kbd></label>
 
+          <select id="sort-select" class="font-size-select" aria-label="Sort notes" title="Sort notes" data-i18n-aria-label="topbar.sort" data-i18n-title="topbar.sort">
+            <option value="newest" data-i18n="sort.newest">Newest first</option>
+            <option value="oldest" data-i18n="sort.oldest">Oldest first</option>
+            <option value="titleAsc" data-i18n="sort.titleAsc">Title A-Z</option>
+            <option value="titleDesc" data-i18n="sort.titleDesc">Title Z-A</option>
+          </select>
+
           <button class="icon-button" id="view-toggle" type="button" aria-label="List view" title="List view" data-i18n-aria-label="topbar.listView" data-i18n-title="topbar.listView">▤</button>
 
           <details class="settings-menu" id="settings-menu">
@@ -132,6 +139,10 @@
           </details>
         </div>
       </header>
+
+      <section class="shared-banner announcement-banner" id="announcement-banner" hidden aria-live="polite">
+        <div><span class="shared-kicker" data-i18n="announcement.kicker">ANNOUNCEMENT</span><p id="announcement-text" style="font-size: 13px; font-weight: 600; margin-top: 4px;"></p></div>
+      </section>
 
       <section class="page-heading">
         <div><p class="eyebrow" id="note-count-label" data-i18n="page.countLabel">YOUR CALM, YOUR NOTES</p><h1 id="page-title">All notes<span class="heading-period">.</span></h1></div>
@@ -183,6 +194,12 @@
         <div class="admin-security-row">
           <label class="field-label" for="admin-session-days" data-i18n="admin.security.sessionDays">Session duration (days, default 30)</label>
           <input class="auth-input" id="admin-session-days" type="number" min="1" max="3650" value="30" style="max-width: 150px;">
+        </div>
+      </div>
+      <div class="admin-security-controls">
+        <div class="admin-security-row">
+          <label class="field-label" for="admin-announcement" data-i18n="admin.security.announcement">Pinned message for users (e.g., Maintenance in progress)</label>
+          <input class="auth-input" id="admin-announcement" type="text" placeholder="e.g. Patching in progress..." data-i18n-placeholder="admin.security.announcementPlaceholder" maxlength="255">
         </div>
       </div>
     </section>
