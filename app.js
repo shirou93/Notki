@@ -3645,21 +3645,25 @@
   initializeApp();
 
   let currentTarballUrl = null;
+  let currentIsBeta = false;
 
   document.querySelector('#check-update')?.addEventListener('click', async event => {
     const button = event.currentTarget;
     const message = document.querySelector('#update-message');
     const resultDiv = document.querySelector('#update-result');
+    const isBeta = document.querySelector('#update-beta-checkbox')?.checked;
 
     button.disabled = true;
     message.hidden = true;
     resultDiv.hidden = true;
 
     try {
-      const result = await apiRequest('/api/admin/update/check');
+      const url = isBeta ? '/api/admin/update/check?beta=1' : '/api/admin/update/check';
+      const result = await apiRequest(url);
       if (result.updateAvailable) {
         document.querySelector('#update-latest-version').textContent = result.latestVersion;
         currentTarballUrl = result.tarballUrl;
+        currentIsBeta = !!result.isBeta;
         resultDiv.hidden = false;
       } else {
         message.textContent = t('admin.update.upToDate', { version: result.currentVersion });
@@ -3712,7 +3716,7 @@
     try {
       await apiRequest('/api/admin/update/perform', {
         method: 'POST',
-        body: JSON.stringify({ tarballUrl: currentTarballUrl })
+        body: JSON.stringify({ tarballUrl: currentTarballUrl, isBeta: currentIsBeta })
       });
       message.textContent = t('admin.update.success');
       showUpdateLoadingOverlay();

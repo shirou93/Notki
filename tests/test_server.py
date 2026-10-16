@@ -591,7 +591,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.84', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.84'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.85', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.85'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -617,10 +617,44 @@ class ServerFlowTests(unittest.TestCase):
             mock_build_opener.return_value = mock_opener
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.84'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.85'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
+
+    def test_update_check_and_perform_beta(self):
+        # Test check update with beta query parameter
+        status, res = self.request(self.admin, 'GET', '/api/admin/update/check?beta=1')
+        self.assertEqual(status, 200)
+        self.assertTrue(res.get('updateAvailable', False))
+        self.assertEqual(res.get('latestVersion'), 'main (beta)')
+        self.assertEqual(res.get('tarballUrl'), 'https://api.github.com/repos/shirou93/Notki/tarball/main')
+        self.assertTrue(res.get('isBeta', False))
+
+        # Test perform beta update succeeds even when tarball contains same version
+        tarball_buf = io.BytesIO()
+        server_code = f"VERSION = '{server.VERSION}'\n".encode('utf-8')
+        with tarfile.open(fileobj=tarball_buf, mode='w:gz') as archive:
+            member = tarfile.TarInfo('repo-main/server.py')
+            member.size = len(server_code)
+            archive.addfile(member, io.BytesIO(server_code))
+
+        with unittest.mock.patch('server.urllib.request.build_opener') as mock_build_opener, \
+             unittest.mock.patch('server.NotkiHandler._extract_update_archive') as mock_extract, \
+             unittest.mock.patch('threading.Timer') as mock_timer:
+            mock_opener = unittest.mock.MagicMock()
+            mock_cm = unittest.mock.MagicMock()
+            mock_cm.__enter__.return_value.read.return_value = tarball_buf.getvalue()
+            mock_opener.open.return_value = mock_cm
+            mock_build_opener.return_value = mock_opener
+
+            status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/main',
+                'isBeta': True
+            })
+            self.assertEqual(status, 200)
+            self.assertTrue(res.get('success', False))
+            self.assertTrue(mock_extract.called)
 
     def test_admin_settings_and_logs(self):
         # Non-admin / unauthenticated cannot access settings or logs

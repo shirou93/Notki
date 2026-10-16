@@ -283,6 +283,7 @@ window.notkiTranslations.pl = {
   'admin.update.description': 'Sprawdź i zainstaluj aktualizacje z GitHub.',
   'admin.update.check': 'Sprawdź aktualizacje',
   'admin.update.currentVersion': 'Zainstalowana wersja:',
+  'admin.update.betaChannel': 'Aktualizacje Beta (pobieraj z gałęzi głównej repozytorium)',
   'admin.update.available': 'Dostępna jest aktualizacja! Najnowsza wersja:',
   'admin.update.perform': 'Aktualizuj teraz',
   'admin.update.upToDate': 'System jest aktualny (wersja {version}).',
