@@ -2338,9 +2338,7 @@
     });
   }
 
-  function setupCardSwipe(card, note, readOnly) {
-    const swipeBgRight = $('.card-swipe-right', card);
-    const swipeBgLeft = $('.card-swipe-left', card);
+  function setupSwipeLabels(card, note) {
     const labelRight = $('.card-swipe-label-right', card);
     const labelLeft = $('.card-swipe-label-left', card);
     const iconLeft = $('.card-swipe-icon-left', card);
@@ -2364,6 +2362,62 @@
       else if (view === 'archive') iconLeft.textContent = '🗑';
       else iconLeft.textContent = '📦';
     }
+  }
+
+  function handleSwipeRight(note) {
+    if (view === 'trash') {
+      note.deleted = false;
+      note.archived = false;
+      note.pinned = false;
+      note.updatedAt = new Date().toISOString();
+      moveToFront(note);
+      persist();
+      showToast(t('editor.restoredToast'));
+      render();
+    } else if (view === 'archive') {
+      note.archived = false;
+      note.deleted = false;
+      note.pinned = false;
+      note.updatedAt = new Date().toISOString();
+      moveToFront(note);
+      persist();
+      showToast(t('editor.unarchivedToast'));
+      render();
+    } else if (!note.archived && !note.deleted) {
+      note.pinned = !note.pinned;
+      note.updatedAt = new Date().toISOString();
+      moveToFront(note);
+      persist();
+      showToast(t(note.pinned ? 'editor.pin' : 'editor.unpin'));
+      render();
+    }
+  }
+
+  function handleSwipeLeft(note) {
+    if (view === 'trash') {
+      notes = notes.filter(item => item.id !== note.id);
+      showToast(t('editor.deletedToast'));
+    } else if (view === 'archive') {
+      note.deleted = true;
+      note.pinned = false;
+      note.archived = false;
+      note.updatedAt = new Date().toISOString();
+      showToast(t('editor.trashedToast'));
+    } else {
+      note.archived = !note.archived;
+      if (note.archived) note.pinned = false;
+      note.updatedAt = new Date().toISOString();
+      showToast(t(note.archived ? 'editor.archivedToast' : 'editor.unarchivedToast'));
+    }
+    persist();
+    render();
+  }
+
+  function setupCardSwipe(card, note, readOnly) {
+    const swipeBgRight = $('.card-swipe-right', card);
+    const swipeBgLeft = $('.card-swipe-left', card);
+
+    setupSwipeLabels(card, note);
 
     const cardInner = $('.card-inner', card);
     let cardSwipeState = null;
@@ -2448,52 +2502,9 @@
 
         const SWIPE_THRESHOLD = 70;
         if (deltaX >= SWIPE_THRESHOLD) {
-          // Swipe Right: Restore (Archive/Trash) or Pin/Unpin (Notes)
-          if (view === 'trash') {
-            note.deleted = false;
-            note.archived = false;
-            note.pinned = false;
-            note.updatedAt = new Date().toISOString();
-            moveToFront(note);
-            persist();
-            showToast(t('editor.restoredToast'));
-            render();
-          } else if (view === 'archive') {
-            note.archived = false;
-            note.deleted = false;
-            note.pinned = false;
-            note.updatedAt = new Date().toISOString();
-            moveToFront(note);
-            persist();
-            showToast(t('editor.unarchivedToast'));
-            render();
-          } else if (!note.archived && !note.deleted) {
-            note.pinned = !note.pinned;
-            note.updatedAt = new Date().toISOString();
-            moveToFront(note);
-            persist();
-            showToast(t(note.pinned ? 'editor.pin' : 'editor.unpin'));
-            render();
-          }
+          handleSwipeRight(note);
         } else if (deltaX <= -SWIPE_THRESHOLD) {
-          // Swipe Left: Archive / Trash / Delete
-          if (view === 'trash') {
-            notes = notes.filter(item => item.id !== note.id);
-            showToast(t('editor.deletedToast'));
-          } else if (view === 'archive') {
-            note.deleted = true;
-            note.pinned = false;
-            note.archived = false;
-            note.updatedAt = new Date().toISOString();
-            showToast(t('editor.trashedToast'));
-          } else {
-            note.archived = !note.archived;
-            if (note.archived) note.pinned = false;
-            note.updatedAt = new Date().toISOString();
-            showToast(t(note.archived ? 'editor.archivedToast' : 'editor.unarchivedToast'));
-          }
-          persist();
-          render();
+          handleSwipeLeft(note);
         }
       }
     };
