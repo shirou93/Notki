@@ -724,9 +724,7 @@
     }
   }
 
-  $('#admin-require-2fa')?.addEventListener('change', saveAdminSettings);
-  $('#admin-session-days')?.addEventListener('change', saveAdminSettings);
-  $('#admin-announcement')?.addEventListener('change', saveAdminSettings);
+  $('#admin-security-apply')?.addEventListener('click', saveAdminSettings);
 
   function setBackupMessage(message, isError = false) {
     const element = document.querySelector('#backup-message');
@@ -3543,6 +3541,14 @@
       view = button.dataset.view;
       render();
     }
+  }));
+
+  $$('.brand').forEach(brand => brand.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (activeId) closeEditor();
+    closeSidebar();
+    view = 'all';
+    render();
   }));
   elements.search.addEventListener('input', () => {
     query = elements.search.value.trim();
