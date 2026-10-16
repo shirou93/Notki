@@ -1,5 +1,6 @@
 import argparse
 import base64
+import getpass
 import hashlib
 import hmac
 import ipaddress
@@ -535,7 +536,6 @@ def create_admin_account():
             return
     try:
         email = normalize_email(input('E-mail administratora: '))
-        import getpass
         password = getpass.getpass('Hasło (minimum 12 znaków): ')
         confirmation = getpass.getpass('Powtórz hasło: ')
         if len(password) < 12:
