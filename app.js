@@ -2107,7 +2107,7 @@
     });
   }
 
-  function render() {
+  function updateSidebarCounts() {
     const active = notes.filter(isActive);
     const pinned = active.filter(note => note.pinned).length;
     const sharedByMeCount = active.filter(note => note.shareCount && note.shareCount > 0).length;
@@ -2118,18 +2118,88 @@
     elements.sharedCount.textContent = String(sharedNotes.length + sharedByMeCount);
     elements.nav.forEach(button => button.classList.toggle('is-active', button.dataset.view === view));
     elements.navAdmin.classList.toggle('is-active', view === 'admin');
+  }
+
+  function renderAdminView() {
+    if (elements.topbar) elements.topbar.hidden = true;
+    elements.pageHeading.hidden = true;
+    elements.captureWrap.hidden = true;
+    elements.notesArea.hidden = true;
+    elements.topbarSearch.hidden = true;
+    if ($('#view-toggle')) $('#view-toggle').hidden = true;
+    elements.adminArea.hidden = false;
+    elements.breadcrumb.textContent = t('nav.adminPanel');
+    refreshAdmin().catch(() => {});
+    window.history.pushState(null, '', '/admin');
+  }
+
+  function renderSharedView() {
+    const sharedWithMe = sharedNotes.filter(note => {
+      if (!query) return true;
+      const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')} ${note.ownerEmail || ''}`.toLocaleLowerCase();
+      return searchable.includes(query.toLocaleLowerCase());
+    }).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+
+    const sharedByMe = notes.filter(note => {
+      if (!isActive(note)) return false;
+      if (!note.shareCount || note.shareCount <= 0) return false;
+      if (!query) return true;
+      const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')}`.toLocaleLowerCase();
+      return searchable.includes(query.toLocaleLowerCase());
+    }).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+
+    const totalVisible = sharedWithMe.length + sharedByMe.length;
+
+    elements.pinnedGrid.replaceChildren(...sharedWithMe.map(makeCard));
+    elements.grid.replaceChildren(...sharedByMe.map(makeCard));
+
+    if ($('#pinned-label-text')) $('#pinned-label-text').textContent = t('section.sharedWithMe');
+    elements.pinnedLabel.hidden = sharedWithMe.length === 0;
+
+    elements.otherLabelText.textContent = t('section.sharedByMe');
+    elements.otherLabel.hidden = sharedByMe.length === 0;
+
+    elements.empty.hidden = totalVisible !== 0;
+    elements.countLabel.textContent = query
+      ? t('count.searchResults', { count: totalVisible })
+      : `${totalVisible} ${pluralText('count.sharedLabel', totalVisible)}`;
+    elements.footerCount.textContent = `${totalVisible} ${pluralText('footer.count', totalVisible)}`;
+    updateEmptyState();
+    if (activeId) {
+      const current = notes.find(note => note.id === activeId) || sharedNotes.find(note => note.id === activeId);
+      if (current) updateEditorActions(current);
+    }
+  }
+
+  function renderStandardView() {
+    if ($('#pinned-label-text')) $('#pinned-label-text').textContent = t('section.pinned');
+    elements.otherLabelText.textContent = t('section.other');
+
+    const visible = filteredNotes();
+    const splitPinned = view === 'all' && !query;
+    const pinnedItems = splitPinned ? visible.filter(note => note.pinned) : [];
+    const regularItems = splitPinned ? visible.filter(note => !note.pinned) : visible;
+    elements.pinnedGrid.replaceChildren(...pinnedItems.map(makeCard));
+    elements.grid.replaceChildren(...regularItems.map(makeCard));
+    elements.pinnedLabel.hidden = pinnedItems.length === 0;
+    elements.otherLabel.hidden = pinnedItems.length === 0 || regularItems.length === 0;
+    elements.empty.hidden = visible.length !== 0;
+    elements.countLabel.textContent = query
+      ? t('count.searchResults', { count: visible.length })
+      : `${visible.length} ${pluralText('count.notesLabel', visible.length)}`;
+    elements.footerCount.textContent = `${visible.length} ${pluralText('footer.count', visible.length)}`;
+    updateEmptyState();
+    if (activeId) {
+      const current = notes.find(note => note.id === activeId) || sharedNotes.find(note => note.id === activeId);
+      if (current) updateEditorActions(current);
+    }
+  }
+
+  function render() {
+    updateSidebarCounts();
 
     if (view === 'admin') {
-      if (elements.topbar) elements.topbar.hidden = true;
-      elements.pageHeading.hidden = true;
-      elements.captureWrap.hidden = true;
-      elements.notesArea.hidden = true;
-      elements.topbarSearch.hidden = true;
-      if ($('#view-toggle')) $('#view-toggle').hidden = true;
-      elements.adminArea.hidden = false;
-      elements.breadcrumb.textContent = t('nav.adminPanel');
-      refreshAdmin().catch(() => {});
-      window.history.pushState(null, '', '/admin');
+      renderAdminView();
     } else {
       if (elements.topbar) elements.topbar.hidden = false;
       elements.pageHeading.hidden = false;
@@ -2148,63 +2218,9 @@
       );
 
       if (view === 'shared') {
-        const sharedWithMe = sharedNotes.filter(note => {
-          if (!query) return true;
-          const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')} ${note.ownerEmail || ''}`.toLocaleLowerCase();
-          return searchable.includes(query.toLocaleLowerCase());
-        }).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
-
-        const sharedByMe = notes.filter(note => {
-          if (!isActive(note)) return false;
-          if (!note.shareCount || note.shareCount <= 0) return false;
-          if (!query) return true;
-          const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')}`.toLocaleLowerCase();
-          return searchable.includes(query.toLocaleLowerCase());
-        }).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
-
-        const totalVisible = sharedWithMe.length + sharedByMe.length;
-
-        elements.pinnedGrid.replaceChildren(...sharedWithMe.map(makeCard));
-        elements.grid.replaceChildren(...sharedByMe.map(makeCard));
-
-        if ($('#pinned-label-text')) $('#pinned-label-text').textContent = t('section.sharedWithMe');
-        elements.pinnedLabel.hidden = sharedWithMe.length === 0;
-
-        elements.otherLabelText.textContent = t('section.sharedByMe');
-        elements.otherLabel.hidden = sharedByMe.length === 0;
-
-        elements.empty.hidden = totalVisible !== 0;
-        elements.countLabel.textContent = query
-          ? t('count.searchResults', { count: totalVisible })
-          : `${totalVisible} ${pluralText('count.sharedLabel', totalVisible)}`;
-        elements.footerCount.textContent = `${totalVisible} ${pluralText('footer.count', totalVisible)}`;
-        updateEmptyState();
-        if (activeId) {
-          const current = notes.find(note => note.id === activeId) || sharedNotes.find(note => note.id === activeId);
-          if (current) updateEditorActions(current);
-        }
+        renderSharedView();
       } else {
-        if ($('#pinned-label-text')) $('#pinned-label-text').textContent = t('section.pinned');
-        elements.otherLabelText.textContent = t('section.other');
-
-        const visible = filteredNotes();
-        const splitPinned = view === 'all' && !query;
-        const pinnedItems = splitPinned ? visible.filter(note => note.pinned) : [];
-        const regularItems = splitPinned ? visible.filter(note => !note.pinned) : visible;
-        elements.pinnedGrid.replaceChildren(...pinnedItems.map(makeCard));
-        elements.grid.replaceChildren(...regularItems.map(makeCard));
-        elements.pinnedLabel.hidden = pinnedItems.length === 0;
-        elements.otherLabel.hidden = pinnedItems.length === 0 || regularItems.length === 0;
-        elements.empty.hidden = visible.length !== 0;
-        elements.countLabel.textContent = query
-          ? t('count.searchResults', { count: visible.length })
-          : `${visible.length} ${pluralText('count.notesLabel', visible.length)}`;
-        elements.footerCount.textContent = `${visible.length} ${pluralText('footer.count', visible.length)}`;
-        updateEmptyState();
-        if (activeId) {
-          const current = notes.find(note => note.id === activeId) || sharedNotes.find(note => note.id === activeId);
-          if (current) updateEditorActions(current);
-        }
+        renderStandardView();
       }
     }
   }
