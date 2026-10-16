@@ -1287,6 +1287,16 @@ class FirstRunSetupTests(unittest.TestCase):
 
 
 class ParseLanguageTests(unittest.TestCase):
+    def test_split_by_comma_and_strip(self):
+        self.assertEqual(server.parse_language('pl , es'), 'pl')
+        self.assertEqual(server.parse_language('pl,es'), 'pl')
+        self.assertEqual(server.parse_language('  pl  ,  es  '), 'pl')
+
+    def test_skips_empty_parts(self):
+        self.assertEqual(server.parse_language('pl,,es'), 'pl')
+        self.assertEqual(server.parse_language(', pl ,'), 'pl')
+        self.assertEqual(server.parse_language('  ,  pl  ,  '), 'pl')
+
     def test_empty_or_none(self):
         self.assertEqual(server.parse_language(None), server.DEFAULT_LANGUAGE)
         self.assertEqual(server.parse_language(''), server.DEFAULT_LANGUAGE)
@@ -1307,6 +1317,12 @@ class ParseLanguageTests(unittest.TestCase):
     def test_respects_quality_values(self):
         self.assertEqual(server.parse_language('en-US;q=0.5,en;q=0.8,pl;q=0.9'), 'pl')
         self.assertEqual(server.parse_language('fr;q=0.7, de;q=0.8, es;q=0.9'), 'es')
+
+    def test_respects_quality_values_more(self):
+        self.assertEqual(server.parse_language('es;q=0.8, pl;q=0.9, en;q=0.1'), 'pl')
+        self.assertEqual(server.parse_language('de;q=0.9, fr;q=0.8, it;q=0.7'), 'de')
+        self.assertEqual(server.parse_language('ja;q=0.5, ko;q=0.6, pl;q=0.4'), 'ko')
+        self.assertEqual(server.parse_language('pl;q=0.9, en-US;q=1.0'), 'en')
 
     def test_skips_asterisk_and_unsupported(self):
         self.assertEqual(server.parse_language('*'), server.DEFAULT_LANGUAGE)
