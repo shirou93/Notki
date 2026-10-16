@@ -2,7 +2,7 @@
 
 A fast, lightweight, and private web-based note-taking application written in pure Python (Python 3.9+) with zero external dependencies from PyPI.
 
-![Main notes view](docs/desktop_notes.png)
+![Main notes view](docs/desktop_notes_light.png)
 
 ---
 
@@ -25,10 +25,10 @@ A fast, lightweight, and private web-based note-taking application written in pu
 
 ## 📱 Screenshots
 
-| View | Desktop | Mobile |
-|---|---|---|
-| **Notes** | ![Notes on Desktop](docs/desktop_notes.png) | ![Notes on Mobile](docs/mobile_notes.png) |
-| **Admin Panel** | ![Admin Panel on Desktop](docs/desktop_admin.png) | ![Admin Panel on Mobile](docs/mobile_admin.png) |
+| View | Desktop (Light) | Desktop (Dark) | Mobile (Light) | Mobile (Dark) |
+|---|---|---|---|---|
+| **Notes** | ![Notes on Desktop Light](docs/desktop_notes_light.png) | ![Notes on Desktop Dark](docs/desktop_notes_dark.png) | ![Notes on Mobile Light](docs/mobile_notes_light.png) | ![Notes on Mobile Dark](docs/mobile_notes_dark.png) |
+| **Admin Panel** | ![Admin Panel on Desktop Light](docs/desktop_admin_light.png) | ![Admin Panel on Desktop Dark](docs/desktop_admin_dark.png) | ![Admin Panel on Mobile Light](docs/mobile_admin_light.png) | ![Admin Panel on Mobile Dark](docs/mobile_admin_dark.png) |
 
 ---
 
