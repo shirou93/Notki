@@ -30,7 +30,7 @@ import qr
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.84'
+VERSION = '0.1.5.85'
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -1254,6 +1254,17 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def check_update(self):
         self.require_user(admin=True)
+        query = urlsplit(self.path).query
+        if 'beta=1' in query or 'beta=true' in query:
+            tarball_url = 'https://api.github.com/repos/shirou93/Notki/tarball/main'
+            self.send_json({
+                'updateAvailable': True,
+                'latestVersion': 'main (beta)',
+                'tarballUrl': tarball_url,
+                'isBeta': True
+            })
+            return
+
         req = urllib.request.Request('https://api.github.com/repos/shirou93/Notki/tags')
         req.add_header('User-Agent', 'Notki-App')
         try:
@@ -1329,6 +1340,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def perform_update(self, payload):
         self.require_user(admin=True)
         tarball_url = payload.get('tarballUrl')
+        is_beta = bool(payload.get('isBeta')) or (tarball_url and tarball_url.endswith('/main'))
         if not tarball_url or not tarball_url.startswith('https://api.github.com/repos/shirou93/Notki/tarball/'):
             raise APIError('Invalid download URL.', 400)
 
@@ -1340,7 +1352,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 if not members:
                     raise ValueError("Empty archive")
 
-                self._verify_update_version(archive, members)
+                if not is_beta:
+                    self._verify_update_version(archive, members)
                 self._extract_update_archive(archive, members)
         except APIError:
             raise
