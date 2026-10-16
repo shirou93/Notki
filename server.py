@@ -733,6 +733,12 @@ class NotkiHandler(BaseHTTPRequestHandler):
             )
         return token
 
+    def create_session_response(self, user_id):
+        token = self.new_session(user_id)
+        with database() as connection:
+            user = connection.execute('SELECT id, email, role, created_at, avatar, labels_json FROM users WHERE id = ?', (user_id,)).fetchone()
+        self.send_json({'user': public_user(user)}, 201, self.session_headers(token))
+
     def handle_setup_get(self, path):
         if path == '/api/setup/status':
             self.send_json({'needsSetup': not self.has_admin()})
@@ -1032,10 +1038,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             except sqlite3.IntegrityError as error:
                 raise APIError('An account with this e-mail address already exists.', 409) from error
             user_id = cursor.lastrowid
-        token = self.new_session(user_id)
-        with database() as connection:
-            user = connection.execute('SELECT id, email, role, created_at, avatar, labels_json FROM users WHERE id = ?', (user_id,)).fetchone()
-        self.send_json({'user': public_user(user)}, 201, self.session_headers(token))
+        self.create_session_response(user_id)
 
     def build_snapshot(self):
         with database() as connection:
@@ -1814,10 +1817,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 raise APIError('An account with this e-mail address already exists.', 409) from error
             connection.execute('UPDATE invites SET used_at = ? WHERE token_hash = ?', (now, invitation['token_hash']))
             user_id = cursor.lastrowid
-        token = self.new_session(user_id)
-        with database() as connection:
-            user = connection.execute('SELECT id, email, role, created_at, avatar, labels_json FROM users WHERE id = ?', (user_id,)).fetchone()
-        self.send_json({'user': public_user(user)}, 201, self.session_headers(token))
+        self.create_session_response(user_id)
 
     def change_password(self, payload):
         user = self.require_user()
