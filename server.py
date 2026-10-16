@@ -169,8 +169,15 @@ TEMP_2FA_LOCK = threading.Lock()
 FAILED_AUTH_ATTEMPTS = {}
 FAILED_AUTH_LOCK = threading.Lock()
 
+AUTH_FAILURES = {}
+
 def record_failed_auth(ip):
     now = time.time()
+    if ip not in AUTH_FAILURES:
+        AUTH_FAILURES[ip] = []
+    AUTH_FAILURES[ip].append(now)
+    AUTH_FAILURES[ip] = [t for t in AUTH_FAILURES[ip] if now - t < 3600]
+
     with FAILED_AUTH_LOCK:
         attempts = [t for t in FAILED_AUTH_ATTEMPTS.get(ip, []) if now - t < 60]
         attempts.append(now)

@@ -1735,5 +1735,73 @@ class TranslateMessageTests(unittest.TestCase):
         self.assertEqual(server.translate_message('Enter a valid e-mail address.', 'es'), 'Enter a valid e-mail address.')
 
 
+class RecordFailedAuthTests(unittest.TestCase):
+    def setUp(self):
+        server.FAILED_AUTH_ATTEMPTS.clear()
+        server.AUTH_FAILURES.clear()
+
+    def tearDown(self):
+        server.FAILED_AUTH_ATTEMPTS.clear()
+        server.AUTH_FAILURES.clear()
+
+    @unittest.mock.patch('server.time.time')
+    def test_record_failed_auth_new_ip(self, mock_time):
+        mock_time.return_value = 1000.0
+        server.record_failed_auth('192.168.1.1')
+
+        self.assertIn('192.168.1.1', server.FAILED_AUTH_ATTEMPTS)
+        self.assertEqual(server.FAILED_AUTH_ATTEMPTS['192.168.1.1'], [1000.0])
+        self.assertIn('192.168.1.1', server.AUTH_FAILURES)
+        self.assertEqual(server.AUTH_FAILURES['192.168.1.1'], [1000.0])
+
+    @unittest.mock.patch('server.time.time')
+    def test_record_failed_auth_existing_ip(self, mock_time):
+        mock_time.return_value = 1000.0
+        server.record_failed_auth('192.168.1.2')
+
+        mock_time.return_value = 1010.0
+        server.record_failed_auth('192.168.1.2')
+
+        self.assertEqual(server.FAILED_AUTH_ATTEMPTS['192.168.1.2'], [1000.0, 1010.0])
+        self.assertEqual(server.AUTH_FAILURES['192.168.1.2'], [1000.0, 1010.0])
+
+    @unittest.mock.patch('server.time.time')
+    def test_record_failed_auth_removes_old_attempts(self, mock_time):
+        # Add an old attempt
+        server.FAILED_AUTH_ATTEMPTS['192.168.1.3'] = [900.0]
+        server.AUTH_FAILURES['192.168.1.3'] = [900.0]
+
+        # Add a new attempt, old one should be filtered out because now - t = 1000 - 900 = 100 >= 60
+        mock_time.return_value = 1000.0
+        server.record_failed_auth('192.168.1.3')
+
+        self.assertEqual(server.FAILED_AUTH_ATTEMPTS['192.168.1.3'], [1000.0])
+        self.assertEqual(server.AUTH_FAILURES['192.168.1.3'], [900.0, 1000.0])
+
+        # Another attempt within 60s
+        mock_time.return_value = 1050.0
+        server.record_failed_auth('192.168.1.3')
+
+        # 1050.0 - 1000.0 = 50 < 60, so 1000.0 is kept
+        self.assertEqual(server.FAILED_AUTH_ATTEMPTS['192.168.1.3'], [1000.0, 1050.0])
+        self.assertEqual(server.AUTH_FAILURES['192.168.1.3'], [900.0, 1000.0, 1050.0])
+
+        # Another attempt outside 60s
+        mock_time.return_value = 1120.0
+        server.record_failed_auth('192.168.1.3')
+
+        # 1120.0 - 1000.0 = 120 >= 60 (discarded)
+        # 1120.0 - 1050.0 = 70 >= 60 (discarded)
+        self.assertEqual(server.FAILED_AUTH_ATTEMPTS['192.168.1.3'], [1120.0])
+        self.assertEqual(server.AUTH_FAILURES['192.168.1.3'], [900.0, 1000.0, 1050.0, 1120.0])
+
+        # Finally test the 3600 limit for AUTH_FAILURES
+        # 4600 - 900 = 3700 >= 3600 (filtered out)
+        # 4600 - 1000 = 3600 >= 3600 (filtered out)
+        mock_time.return_value = 4600.0
+        server.record_failed_auth('192.168.1.3')
+        self.assertEqual(server.AUTH_FAILURES['192.168.1.3'], [1050.0, 1120.0, 4600.0])
+
+
 if __name__ == '__main__':
     unittest.main()
