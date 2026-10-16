@@ -132,6 +132,17 @@ class TestQRGenerator(unittest.TestCase):
         self.assertEqual(qr.evaluate_penalty(m, size), 703)
 
 
+    def test_rs_generator_poly(self):
+        test_cases = [
+            (1, [1, 1]),
+            (2, [1, 3, 2]),
+            (3, [1, 7, 14, 8]),
+            (5, [1, 31, 198, 63, 147, 116])
+        ]
+        for nsym, expected in test_cases:
+            with self.subTest(nsym=nsym):
+                self.assertEqual(qr.rs_generator_poly(nsym), expected)
+
     def test_get_mask_bit(self):
         # Test a few coordinates for each pattern to ensure accuracy of the logic
         test_cases = [
