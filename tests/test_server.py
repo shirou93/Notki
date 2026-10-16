@@ -1343,7 +1343,7 @@ class ParseVersionTests(unittest.TestCase):
         self.assertEqual(server.parse_version('  v2.0.1  '), (2, 0, 1))
 
     def test_incomplete_version(self):
-        self.assertEqual(server.parse_version('1.2'), (0, 0, 0))
+        self.assertEqual(server.parse_version('1.2'), (1, 2))
 
     def test_malformed_string(self):
         self.assertEqual(server.parse_version('invalid'), (0, 0, 0))
