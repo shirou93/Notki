@@ -107,12 +107,15 @@ def evaluate_penalty(matrix, size):
     penalty = 0
 
     transposed = list(zip(*matrix))
+    dark_count = 0
 
     # Rule 1: 5 or more same color modules in row/col
     for r in range(size):
+        row = matrix[r]
+        dark_count += sum(row)
         count = 1
         for c in range(1, size):
-            if matrix[r][c] == matrix[r][c - 1]:
+            if row[c] == row[c - 1]:
                 count += 1
             else:
                 if count >= 5:
@@ -148,11 +151,12 @@ def evaluate_penalty(matrix, size):
     zeros_t = (0, 0, 0, 0)
 
     for r in range(size):
+        row = matrix[r]
         for c in range(size - 6):
-            if matrix[r][c:c + 7] == target_l:
-                if c >= 4 and matrix[r][c - 4:c] == zeros_l:
+            if row[c:c + 7] == target_l:
+                if c >= 4 and row[c - 4:c] == zeros_l:
                     penalty += 40
-                if c + 11 <= size and matrix[r][c + 7:c + 11] == zeros_l:
+                if c + 11 <= size and row[c + 7:c + 11] == zeros_l:
                     penalty += 40
 
     for r in range(size):
@@ -165,7 +169,6 @@ def evaluate_penalty(matrix, size):
                     penalty += 40
 
     # Rule 4: Proportion of dark modules
-    dark_count = sum(sum(row) for row in matrix)
     percent = (dark_count * 100) // (size * size)
     penalty += (abs(percent - 50) // 5) * 10
 
