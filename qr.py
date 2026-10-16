@@ -105,6 +105,9 @@ def get_mask_bit(pattern, r, c):
 
 def evaluate_penalty(matrix, size):
     penalty = 0
+
+    transposed = list(zip(*matrix))
+
     # Rule 1: 5 or more same color modules in row/col
     for r in range(size):
         count = 1
@@ -118,10 +121,11 @@ def evaluate_penalty(matrix, size):
         if count >= 5:
             penalty += 3 + (count - 5)
 
-    for c in range(size):
+    for r in range(size):
         count = 1
-        for r in range(1, size):
-            if matrix[r][c] == matrix[r - 1][c]:
+        col_vals = transposed[r]
+        for c in range(1, size):
+            if col_vals[c] == col_vals[c - 1]:
                 count += 1
             else:
                 if count >= 5:
@@ -138,21 +142,26 @@ def evaluate_penalty(matrix, size):
                 penalty += 3
 
     # Rule 3: 1:1:3:1:1 finder-like pattern
+    target_l = [1, 0, 1, 1, 1, 0, 1]
+    zeros_l = [0, 0, 0, 0]
+    target_t = (1, 0, 1, 1, 1, 0, 1)
+    zeros_t = (0, 0, 0, 0)
+
     for r in range(size):
         for c in range(size - 6):
-            if matrix[r][c:c + 7] == [1, 0, 1, 1, 1, 0, 1]:
-                if c >= 4 and matrix[r][c - 4:c] == [0, 0, 0, 0]:
+            if matrix[r][c:c + 7] == target_l:
+                if c >= 4 and matrix[r][c - 4:c] == zeros_l:
                     penalty += 40
-                if c + 11 <= size and matrix[r][c + 7:c + 11] == [0, 0, 0, 0]:
+                if c + 11 <= size and matrix[r][c + 7:c + 11] == zeros_l:
                     penalty += 40
 
-    for c in range(size):
-        col_vals = [matrix[r][c] for r in range(size)]
-        for r in range(size - 6):
-            if col_vals[r:r + 7] == [1, 0, 1, 1, 1, 0, 1]:
-                if r >= 4 and col_vals[r - 4:r] == [0, 0, 0, 0]:
+    for r in range(size):
+        col_vals = transposed[r]
+        for c in range(size - 6):
+            if col_vals[c:c + 7] == target_t:
+                if c >= 4 and col_vals[c - 4:c] == zeros_t:
                     penalty += 40
-                if r + 11 <= size and col_vals[r + 7:r + 11] == [0, 0, 0, 0]:
+                if c + 11 <= size and col_vals[c + 7:c + 11] == zeros_t:
                     penalty += 40
 
     # Rule 4: Proportion of dark modules
