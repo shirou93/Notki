@@ -1980,8 +1980,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             prepared.append(NotkiHandler._prepare_note_for_db(note, user_id, seen))
         with database() as connection:
             if seen:
-                placeholders = ','.join('?' for _ in seen)
-                connection.execute(f'DELETE FROM notes WHERE user_id = ? AND id NOT IN ({placeholders})', (user_id, *seen))
+                connection.execute('DELETE FROM notes WHERE user_id = ? AND id NOT IN (SELECT value FROM json_each(?))', (user_id, json.dumps(list(seen))))
             else:
                 connection.execute('DELETE FROM notes WHERE user_id = ?', (user_id,))
             connection.executemany('''
