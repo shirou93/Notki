@@ -1293,10 +1293,17 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('Could not fetch update information.', 500)
 
     def _download_update_archive(self, tarball_url):
+        class UpdateRedirectHandler(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                if not newurl.startswith('https://codeload.github.com/shirou93/Notki/'):
+                    raise urllib.error.URLError("Invalid redirect URL.")
+                return super().redirect_request(req, fp, code, msg, headers, newurl)
+
         req = urllib.request.Request(tarball_url)
         req.add_header('User-Agent', 'Notki-App')
+        opener = urllib.request.build_opener(UpdateRedirectHandler())
         try:
-            with urllib.request.urlopen(req, timeout=30) as response:
+            with opener.open(req, timeout=30) as response:
                 return response.read()
         except Exception:
             raise APIError('An error occurred while downloading the archive.', 500)

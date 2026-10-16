@@ -609,10 +609,12 @@ class ServerFlowTests(unittest.TestCase):
             member.size = len(server_code)
             archive.addfile(member, io.BytesIO(server_code))
 
-        with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
+        with unittest.mock.patch('server.urllib.request.build_opener') as mock_build_opener:
+            mock_opener = unittest.mock.MagicMock()
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tarball_buf.getvalue()
-            mock_urlopen.return_value = mock_cm
+            mock_opener.open.return_value = mock_cm
+            mock_build_opener.return_value = mock_opener
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
                 'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.83'
@@ -1482,22 +1484,63 @@ class PerformUpdateHelperTests(unittest.TestCase):
 
         self.handler = DummyHandler()
 
-    @unittest.mock.patch('server.urllib.request.urlopen')
-    def test_download_update_archive_success(self, mock_urlopen):
+    @unittest.mock.patch('server.urllib.request.build_opener')
+    def test_download_update_archive_success(self, mock_build_opener):
+        mock_opener = unittest.mock.MagicMock()
         mock_response = unittest.mock.MagicMock()
         mock_response.read.return_value = b'archive_data'
-        mock_urlopen.return_value.__enter__.return_value = mock_response
+        mock_opener.open.return_value.__enter__.return_value = mock_response
+        mock_build_opener.return_value = mock_opener
 
         result = self.handler._download_update_archive('http://example.com/tarball')
         self.assertEqual(result, b'archive_data')
 
-    @unittest.mock.patch('server.urllib.request.urlopen')
-    def test_download_update_archive_error(self, mock_urlopen):
-        mock_urlopen.side_effect = Exception("Network error")
+    @unittest.mock.patch('server.urllib.request.build_opener')
+    def test_download_update_archive_error(self, mock_build_opener):
+        mock_opener = unittest.mock.MagicMock()
+        mock_opener.open.side_effect = Exception("Network error")
+        mock_build_opener.return_value = mock_opener
+
         with self.assertRaises(server.APIError) as cm:
             self.handler._download_update_archive('http://example.com/tarball')
         self.assertEqual(cm.exception.status, 500)
         self.assertEqual(cm.exception.args[0], 'An error occurred while downloading the archive.')
+
+    def test_download_update_archive_invalid_redirect(self):
+        # We need to capture the redirect handler created in the method
+        # and verify it raises URLError on invalid redirect URLs.
+        import urllib.error
+
+        captured_handler = None
+        original_build_opener = server.urllib.request.build_opener
+
+        def mock_build_opener(handler):
+            nonlocal captured_handler
+            captured_handler = handler
+            # Return a dummy opener that will just raise an exception to exit early
+            dummy_opener = unittest.mock.MagicMock()
+            dummy_opener.open.side_effect = Exception("Stop execution")
+            return dummy_opener
+
+        with unittest.mock.patch('server.urllib.request.build_opener', side_effect=mock_build_opener):
+            try:
+                self.handler._download_update_archive('http://example.com/tarball')
+            except server.APIError:
+                pass
+
+        self.assertIsNotNone(captured_handler)
+
+        # Test valid redirect
+        valid_url = 'https://codeload.github.com/shirou93/Notki/zip'
+        # The base class method is called, but we mock it for the test
+        with unittest.mock.patch('urllib.request.HTTPRedirectHandler.redirect_request', return_value='success'):
+            self.assertEqual(captured_handler.redirect_request(None, None, None, None, None, valid_url), 'success')
+
+        # Test invalid redirect
+        invalid_url = 'https://malicious.com/zip'
+        with self.assertRaises(urllib.error.URLError) as cm:
+            captured_handler.redirect_request(None, None, None, None, None, invalid_url)
+        self.assertEqual(str(cm.exception), '<urlopen error Invalid redirect URL.>')
 
     def test_verify_update_version_success(self):
         mock_archive = unittest.mock.MagicMock()
