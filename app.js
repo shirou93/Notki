@@ -159,7 +159,7 @@
     const checkboxes = [...rootElement.querySelectorAll('input[type="checkbox"]')];
     const total = checkboxes.length;
     if (!total) return { total: 0, completed: 0, percent: 0 };
-    const completed = checkboxes.filter(cb => cb.checked || cb.hasAttribute('checked')).length;
+    const completed = checkboxes.filter(cb => cb.checked).length;
     const percent = Math.round((completed / total) * 100);
     return { total, completed, percent };
   }
@@ -1608,7 +1608,7 @@
   function normalizeChecklistGroups(root = elements.noteBody) {
     normalizeChecklistItemMarkup(root);
     root.querySelectorAll('input.task-checkbox').forEach(cb => {
-      if (cb.checked || cb.hasAttribute('checked')) cb.setAttribute('checked', '');
+      if (cb.checked) cb.setAttribute('checked', '');
       else cb.removeAttribute('checked');
     });
     root.querySelectorAll('ul.task-list:not(.task-list-completed)').forEach(activeList => {
@@ -1622,11 +1622,11 @@
       ].filter(item => item.querySelector('input.task-checkbox'));
       const activeItems = allItems.filter(item => {
         const cb = item.querySelector('input.task-checkbox');
-        return cb && !cb.checked && !cb.hasAttribute('checked');
+        return cb && !cb.checked;
       });
       const completedItems = allItems.filter(item => {
         const cb = item.querySelector('input.task-checkbox');
-        return cb && (cb.checked || cb.hasAttribute('checked'));
+        return cb && cb.checked;
       });
       const currentActiveItems = [...activeList.querySelectorAll(':scope > li')];
       if (currentActiveItems.length !== activeItems.length
