@@ -132,6 +132,21 @@ class TestQRGenerator(unittest.TestCase):
         self.assertEqual(qr.evaluate_penalty(m, size), 703)
 
 
+    def test_rs_poly_mul(self):
+        test_cases = [
+            # Identity polynomial
+            ([1], [1, 2, 3], [1, 2, 3]),
+            # Zero polynomial
+            ([0], [1, 2, 3], [0, 0, 0]),
+            # Simple polynomial over GF(2^8)
+            ([1, 2], [1, 3], [1, 1, 6]),
+            # Commutative property
+            ([1, 3], [1, 2], [1, 1, 6]),
+        ]
+        for p1, p2, expected in test_cases:
+            with self.subTest(p1=p1, p2=p2):
+                self.assertEqual(qr.rs_poly_mul(p1, p2), expected)
+
     def test_rs_generator_poly(self):
         test_cases = [
             (1, [1, 1]),
