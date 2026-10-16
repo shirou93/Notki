@@ -35,8 +35,16 @@ SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
 INVITE_DAYS = 7
 PASSWORD_ITERATIONS = 310_000
+
+def hash_password(password):
+    salt = secrets.token_bytes(16)
+    derived = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, PASSWORD_ITERATIONS)
+    return f'pbkdf2_sha256${PASSWORD_ITERATIONS}${salt.hex()}${derived.hex()}'
+
 # Dummy hash used to mitigate timing side-channel attacks during login when email is not found
-DUMMY_PASSWORD_HASH = f'pbkdf2_sha256${PASSWORD_ITERATIONS}$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000'
+# This hash must be generated properly to have exact exact same timing properties.
+DUMMY_PASSWORD_HASH = hash_password('')
+
 MAX_REQUEST_BYTES = 3 * 1024 * 1024
 MAX_SNAPSHOT_BYTES = 100 * 1024 * 1024
 BACKUP_FILENAME_PATTERN = re.compile(r'^notki-[A-Za-z0-9_-]+\.json$')
@@ -475,12 +483,6 @@ def initialize_database():
             connection.execute("ALTER TABLE users ADD COLUMN totp_secret TEXT")
         if 'backup_codes_json' not in columns:
             connection.execute("ALTER TABLE users ADD COLUMN backup_codes_json TEXT")
-
-
-def hash_password(password):
-    salt = secrets.token_bytes(16)
-    derived = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, PASSWORD_ITERATIONS)
-    return f'pbkdf2_sha256${PASSWORD_ITERATIONS}${salt.hex()}${derived.hex()}'
 
 
 def verify_password(password, encoded):
