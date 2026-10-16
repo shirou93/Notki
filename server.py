@@ -366,7 +366,11 @@ def verify_passkey_signature(public_key_pem, sig_bytes, signed_data):
 
 
 def parse_version(version_str):
-    return tuple(int(x) for x in re.findall(r'\d+', str(version_str)))
+    import re
+    match = re.match(r'v?(\d+)\.(\d+)\.(\d+)', version_str.strip())
+    if match:
+        return tuple(map(int, match.groups()))
+    return (0, 0, 0)
 
 
 def parse_language(header_value):

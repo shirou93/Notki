@@ -1286,6 +1286,30 @@ class FirstRunSetupTests(unittest.TestCase):
 
 
 
+class ParseVersionTests(unittest.TestCase):
+    def test_standard_version(self):
+        self.assertEqual(server.parse_version('1.2.3'), (1, 2, 3))
+
+    def test_prefix_version(self):
+        self.assertEqual(server.parse_version('v1.2.3'), (1, 2, 3))
+
+    def test_stripped_input(self):
+        self.assertEqual(server.parse_version('  v2.0.1  '), (2, 0, 1))
+
+    def test_incomplete_version(self):
+        self.assertEqual(server.parse_version('1.2'), (0, 0, 0))
+
+    def test_malformed_string(self):
+        self.assertEqual(server.parse_version('invalid'), (0, 0, 0))
+
+    def test_empty_string(self):
+        self.assertEqual(server.parse_version(''), (0, 0, 0))
+
+    def test_none_input(self):
+        with self.assertRaises(AttributeError):
+            server.parse_version(None)
+
+
 class ParseLanguageTests(unittest.TestCase):
     def test_empty_or_none(self):
         self.assertEqual(server.parse_language(None), server.DEFAULT_LANGUAGE)
