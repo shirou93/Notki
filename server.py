@@ -2093,12 +2093,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
             shared.append(note)
         return shared
 
-    def writable_note_ids(self, connection, user_id):
-        rows = connection.execute(
-            "SELECT note_id FROM note_shares WHERE user_id = ? AND permission = 'write'", (user_id,)
-        ).fetchall()
-        return {row['note_id'] for row in rows}
-
     def update_shared_note(self, user, note_id, payload):
         """Let a recipient with write access update the content of a note shared with them.
 
