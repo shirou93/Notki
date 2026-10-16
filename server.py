@@ -195,6 +195,20 @@ def parse_header_params(header_str):
             params[k.strip().lower()] = v.strip().strip('"\'')
     return main_val, params
 
+def parse_headers(header_str):
+    headers = {}
+    start = 0
+    while True:
+        end = header_str.find('\r\n', start)
+        line = header_str[start:end] if end != -1 else header_str[start:]
+        if ': ' in line:
+            name, value = line.split(': ', 1)
+            headers[name.lower()] = value
+        if end == -1:
+            break
+        start = end + 2
+    return headers
+
 def parse_multipart_data(rfile, boundary, content_length):
     if isinstance(boundary, str):
         boundary = boundary.encode('utf-8')
@@ -210,12 +224,11 @@ def parse_multipart_data(rfile, boundary, content_length):
             if body.endswith(b'\r\n'):
                 body = body[:-2]
             header_str = header_bytes.decode('utf-8', errors='ignore')
+            headers = parse_headers(header_str)
             name = None
-            for line in header_str.split('\r\n'):
-                if line.lower().startswith('content-disposition:'):
-                    _, params = parse_header_params(line)
-                    name = params.get('name')
-                    break
+            if 'content-disposition' in headers:
+                _, params = parse_header_params(headers['content-disposition'])
+                name = params.get('name')
             if name:
                 fields.setdefault(name, []).append(body)
     return fields
