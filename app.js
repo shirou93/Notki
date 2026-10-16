@@ -3429,7 +3429,17 @@
   $('#view-toggle').addEventListener('click', () => {
     listViewPref = !listViewPref;
     localStorage.setItem('notki.list-view', listViewPref ? '1' : '0');
+    elements.pinnedGrid.classList.remove('is-animating');
+    elements.grid.classList.remove('is-animating');
+    void elements.pinnedGrid.offsetWidth;
+    void elements.grid.offsetWidth;
+    elements.pinnedGrid.classList.add('is-animating');
+    elements.grid.classList.add('is-animating');
     applyViewPref();
+    setTimeout(() => {
+      elements.pinnedGrid.classList.remove('is-animating');
+      elements.grid.classList.remove('is-animating');
+    }, 300);
   });
 
   function closeSidebar() {

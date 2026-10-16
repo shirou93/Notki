@@ -251,8 +251,10 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .notes-area { min-height: 210px; flex: 1; }
 .section-label { display: flex; align-items: center; gap: 13px; margin: 0 0 14px; color: #8b958d; font-size: 9px; font-weight: 700; letter-spacing: 1.35px; }
 .section-rule { height: 1px; flex: 1; background: #e8ece7; }
-.notes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 218px), 1fr)); align-items: stretch; gap: 14px; margin: 0 0 27px; }
+.notes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 218px), 1fr)); align-items: stretch; gap: 14px; margin: 0 0 27px; transition: grid-template-columns 0.3s ease, gap 0.3s ease; }
 .notes-grid.is-list-view { grid-template-columns: 1fr; }
+.notes-grid.is-animating .note-card { animation: grid-switch-in 0.28s cubic-bezier(0.2, 0.75, 0.25, 1) both; }
+@keyframes grid-switch-in { from { opacity: 0.3; transform: scale(0.97) translateY(6px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 .note-card { position: relative; overflow: hidden; min-width: 0; min-height: 170px; border: 1px solid #e8ebe5; border-radius: 7px; background: #fff; cursor: pointer; animation: rise-in .35s both; transition: transform .18s, box-shadow .18s, border-color .18s; touch-action: pan-y; }
 .note-card:hover { transform: translateY(-2px); border-color: #d5ddd4; box-shadow: 0 8px 21px #1e33250b; }
 .card-inner { position: relative; z-index: 2; width: 100%; height: 100%; min-height: inherit; display: flex; flex-direction: column; padding: 15px 15px 12px; background: inherit; border-radius: inherit; transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.3, 1); will-change: transform; }
@@ -429,7 +431,7 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .editor-panel .font-size-select:hover { background-color: rgba(0, 0, 0, 0.06); border-color: rgba(0, 0, 0, 0.2); }
 .editor-panel .font-size-select option { background-color: var(--paper); color: var(--ink); }
 .editor-panel .format-tool:hover, .editor-panel .format-tool.is-active { color: var(--ink); background-color: rgba(0, 0, 0, 0.08); }
-:root[data-theme="dark"] .editor-panel .font-size-select { border-color: rgba(255, 255, 255, 0.15); }
+:root[data-theme="dark"] .editor-panel .font-size-select { background-color: transparent; border-color: rgba(255, 255, 255, 0.15); color: var(--ink); }
 :root[data-theme="dark"] .editor-panel .font-size-select:hover { background-color: rgba(255, 255, 255, 0.1); }
 :root[data-theme="dark"] .editor-panel .format-tool:hover, :root[data-theme="dark"] .editor-panel .format-tool.is-active { color: var(--ink); background-color: rgba(255, 255, 255, 0.12); }
 .underline-icon { text-decoration: underline; text-underline-offset: 2px; }
