@@ -788,8 +788,12 @@ class NotkiHandler(BaseHTTPRequestHandler):
             user = self.require_user()
             with database() as connection:
                 rows = connection.execute('''
-                    SELECT notes.*, (SELECT COUNT(*) FROM note_shares WHERE note_shares.note_id = notes.id) AS share_count
-                    FROM notes WHERE user_id = ? ORDER BY sort_order DESC
+                    SELECT notes.*, COUNT(note_shares.note_id) AS share_count
+                    FROM notes
+                    LEFT JOIN note_shares ON notes.id = note_shares.note_id
+                    WHERE notes.user_id = ?
+                    GROUP BY notes.id
+                    ORDER BY notes.sort_order DESC
                 ''', (user['id'],)).fetchall()
             self.send_json({'notes': [self.note_from_row(row) for row in rows]})
             return True
