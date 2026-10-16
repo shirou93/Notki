@@ -367,9 +367,9 @@ def verify_passkey_signature(public_key_pem, sig_bytes, signed_data):
 
 def parse_version(version_str):
     import re
-    match = re.match(r'v?(\d+)\.(\d+)\.(\d+)', version_str.strip())
+    match = re.match(r'^v?([0-9]+(?:\.[0-9]+)*)', version_str.strip())
     if match:
-        return tuple(map(int, match.groups()))
+        return tuple(map(int, match.group(1).split('.')))
     return (0, 0, 0)
 
 
