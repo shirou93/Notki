@@ -644,6 +644,13 @@ class ServerFlowTests(unittest.TestCase):
         self.assertTrue(updated['require2FA'])
         self.assertEqual(updated['logLevel'], 'DEBUG')
 
+        # Admin POST settings invalid log level
+        status, err = self.request(self.admin, 'POST', '/api/admin/settings', {
+            'logLevel': 'INVALID'
+        })
+        self.assertEqual(status, 400)
+        self.assertEqual(err['error'], 'Invalid log level.')
+
         # Verify GET settings updated
         status, settings = self.request(self.admin, 'GET', '/api/admin/settings')
         self.assertEqual(status, 200)

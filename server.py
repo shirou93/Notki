@@ -2162,7 +2162,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         require_2fa = 'true' if payload.get('require2FA') else 'false'
         log_level = str(payload.get('logLevel') or 'INFO').upper()
         if log_level not in ('INFO', 'WARNING', 'ERROR', 'DEBUG'):
-            log_level = 'INFO'
+            raise APIError('Invalid log level.')
         try:
             session_days = max(1, min(3650, int(payload.get('sessionDays', SESSION_DAYS))))
         except (ValueError, TypeError):
