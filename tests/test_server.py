@@ -1803,5 +1803,39 @@ class RecordFailedAuthTests(unittest.TestCase):
         self.assertEqual(server.AUTH_FAILURES['192.168.1.3'], [1050.0, 1120.0, 4600.0])
 
 
+class AddLogTests(unittest.TestCase):
+    def setUp(self):
+        server.LOG_BUFFER.clear()
+
+    def tearDown(self):
+        server.LOG_BUFFER.clear()
+
+    @unittest.mock.patch('server.datetime')
+    def test_add_log_appends_entry(self, mock_datetime):
+        mock_now = mock_datetime.now.return_value
+        mock_now.strftime.return_value = '2023-10-25 12:00:00'
+
+        server.add_log('INFO', 'Test message')
+
+        self.assertEqual(len(server.LOG_BUFFER), 1)
+        entry = server.LOG_BUFFER[0]
+        self.assertEqual(entry['level'], 'INFO')
+        self.assertEqual(entry['message'], 'Test message')
+        self.assertEqual(entry['time'], '2023-10-25 12:00:00')
+
+    def test_add_log_caps_entries(self):
+        old_max = server.MAX_LOG_ENTRIES
+        server.MAX_LOG_ENTRIES = 3
+        try:
+            for i in range(5):
+                server.add_log('INFO', f'Message {i}')
+
+            self.assertEqual(len(server.LOG_BUFFER), 3)
+            self.assertEqual(server.LOG_BUFFER[0]['message'], 'Message 2')
+            self.assertEqual(server.LOG_BUFFER[1]['message'], 'Message 3')
+            self.assertEqual(server.LOG_BUFFER[2]['message'], 'Message 4')
+        finally:
+            server.MAX_LOG_ENTRIES = old_max
+
 if __name__ == '__main__':
     unittest.main()
