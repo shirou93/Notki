@@ -170,6 +170,31 @@ class TestQRGenerator(unittest.TestCase):
             with self.subTest(p1=p1, p2=p2):
                 self.assertEqual(qr.rs_poly_mul(p1, p2), expected)
 
+    def test_rs_encode(self):
+        test_cases = [
+            # Standard QR code tutorial example: Hello World
+            (
+                [32, 91, 11, 120, 209, 114, 220, 77, 67, 64, 236, 17, 236, 17, 236, 17],
+                10,
+                [196, 35, 39, 119, 235, 215, 231, 226, 93, 23]
+            ),
+            # Simple test case
+            (
+                [1, 2, 3],
+                5,
+                [116, 159, 107, 177, 49]
+            ),
+            # Zeroes edge case
+            (
+                [0, 0, 0],
+                5,
+                [0, 0, 0, 0, 0]
+            )
+        ]
+        for data, nsym, expected in test_cases:
+            with self.subTest(data=data, nsym=nsym):
+                self.assertEqual(qr.rs_encode(data, nsym), expected)
+
     def test_rs_generator_poly(self):
         test_cases = [
             (1, [1, 1]),
