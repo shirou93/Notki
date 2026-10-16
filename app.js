@@ -3838,6 +3838,29 @@
     }
   }, true);
 
+  function setTaskListsState(root, completedList, saveFunc) {
+    root.addEventListener('change', (e) => {
+      if (!e.target.matches('input.task-checkbox')) return;
+      const li = e.target.closest('li');
+      if (e.target.checked) {
+        completedList.appendChild(li);
+      } else {
+        const targetList = root.querySelector('ul.task-list:not(.task-list-completed)') || root.insertBefore(document.createElement('ul'), completedList);
+        targetList.classList.add('task-list');
+        targetList.appendChild(li);
+      }
+      saveFunc();
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const root = document.getElementById('task-list-root');
+    const completedList = document.getElementById('completed-list');
+    if (root && completedList) {
+      setTaskListsState(root, completedList, scheduleSave);
+    }
+  });
+
   // Expose internals for testing
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -3846,7 +3869,8 @@
       tableCell,
       createIconSvg,
       saveCachedUser,
-      getCachedUser
+      getCachedUser,
+      setTaskListsState
     };
   }
 })();
