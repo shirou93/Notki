@@ -191,9 +191,9 @@
         </div>
       </div>
       <div class="admin-security-controls">
-        <div class="admin-security-row">
-          <label class="field-label" for="admin-session-days" data-i18n="admin.security.sessionDays">Session duration (days, default 30)</label>
-          <input class="auth-input" id="admin-session-days" type="number" min="1" max="3650" value="30" style="max-width: 150px;">
+        <div class="admin-security-row" style="flex-direction: row; align-items: center; gap: 10px;">
+          <label class="field-label" for="admin-session-days" data-i18n="admin.security.sessionDays" style="margin: 0;">Session duration (days, default 30)</label>
+          <input class="auth-input" id="admin-session-days" type="number" min="1" max="3650" value="30" style="max-width: 150px; margin: 0;">
         </div>
       </div>
       <div class="admin-security-controls">
@@ -202,6 +202,7 @@
           <input class="auth-input" id="admin-announcement" type="text" placeholder="e.g. Patching in progress..." data-i18n-placeholder="admin.security.announcementPlaceholder" maxlength="255">
         </div>
       </div>
+      <button class="button-primary" id="admin-security-apply" type="button" style="margin-top: 12px;" data-i18n="admin.security.apply">Apply</button>
     </section>
 
     <section class="admin-section">
@@ -435,6 +436,8 @@
           <option value="7">30 pt</option>
         </select>
         <span class="format-separator" aria-hidden="true"></span>
+        <button class="format-tool" type="button" data-command="undo" aria-label="Undo" title="Undo" data-i18n-aria-label="editor.undo" data-i18n-title="editor.undo">↶</button>
+        <button class="format-tool" type="button" data-command="redo" aria-label="Redo" title="Redo" data-i18n-aria-label="editor.redo" data-i18n-title="editor.redo">↷</button>
         <button class="format-tool" type="button" data-command="bold" aria-label="Bold" title="Bold" data-i18n-aria-label="editor.bold" data-i18n-title="editor.bold"><strong>B</strong></button>
         <button class="format-tool" type="button" data-command="italic" aria-label="Italic" title="Italic" data-i18n-aria-label="editor.italic" data-i18n-title="editor.italic"><em>I</em></button>
         <button class="format-tool" type="button" data-command="underline" aria-label="Underline" title="Underline" data-i18n-aria-label="editor.underline" data-i18n-title="editor.underline"><span class="underline-icon">U</span></button>

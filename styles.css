@@ -210,7 +210,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .action-icon svg { width: 1.15em; height: 1.15em; display: block; }
 .search-box { width: min(288px, 30vw); height: 37px; display: flex; align-items: center; justify-content: flex-start; gap: 9px; padding: 0 10px; border: 1px solid #edf0ec; border-radius: 6px; background: #f4f7f3; color: #78837d; }
 .search-icon { font-size: 20px; line-height: 1; transform: rotate(-20deg); user-select: none; pointer-events: none; }
-.search-box input { flex: 0 1 auto; min-width: 0; padding: 0; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 12px; text-align: left; }
+.search-box input { flex: 1 1 0%; min-width: 0; padding: 0; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 12px; text-align: left; }
 .search-box input::placeholder { color: #a5b2a9; }
 .search-box kbd { flex: 0 0 auto; padding: 3px 4px; border: 1px solid #edf0ed; border-radius: 3px; color: #9aa49d; font-family: var(--sans); font-size: 9px; user-select: none; pointer-events: none; }
 .language-picker { display: inline-flex; align-items: center; }
