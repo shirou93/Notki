@@ -3035,19 +3035,6 @@
     elements.panel.classList.add(`color-${activeColor}`);
   }
 
-  async function shareNote(note) {
-    const copy = { title: note.title, body: note.body, bodyFormat: note.bodyFormat === 1 ? 1 : 0, color: note.color, tags: note.tags || [] };
-    const encoded = encodeBase64Url(JSON.stringify(copy));
-    const url = new URL(window.location.href);
-    url.hash = `share=${encoded}`;
-    try {
-      await navigator.clipboard.writeText(url.toString());
-      showToast(t('shared.copied'));
-    } catch {
-      showToast(t('shared.copyFailed'));
-    }
-  }
-
   function readSharedNote() {
     const match = window.location.hash.match(/^#share=([A-Za-z0-9_-]+)$/);
     if (!match) return;
