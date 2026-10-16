@@ -132,6 +132,29 @@ class TestQRGenerator(unittest.TestCase):
         self.assertEqual(qr.evaluate_penalty(m, size), 703)
 
 
+    def test_gf_mul(self):
+        # Zero multiplication
+        self.assertEqual(qr.gf_mul(0, 5), 0)
+        self.assertEqual(qr.gf_mul(7, 0), 0)
+        self.assertEqual(qr.gf_mul(0, 0), 0)
+
+        # Identity multiplication
+        self.assertEqual(qr.gf_mul(1, 10), 10)
+        self.assertEqual(qr.gf_mul(25, 1), 25)
+
+        # Commutative property
+        self.assertEqual(qr.gf_mul(5, 7), qr.gf_mul(7, 5))
+
+        # Known values
+        # 2 * 3 = 6
+        self.assertEqual(qr.gf_mul(2, 3), 6)
+        # 3 * 4 = 12
+        self.assertEqual(qr.gf_mul(3, 4), 12)
+        # 128 * 2 = 29
+        self.assertEqual(qr.gf_mul(128, 2), 29)
+        # 255 * 255 = 226
+        self.assertEqual(qr.gf_mul(255, 255), 226)
+
     def test_rs_poly_mul(self):
         test_cases = [
             # Identity polynomial
