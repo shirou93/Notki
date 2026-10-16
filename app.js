@@ -1895,22 +1895,21 @@
       dragState.card.classList.add('is-dragging');
       document.body.classList.add('is-dragging-note');
       const note = notes.find(item => item.id === dragState.noteId);
-      const preview = document.createElement('div');
-      preview.className = 'note-drag-preview';
+      const preview = dragState.card.cloneNode(true);
+      preview.className = 'note-drag-preview note-card';
+      preview.classList.remove('is-dragging', 'is-swiping');
+      const previewInner = $('.card-inner', preview);
+      if (previewInner) previewInner.style.transform = '';
+      const swipeLeft = $('.card-swipe-left', preview);
+      const swipeRight = $('.card-swipe-right', preview);
+      if (swipeLeft) swipeLeft.remove();
+      if (swipeRight) swipeRight.remove();
       if (note && COLORS.includes(note.color)) preview.classList.add(`color-${note.color}`);
       else preview.classList.add('color-default');
       preview.setAttribute('aria-hidden', 'true');
-      const title = document.createElement('strong');
-      title.textContent = note?.title || t('editor.untitled');
-      const body = document.createElement('span');
-      body.className = 'card-body';
-
-      if (note && note.bodyFormat === 1 && note.body) {
-        body.innerHTML = sanitizeRichHtml(note.body);
-      } else {
-        body.textContent = (note ? noteText(note) : '') || t('editor.emptyNote');
-      }
-      preview.append(title, body);
+      const rect = dragState.card.getBoundingClientRect();
+      preview.style.width = `${rect.width}px`;
+      preview.style.height = `${rect.height}px`;
       document.body.append(preview);
       dragState.preview = preview;
       captureSlots();
@@ -1923,7 +1922,7 @@
       if (!dragState || !dragPoint) return;
       const { x, y } = dragPoint;
       const previewOffset = y > 115 ? -100 : 16;
-      dragState.preview.style.transform = `translate3d(${x + 16}px, ${y + previewOffset}px, 0)`;
+      dragState.preview.style.transform = `translate3d(${x + 16}px, ${y + previewOffset}px, 0) rotate(3deg)`;
       updateDropGap(x, y);
     });
   }
