@@ -147,6 +147,7 @@
 
       <section class="page-heading">
         <div><p class="eyebrow" id="note-count-label" data-i18n="page.countLabel">YOUR CALM, YOUR NOTES</p><h1 id="page-title">All notes<span class="heading-period">.</span></h1></div>
+        <div id="page-heading-actions"></div>
       </section>
 
       <section class="capture-wrap" aria-label="Quick note" data-i18n-aria-label="capture.aria">
@@ -163,6 +164,7 @@
         <div class="notes-grid" id="pinned-grid"></div>
         <div class="section-label" id="other-label" hidden><span id="other-label-text" data-i18n="section.other">OTHER</span><span class="section-rule"></span></div>
         <div class="notes-grid" id="notes-grid"></div>
+        <div id="timeline-area" hidden></div>
         <div class="empty-state" id="empty-state" hidden>
           <div class="empty-art" aria-hidden="true"><span class="empty-sheet"></span><span class="empty-spark">✳</span></div>
           <h2 id="empty-title">A good thought starts here.</h2>
@@ -454,7 +456,10 @@
       <div class="editor-meta"><span id="editor-date"></span><span class="meta-separator">·</span><span id="editor-words">0 words</span></div>
       <div class="editor-divider"></div>
       <div class="field-label" data-i18n="editor.dueDate">DUE DATE / DAILY PLAN</div>
-      <input class="auth-input" id="note-due-date" type="datetime-local" style="margin-bottom: 12px; font-size: 13px;">
+      <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
+        <input class="auth-input" id="note-due-date" type="datetime-local" style="flex: 1; font-size: 13px;">
+        <button type="button" class="button-secondary" id="editor-add-cal-btn" style="height: 42px; padding: 0 10px; font-size: 12px; white-space: nowrap;" title="Add to calendar" data-i18n-title="card.addToCalendar">📅</button>
+      </div>
       <div class="field-label labels-label-row"><span data-i18n="editor.tags">TAGS</span> <button type="button" class="icon-button labels-edit-button" id="edit-labels" aria-label="Edit labels" title="Edit labels" data-i18n-aria-label="editor.editLabels" data-i18n-title="editor.editLabels">✎</button></div>
       <div class="labels-container" id="note-labels"></div>
       <div class="field-label color-label" data-i18n="editor.color">NOTE COLOR</div>
@@ -489,7 +494,7 @@
         <div class="card-topline"><span class="card-date"></span><div class="card-tools"><button class="card-share" type="button" aria-label="Share note" title="Share link" data-i18n-aria-label="editor.share" data-i18n-title="editor.shareTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button><button class="card-drag" type="button" aria-label="Reorder note" title="Drag to reorder" data-i18n-aria-label="card.drag" data-i18n-title="card.dragTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></button><button class="card-pin" type="button" aria-label="Pin note" title="Pin" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><path d="M10 3v6l-3 3v2h10v-2l-3-3V3"/><path d="M12 14v7"/></svg></button></div></div>
         <h2 class="card-title"></h2>
         <p class="card-body"></p>
-        <div class="card-bottom"><div class="card-tags"></div></div>
+        <div class="card-bottom"><div class="card-due"></div><div class="card-tags"></div></div>
       </div>
     </article>
   </template>
