@@ -2152,5 +2152,18 @@ class TestVerifyPassword(unittest.TestCase):
                 self.assertIs(server.verify_password("secret_password_123", encoded_str), expected)
 
 
+class TestGenerateTOTPSecret(unittest.TestCase):
+    def test_generate_totp_secret_properties(self):
+        secret = server.generate_totp_secret()
+        self.assertIsInstance(secret, str)
+        self.assertEqual(len(secret), 16)
+        valid_alphabet = set('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567')
+        self.assertTrue(set(secret).issubset(valid_alphabet))
+
+    def test_generate_totp_secret_uniqueness(self):
+        secrets_set = {server.generate_totp_secret() for _ in range(20)}
+        self.assertEqual(len(secrets_set), 20)
+
+
 if __name__ == '__main__':
     unittest.main()
