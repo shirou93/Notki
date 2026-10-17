@@ -33,6 +33,7 @@ window.notkiTranslations.pl = {
   'nav.aria': 'Nawigacja',
   'nav.viewsAria': 'Widoki notatek',
   'nav.all': 'Wszystkie',
+  'nav.dailyPlan': 'Plan Dnia',
   'nav.pinned': 'Przypięte',
   'nav.archive': 'Archiwum',
   'nav.trash': 'Kosz',
@@ -46,6 +47,7 @@ window.notkiTranslations.pl = {
   'nav.syncFailed': 'Nie udało się zsynchronizować z serwerem: {message}',
 
   'view.all': 'Wszystkie notatki',
+  'view.dailyPlan': 'Plan dnia',
   'view.pinned': 'Przypięte',
   'view.archive': 'Archiwum',
   'view.trash': 'Kosz',
@@ -184,6 +186,8 @@ window.notkiTranslations.pl = {
 
   'empty.all.title': 'Tu zaczyna się dobra myśl.',
   'empty.all.copy': 'Zapisz pierwszą notatkę. Będzie czekać na Ciebie właśnie tutaj.',
+  'empty.dailyPlan.title': 'Brak zaplanowanych zadań.',
+  'empty.dailyPlan.copy': 'Nie masz jeszcze notatek z ustawionym terminem na ten dzień.',
   'empty.pinned.title': 'Nic tu jeszcze nie ma.',
   'empty.pinned.copy': 'Przypnij ważną notatkę, aby mieć ją zawsze pod ręką.',
   'empty.archive.title': 'Archiwum jest puste.',
@@ -232,6 +236,7 @@ window.notkiTranslations.pl = {
   'editor.clearFormat': 'Wyczyść formatowanie',
   'editor.bodyPlaceholder': 'Zacznij pisać...',
   'editor.progressLabel': 'POSTĘP ZADAŃ',
+  'editor.dueDate': 'TERMIN / PLAN DNIA',
   'editor.tags': 'ETYKIETY',
   'editor.editLabels': 'Edytuj etykiety',
   'editor.tagsPlaceholder': 'np. praca, pomysły',
@@ -266,6 +271,7 @@ window.notkiTranslations.pl = {
   'editor.deletedToast': 'Notatka usunięta na stałe.',
   'editor.saveFailed': 'Nie udało się zapisać notatek: {message}',
 
+  'card.dueDate': 'Termin: {date}',
   'card.drag': 'Zmień kolejność notatki',
   'card.dragTitle': 'Przeciągnij, aby zmienić kolejność',
 
