@@ -2124,7 +2124,12 @@
 
     if (view === 'dailyPlan') {
       return filtered.sort((a, b) => {
-        return (Date.parse(a.dueDate) || 0) - (Date.parse(b.dueDate) || 0);
+        const timeA = Date.parse(a.dueDate) || 0;
+        const timeB = Date.parse(b.dueDate) || 0;
+        if (currentSort === 'newest') {
+          return timeB - timeA;
+        }
+        return timeA - timeB;
       });
     }
 
@@ -2180,6 +2185,14 @@
   }
 
   function renderSharedView() {
+    elements.pinnedGrid.hidden = false;
+    elements.grid.hidden = false;
+    const timelineEl = $('#timeline-area');
+    if (timelineEl) {
+      timelineEl.replaceChildren();
+      timelineEl.hidden = true;
+    }
+
     const sharedWithMe = sharedNotes.filter(note => {
       if (!query) return true;
       const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')} ${note.ownerEmail || ''}`.toLocaleLowerCase();
@@ -2225,6 +2238,144 @@
     elements.otherLabelText.textContent = t('section.other');
 
     const visible = filteredNotes();
+
+    if (view === 'dailyPlan') {
+      elements.pinnedLabel.hidden = true;
+      elements.otherLabel.hidden = true;
+      elements.pinnedGrid.replaceChildren();
+      elements.grid.replaceChildren();
+      elements.pinnedGrid.hidden = true;
+      elements.grid.hidden = true;
+
+      const timelineEl = $('#timeline-area');
+      if (timelineEl) {
+        timelineEl.replaceChildren();
+        timelineEl.hidden = visible.length === 0;
+
+        if (visible.length > 0) {
+          const now = new Date();
+          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+          const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+          const tomorrowStart = new Date(todayStart);
+          tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+          const tomorrowEnd = new Date(todayEnd);
+          tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
+
+          const dayOfWeek = todayStart.getDay() === 0 ? 7 : todayStart.getDay();
+          const daysUntilEndOfWeek = 7 - dayOfWeek;
+          const endOfWeek = new Date(todayEnd);
+          endOfWeek.setDate(endOfWeek.getDate() + daysUntilEndOfWeek);
+
+          const endOfNextWeek = new Date(endOfWeek);
+          endOfNextWeek.setDate(endOfNextWeek.getDate() + 7);
+
+          const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+          const endOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59, 999);
+
+          const groups = {
+            overdue: [],
+            today: [],
+            tomorrow: [],
+            thisWeek: [],
+            nextWeek: [],
+            thisMonth: [],
+            nextMonth: [],
+            later: []
+          };
+
+          visible.forEach(note => {
+            const d = new Date(note.dueDate);
+            if (Number.isNaN(d.getTime())) return;
+            if (d < todayStart) {
+              groups.overdue.push(note);
+            } else if (d <= todayEnd) {
+              groups.today.push(note);
+            } else if (d <= tomorrowEnd) {
+              groups.tomorrow.push(note);
+            } else if (d <= endOfWeek) {
+              groups.thisWeek.push(note);
+            } else if (d <= endOfNextWeek) {
+              groups.nextWeek.push(note);
+            } else if (d <= endOfMonth) {
+              groups.thisMonth.push(note);
+            } else if (d <= endOfNextMonth) {
+              groups.nextMonth.push(note);
+            } else {
+              groups.later.push(note);
+            }
+          });
+
+          const groupOrder = currentSort === 'newest'
+            ? ['later', 'nextMonth', 'thisMonth', 'nextWeek', 'thisWeek', 'tomorrow', 'today', 'overdue']
+            : ['overdue', 'today', 'tomorrow', 'thisWeek', 'nextWeek', 'thisMonth', 'nextMonth', 'later'];
+
+          groupOrder.forEach(key => {
+            const items = groups[key];
+            if (items && items.length > 0) {
+              const labelDiv = document.createElement('div');
+              labelDiv.className = 'section-label';
+              const spanText = document.createElement('span');
+              spanText.textContent = t(`section.${key}`);
+              const spanRule = document.createElement('span');
+              spanRule.className = 'section-rule';
+              labelDiv.appendChild(spanText);
+              labelDiv.appendChild(spanRule);
+
+              const gridDiv = document.createElement('div');
+              gridDiv.className = 'notes-grid';
+              gridDiv.replaceChildren(...items.map(makeCard));
+
+              timelineEl.appendChild(labelDiv);
+              timelineEl.appendChild(gridDiv);
+            }
+          });
+        }
+      }
+
+      const headingActions = $('#page-heading-actions');
+      if (headingActions) {
+        headingActions.replaceChildren();
+        if (visible.length > 0) {
+          const exportBtn = document.createElement('button');
+          exportBtn.type = 'button';
+          exportBtn.className = 'button-secondary';
+          exportBtn.style.fontSize = '12px';
+          exportBtn.style.padding = '6px 12px';
+          exportBtn.innerHTML = `📅 <span>${t('dailyPlan.exportCalendar')}</span>`;
+          exportBtn.addEventListener('click', () => {
+            downloadIcsFile('plan-dnia.ics', visible);
+          });
+          headingActions.appendChild(exportBtn);
+        }
+      }
+
+      elements.empty.hidden = visible.length !== 0;
+      elements.countLabel.textContent = query
+        ? t('count.searchResults', { count: visible.length })
+        : `${visible.length} ${pluralText('count.notesLabel', visible.length)}`;
+      elements.footerCount.textContent = `${visible.length} ${pluralText('footer.count', visible.length)}`;
+      updateEmptyState();
+      if (activeId) {
+        const current = notes.find(note => note.id === activeId) || sharedNotes.find(note => note.id === activeId);
+        if (current) updateEditorActions(current);
+      }
+      return;
+    }
+
+    const headingActions = $('#page-heading-actions');
+    if (headingActions) {
+      headingActions.replaceChildren();
+    }
+
+    elements.pinnedGrid.hidden = false;
+    elements.grid.hidden = false;
+    const timelineEl = $('#timeline-area');
+    if (timelineEl) {
+      timelineEl.replaceChildren();
+      timelineEl.hidden = true;
+    }
+
     const splitPinned = view === 'all' && !query;
     const pinnedItems = splitPinned ? visible.filter(note => note.pinned) : [];
     const regularItems = splitPinned ? visible.filter(note => !note.pinned) : visible;
@@ -2374,28 +2525,97 @@
     }
   }
 
-  function setupCardTags(card, note, shared, readOnly) {
-    const tags = $('.card-tags', card);
-    if (note.dueDate) {
-      const dueBadge = document.createElement('span');
-      dueBadge.className = 'card-tag card-due-badge';
-      dueBadge.style.fontWeight = '600';
-      dueBadge.textContent = t('card.dueDate', { date: window.i18n.formatDateTime(note.dueDate) });
-      tags.append(dueBadge);
-    }
-    if (shared) {
-      const badge = document.createElement('span');
-      badge.className = `card-owner${readOnly ? ' is-read-only' : ''}`;
-      badge.textContent = readOnly ? t('share.readOnlyBadge') : t('share.writeBadge');
-      badge.title = t('share.ownerLabel', { email: note.ownerEmail });
-      tags.append(badge);
-    }
-    (note.tags || []).slice(0, 3).forEach(tag => {
-      const label = document.createElement('span');
-      label.className = 'card-tag';
-      label.textContent = tag;
-      tags.append(label);
+  function formatIcsDate(d) {
+    if (!d || Number.isNaN(d.getTime())) return '';
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
+  }
+
+  function downloadIcsFile(filename, notesList) {
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Notki Notebook//EN',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH'
+    ];
+
+    const nowIcs = formatIcsDate(new Date());
+
+    notesList.forEach(note => {
+      if (!note.dueDate) return;
+      const start = new Date(note.dueDate);
+      if (Number.isNaN(start.getTime())) return;
+      const end = new Date(start.getTime() + 3600000);
+      const uid = `notki-${note.id}@notki.local`;
+      const title = (note.title || t('editor.untitled')).replace(/[\r\n]+/g, ' ');
+      const description = (noteText(note) || '').replace(/[\r\n]+/g, '\\n');
+
+      lines.push('BEGIN:VEVENT');
+      lines.push(`UID:${uid}`);
+      lines.push(`DTSTAMP:${nowIcs}`);
+      lines.push(`DTSTART:${formatIcsDate(start)}`);
+      lines.push(`DTEND:${formatIcsDate(end)}`);
+      lines.push(`SUMMARY:${title}`);
+      if (description) lines.push(`DESCRIPTION:${description}`);
+      lines.push('END:VEVENT');
     });
+
+    lines.push('END:VCALENDAR');
+
+    const content = lines.join('\r\n');
+    const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function setupCardTags(card, note, shared, readOnly) {
+    const dueContainer = $('.card-due', card);
+    const tagsContainer = $('.card-tags', card);
+
+    if (dueContainer) {
+      dueContainer.replaceChildren();
+      if (note.dueDate) {
+        const dueBadge = document.createElement('span');
+        dueBadge.className = 'card-due-badge';
+        dueBadge.textContent = t('card.dueDate', { date: window.i18n.formatDateTime(note.dueDate) });
+        dueContainer.appendChild(dueBadge);
+
+        const calBtn = document.createElement('button');
+        calBtn.type = 'button';
+        calBtn.className = 'card-cal-btn';
+        calBtn.innerHTML = `📅 <span>${t('card.addToCalendar')}</span>`;
+        calBtn.title = t('card.addToCalendar');
+        calBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          downloadIcsFile(`${note.title || 'note'}.ics`, [note]);
+        });
+        dueContainer.appendChild(calBtn);
+      }
+    }
+
+    if (tagsContainer) {
+      tagsContainer.replaceChildren();
+      if (shared) {
+        const badge = document.createElement('span');
+        badge.className = `card-owner${readOnly ? ' is-read-only' : ''}`;
+        badge.textContent = readOnly ? t('share.readOnlyBadge') : t('share.writeBadge');
+        badge.title = t('share.ownerLabel', { email: note.ownerEmail });
+        tagsContainer.append(badge);
+      }
+      (note.tags || []).slice(0, 3).forEach(tag => {
+        const label = document.createElement('span');
+        label.className = 'card-tag';
+        label.textContent = tag;
+        tagsContainer.append(label);
+      });
+    }
   }
 
   function setupSwipeLabels(card, note) {
@@ -3604,6 +3824,21 @@
       render();
     });
   }
+  const editorAddCalBtn = $('#editor-add-cal-btn');
+  if (editorAddCalBtn) {
+    editorAddCalBtn.addEventListener('click', () => {
+      const dueDateInput = $('#note-due-date');
+      if (!dueDateInput || !dueDateInput.value) return;
+      const tempNote = {
+        id: activeId || 'note',
+        title: elements.noteTitle.value.trim() || t('editor.untitled'),
+        body: serializedEditorBody(),
+        dueDate: dueDateInput.value
+      };
+      downloadIcsFile(`${tempNote.title}.ics`, [tempNote]);
+    });
+  }
+
   [elements.noteTitle, elements.noteBody, $('#note-due-date')].filter(Boolean).forEach(input => input.addEventListener('input', event => {
     if (input === elements.noteBody) {
       normalizeChecklistItemMarkup();
@@ -3984,6 +4219,10 @@
       filteredNotes,
       setupCardDrag,
       makeCard,
+      renderStandardView,
+      render,
+      formatIcsDate,
+      downloadIcsFile,
       getView: () => view,
       setView: (v) => { view = v; },
       getNotes: () => notes,

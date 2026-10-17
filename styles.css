@@ -289,7 +289,8 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .card-drag svg, .card-pin svg, .card-share svg { display: block; width: 1em; height: 1em; pointer-events: none; }
 .card-drag { touch-action: none; cursor: var(--drag-cursor); }
 .note-card:hover .card-drag, .note-card:hover .card-pin, .note-card:hover .card-share, .card-pin.is-pinned, .card-share.is-shared { opacity: 1; }
-.card-drag:hover { color: #fff; background: var(--forest); }
+.card-drag:hover, .card-drag:focus, .card-drag:active { color: var(--ink); background: rgba(0, 0, 0, 0.08); outline: none; }
+:root[data-theme="dark"] .card-drag:hover, :root[data-theme="dark"] .card-drag:focus, :root[data-theme="dark"] .card-drag:active { color: var(--ink); background: rgba(255, 255, 255, 0.12); }
 .card-pin:hover, .card-share:hover { background: #ffffff8c; }
 .card-share.is-shared { color: #275544; background: #e6f0e3; }
 .card-share.is-shared:hover { background: #d8e8d3; }
@@ -331,7 +332,15 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .card-body .task-list-completed { margin-left: 0; }
 .card-body .task-list-completed .task-text { color: #87928a; text-decoration: line-through; }
 .card-body .task-checkbox { width: 18px; height: 18px; flex: 0 0 18px; margin: 0; accent-color: #52754e; vertical-align: middle; cursor: pointer; }
-.card-bottom { display: flex; align-items: end; justify-content: space-between; gap: 5px; margin-top: auto; }
+.card-bottom { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
+.card-due { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.card-due:empty { display: none; }
+.card-due-badge { padding: 3px 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.06); color: var(--ink); border: 1px solid rgba(0, 0, 0, 0.12); font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+:root[data-theme="dark"] .card-due-badge { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.15); }
+.card-cal-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 3px 7px; border: 1px solid rgba(0,0,0,0.12); border-radius: 4px; background: transparent; color: var(--ink); font-size: 10px; font-weight: 500; cursor: pointer; transition: background 0.15s; }
+.card-cal-btn:hover { background: rgba(0,0,0,0.08); }
+:root[data-theme="dark"] .card-cal-btn { border-color: rgba(255,255,255,0.18); }
+:root[data-theme="dark"] .card-cal-btn:hover { background: rgba(255,255,255,0.12); }
 .card-tags { display: flex; flex-wrap: wrap; gap: 5px; }
 .card-tag { padding: 3px 7px; border-radius: 3px; background: #ffffff9c; color: #63746a; font-size: 9px; }
 .card-owner { padding: 3px 7px; border-radius: 3px; background: #e8f0e0; color: #4f6b45; font-size: 9px; font-weight: 700; }
@@ -417,6 +426,8 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .editor-panel .font-size-select { background-color: transparent; border-color: rgba(0, 0, 0, 0.12); color: var(--ink); }
 .editor-panel .font-size-select:hover { background-color: rgba(0, 0, 0, 0.06); border-color: rgba(0, 0, 0, 0.2); }
 .editor-panel .font-size-select option { background-color: var(--paper); color: var(--ink); }
+.editor-panel .auth-input { background-color: transparent; border-color: rgba(0, 0, 0, 0.15); color: var(--ink); }
+.editor-panel .auth-input:focus { border-color: rgba(0, 0, 0, 0.3); outline: none; }
 .editor-panel.color-default .font-size-select option { background-color: var(--note-default); }
 .editor-panel.color-mint .font-size-select option { background-color: var(--mint); }
 .editor-panel.color-lemon .font-size-select option { background-color: var(--lemon); }
@@ -431,6 +442,8 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 :root[data-theme="dark"] .editor-panel .font-size-select { background-color: transparent; border-color: rgba(255, 255, 255, 0.15); color: var(--ink); }
 :root[data-theme="dark"] .editor-panel .font-size-select:hover { background-color: rgba(255, 255, 255, 0.1); }
 :root[data-theme="dark"] .editor-panel .format-tool:hover, :root[data-theme="dark"] .editor-panel .format-tool.is-active { color: var(--ink); background-color: rgba(255, 255, 255, 0.12); }
+:root[data-theme="dark"] .editor-panel .auth-input { background-color: transparent; border-color: rgba(255, 255, 255, 0.18); color: var(--ink); color-scheme: dark; }
+:root[data-theme="dark"] .editor-panel .auth-input:focus { border-color: rgba(255, 255, 255, 0.35); }
 .underline-icon { text-decoration: underline; text-underline-offset: 2px; }
 .format-separator { width: 1px; height: 20px; margin: 0 3px; background: #e4e9e4; }
 .editor-body { width: 100%; min-height: min(43vh, 390px); margin-top: 18px; padding: 0; overflow-y: auto; overflow-wrap: anywhere; outline: 0; color: #414b44; background: transparent; font-size: 14px; line-height: 1.85; caret-color: #0066cc; }

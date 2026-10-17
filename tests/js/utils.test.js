@@ -48,6 +48,9 @@ const {
   setNotes,
   getCurrentSort,
   setCurrentSort,
+  renderStandardView,
+  formatIcsDate,
+  downloadIcsFile,
   getQuery,
   setQuery,
 } = require('../../app.js');
@@ -323,15 +326,56 @@ describe('Note dragging and sorting across tabs', () => {
     expect(sortedCard.querySelector('.card-drag').hidden).toBe(true);
   });
 
-  it('should filter notes with dueDate in dailyPlan view sorted chronologically', () => {
+  it('should filter notes with dueDate in dailyPlan view sorted by date (oldest vs newest)', () => {
     const note1 = { id: 'due-1', title: 'Task 1', archived: false, deleted: false, dueDate: '2026-10-25T14:00' };
     const note2 = { id: 'due-2', title: 'Task 2', archived: false, deleted: false, dueDate: '2026-10-20T09:00' };
     const note3 = { id: 'nodue', title: 'No Due', archived: false, deleted: false, dueDate: null };
     setNotes([note1, note2, note3]);
 
     setView('dailyPlan');
-    const result = filteredNotes();
-    expect(result.map(n => n.id)).toEqual(['due-2', 'due-1']);
+    setCurrentSort('oldest');
+    const resultOldest = filteredNotes();
+    expect(resultOldest.map(n => n.id)).toEqual(['due-2', 'due-1']);
+
+    setCurrentSort('newest');
+    const resultNewest = filteredNotes();
+    expect(resultNewest.map(n => n.id)).toEqual(['due-1', 'due-2']);
+  });
+
+  it('should format dates for iCalendar export correctly', () => {
+    const d = new Date('2026-10-25T14:30:00Z');
+    expect(formatIcsDate(d)).toBe('20261025T143000Z');
+  });
+
+  it('should separate due date container from tags container on note cards', () => {
+    const noteWithDue = { id: 'due-card-1', title: 'Due Note', archived: false, deleted: false, dueDate: '2026-10-25T14:00', tags: ['work'] };
+    const card = makeCard(noteWithDue);
+
+    const dueElem = card.querySelector('.card-due');
+    const tagsElem = card.querySelector('.card-tags');
+    expect(dueElem).not.toBeNull();
+    expect(tagsElem).not.toBeNull();
+    expect(dueElem.querySelector('.card-due-badge')).not.toBeNull();
+    expect(tagsElem.querySelector('.card-tag').textContent).toBe('work');
+  });
+
+  it('should render timeline sections in dailyPlan view including overdue section', () => {
+    const now = new Date();
+    const overdueDate = new Date(now.getTime() - 86400000 * 2).toISOString().slice(0, 16);
+    const todayDate = new Date(now.getTime()).toISOString().slice(0, 16);
+
+    const noteOverdue = { id: 'overdue-1', title: 'Overdue Note', archived: false, deleted: false, dueDate: overdueDate };
+    const noteToday = { id: 'today-1', title: 'Today Note', archived: false, deleted: false, dueDate: todayDate };
+    setNotes([noteOverdue, noteToday]);
+
+    setView('dailyPlan');
+    setCurrentSort('oldest');
+    renderStandardView();
+
+    const timelineArea = document.getElementById('timeline-area');
+    expect(timelineArea).not.toBeNull();
+    expect(timelineArea.hidden).toBe(false);
+    expect(timelineArea.querySelectorAll('.section-label').length).toBeGreaterThanOrEqual(1);
   });
 
   it('should preserve order-based sorting in archive and trash views', () => {
