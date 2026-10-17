@@ -1190,6 +1190,59 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertTrue(invite['url'].startswith('https://notki.multi.proxy/?invite='))
 
+    def test_disable_user_2fa_cli(self):
+        user_client = self.register_user('cli2fa@example.com', 'user-passphrase-123')
+        # Setup 2FA (TOTP and Passkey) for user
+        status, res = self.request(user_client, 'POST', '/api/account/totp')
+        secret = res['secret']
+        code = server.compute_totp_code(secret)
+        self.request(user_client, 'POST', '/api/account/totp/verify', {'code': code})
+
+        # Insert dummy passkey directly into DB
+        with server.database() as conn:
+            user_row = conn.execute("SELECT id FROM users WHERE email = 'cli2fa@example.com'").fetchone()
+            user_id = user_row['id']
+            conn.execute('INSERT INTO passkeys (id, user_id, name, public_key_pem, created_at) VALUES (?, ?, ?, ?, ?)', ('pk-123', user_id, 'My Key', 'pem', '2026-01-01T00:00:00Z'))
+
+        status, twofa_info = self.request(user_client, 'GET', '/api/account/2fa')
+        self.assertTrue(twofa_info['hasTotp'])
+        self.assertEqual(len(twofa_info['passkeys']), 1)
+
+        # Disable 2FA via CLI using email
+        server.disable_user_2fa_cli('cli2fa@example.com')
+
+        status, twofa_info = self.request(user_client, 'GET', '/api/account/2fa')
+        self.assertFalse(twofa_info['hasTotp'])
+        self.assertEqual(len(twofa_info['passkeys']), 0)
+
+        # Re-enable TOTP
+        status, res = self.request(user_client, 'POST', '/api/account/totp')
+        secret = res['secret']
+        code = server.compute_totp_code(secret)
+        self.request(user_client, 'POST', '/api/account/totp/verify', {'code': code})
+
+        status, twofa_info = self.request(user_client, 'GET', '/api/account/2fa')
+        self.assertTrue(twofa_info['hasTotp'])
+
+        # Get user ID
+        with server.database() as conn:
+            user_row = conn.execute("SELECT id FROM users WHERE email = 'cli2fa@example.com'").fetchone()
+            user_id = user_row['id']
+
+        # Disable 2FA via CLI using user ID
+        server.disable_user_2fa_cli(str(user_id))
+
+        status, twofa_info = self.request(user_client, 'GET', '/api/account/2fa')
+        self.assertFalse(twofa_info['hasTotp'])
+
+        # Test empty input handling
+        with self.assertRaises(SystemExit):
+            server.disable_user_2fa_cli('   ')
+
+        # Test non-existent user handling
+        with self.assertRaises(SystemExit):
+            server.disable_user_2fa_cli('nonexistent@example.com')
+
 
 class FirstRunSetupTests(unittest.TestCase):
     def setUp(self):
