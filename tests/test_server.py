@@ -2336,5 +2336,59 @@ class TestCreateServerBackupTemporaryFile(unittest.TestCase):
         self.assertFalse(os.path.exists(temp_files_created[0]))
 
 
+class TestClientIPAndProxyTrust(unittest.TestCase):
+    def setUp(self):
+        self.original_env = os.environ.get('NOTKI_TRUST_PROXY')
+
+    def tearDown(self):
+        if self.original_env is None:
+            os.environ.pop('NOTKI_TRUST_PROXY', None)
+        else:
+            os.environ['NOTKI_TRUST_PROXY'] = self.original_env
+
+    def _make_handler(self, client_ip, forwarded_for=None):
+        class DummyHandler(server.NotkiHandler):
+            def __init__(self, ip, fwd):
+                self.client_address = (ip, 12345)
+                self.headers = {}
+                if fwd is not None:
+                    self.headers['X-Forwarded-For'] = fwd
+        return DummyHandler(client_ip, forwarded_for)
+
+    def test_default_ignores_x_forwarded_for(self):
+        os.environ.pop('NOTKI_TRUST_PROXY', None)
+        handler = self._make_handler('192.168.1.50', '203.0.113.195')
+        self.assertEqual(handler.get_client_ip(), '192.168.1.50')
+
+    def test_trust_proxy_boolean_enabled(self):
+        for val in ('1', 'true', 'yes', 'all', '*'):
+            with self.subTest(val=val):
+                os.environ['NOTKI_TRUST_PROXY'] = val
+                handler = self._make_handler('127.0.0.1', '203.0.113.195, 10.0.0.1')
+                self.assertEqual(handler.get_client_ip(), '203.0.113.195')
+
+    def test_trust_proxy_boolean_disabled(self):
+        for val in ('0', 'false', 'no'):
+            with self.subTest(val=val):
+                os.environ['NOTKI_TRUST_PROXY'] = val
+                handler = self._make_handler('127.0.0.1', '203.0.113.195')
+                self.assertEqual(handler.get_client_ip(), '127.0.0.1')
+
+    def test_trust_proxy_ip_and_cidr_filtering(self):
+        os.environ['NOTKI_TRUST_PROXY'] = '10.0.0.1, 192.168.1.0/24'
+
+        # From trusted single IP
+        h1 = self._make_handler('10.0.0.1', '203.0.113.10')
+        self.assertEqual(h1.get_client_ip(), '203.0.113.10')
+
+        # From trusted CIDR range
+        h2 = self._make_handler('192.168.1.50', '203.0.113.20')
+        self.assertEqual(h2.get_client_ip(), '203.0.113.20')
+
+        # From untrusted IP address
+        h3 = self._make_handler('172.16.0.1', '203.0.113.30')
+        self.assertEqual(h3.get_client_ip(), '172.16.0.1')
+
+
 if __name__ == '__main__':
     unittest.main()

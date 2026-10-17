@@ -95,6 +95,7 @@ From the **Admin Panel** under **Server Backups**, you can easily manage server 
 | `NOTKI_DB_PATH` | Path to the SQLite3 database file | `./data/notki.sqlite3` |
 | `NOTKI_BACKUP_DIR` | Directory path for storing JSON backups | `./data/backups` |
 | `NOTKI_ALLOW_REMOTE_SETUP` | Allow first-time setup from remote IP addresses | `0` (`1` in Docker) |
+| `NOTKI_TRUST_PROXY` | Trust `X-Forwarded-For` header for rate limiting (`1`/`true` or IP/CIDR list) | `0` |
 
 > **Reverse Proxies & HTTPS (Cloudflare Tunnel, Nginx, Caddy, Traefik, NPM):**
 > Notki operates natively as an HTTP server and automatically detects reverse proxy forwarding headers (`X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Ssl`). It handles secure cookie flags and generates valid HTTPS invite links without extra SSL configuration inside the app.
