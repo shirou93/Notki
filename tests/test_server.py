@@ -607,7 +607,7 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(res.get('latestVersion'), '0.1.6.0')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.90', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.90'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.5.91', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.91'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -633,7 +633,7 @@ class ServerFlowTests(unittest.TestCase):
             mock_build_opener.return_value = mock_opener
 
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.90'
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.91'
             })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
@@ -678,10 +678,10 @@ class ServerFlowTests(unittest.TestCase):
 
         # Test beta update replaces ALPHA or empty badge with BETA
         with unittest.mock.patch('pathlib.Path.exists', return_value=True), \
-             unittest.mock.patch('pathlib.Path.read_text', return_value='<span class="sidebar-version">NOTKI · ALPHA 0.1.5.90</span>'), \
+             unittest.mock.patch('pathlib.Path.read_text', return_value='<span class="sidebar-version">NOTKI · ALPHA 0.1.5.91</span>'), \
              unittest.mock.patch('pathlib.Path.write_text') as mock_write:
             server.NotkiHandler._finalize_update_index_html(dummy_handler, is_beta=True)
-            mock_write.assert_called_once_with('<span class="sidebar-version">NOTKI · BETA 0.1.5.90</span>', encoding='utf-8')
+            mock_write.assert_called_once_with('<span class="sidebar-version">NOTKI · BETA 0.1.5.91</span>', encoding='utf-8')
 
         # Test standard update removes ALPHA/BETA badge and keeps only digits
         with unittest.mock.patch('pathlib.Path.exists', return_value=True), \
