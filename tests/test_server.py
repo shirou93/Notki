@@ -1243,6 +1243,57 @@ class ServerFlowTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             server.disable_user_2fa_cli('nonexistent@example.com')
 
+    def test_disable_all_2fa_cli(self):
+        user1 = self.register_user('u1@example.com', 'passphrase-123-abc')
+        user2 = self.register_user('u2@example.com', 'passphrase-123-xyz')
+
+        # Enable TOTP for user 1
+        status, res = self.request(user1, 'POST', '/api/account/totp')
+        code1 = server.compute_totp_code(res['secret'])
+        self.request(user1, 'POST', '/api/account/totp/verify', {'code': code1})
+
+        # Enable TOTP for user 2
+        status, res = self.request(user2, 'POST', '/api/account/totp')
+        code2 = server.compute_totp_code(res['secret'])
+        self.request(user2, 'POST', '/api/account/totp/verify', {'code': code2})
+
+        # Insert dummy passkeys and set require2FA in DB
+        with server.database() as conn:
+            u1_row = conn.execute("SELECT id FROM users WHERE email = 'u1@example.com'").fetchone()
+            u2_row = conn.execute("SELECT id FROM users WHERE email = 'u2@example.com'").fetchone()
+            conn.execute('INSERT INTO passkeys (id, user_id, name, public_key_pem, created_at) VALUES (?, ?, ?, ?, ?)', ('pk-u1', u1_row['id'], 'Key 1', 'pem', '2026-01-01T00:00:00Z'))
+            conn.execute('INSERT INTO passkeys (id, user_id, name, public_key_pem, created_at) VALUES (?, ?, ?, ?, ?)', ('pk-u2', u2_row['id'], 'Key 2', 'pem', '2026-01-01T00:00:00Z'))
+            conn.execute("INSERT INTO settings (key, value) VALUES ('require2FA', 'true') ON CONFLICT(key) DO UPDATE SET value = 'true'")
+
+        # Create a temp token
+        server.create_temp_2fa_token(u1_row['id'])
+        self.assertGreater(len(server.TEMP_2FA_TOKENS), 0)
+
+        # Call disable_all_2fa_cli
+        server.disable_all_2fa_cli()
+
+        # Check user 1
+        status, info1 = self.request(user1, 'GET', '/api/account/2fa')
+        self.assertFalse(info1['hasTotp'])
+        self.assertEqual(len(info1['passkeys']), 0)
+
+        # Check user 2
+        status, info2 = self.request(user2, 'GET', '/api/account/2fa')
+        self.assertFalse(info2['hasTotp'])
+        self.assertEqual(len(info2['passkeys']), 0)
+
+        # Check require2FA setting in DB
+        with server.database() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key = 'require2FA'").fetchone()
+            self.assertEqual(row['value'], 'false')
+
+        # Check temp tokens cleared
+        self.assertEqual(len(server.TEMP_2FA_TOKENS), 0)
+
+        # Test CLI invocation via main()
+        with unittest.mock.patch('sys.argv', ['server.py', '--disable-all-2fa']):
+            server.main()
+
 
 class FirstRunSetupTests(unittest.TestCase):
     def setUp(self):

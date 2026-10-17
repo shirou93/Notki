@@ -633,6 +633,17 @@ def disable_user_2fa_cli(identifier):
         print(f'Disabled 2FA for user {user["email"]} (ID: {user["id"]}).')
 
 
+def disable_all_2fa_cli():
+    initialize_database()
+    with database() as connection:
+        connection.execute('UPDATE users SET totp_secret = NULL, backup_codes_json = NULL')
+        connection.execute('DELETE FROM passkeys')
+        connection.execute("INSERT INTO settings (key, value) VALUES ('require2FA', 'false') ON CONFLICT(key) DO UPDATE SET value = 'false'")
+    with TEMP_2FA_LOCK:
+        TEMP_2FA_TOKENS.clear()
+    print('Disabled 2FA server-wide for all users.')
+
+
 class APIError(Exception):
     def __init__(self, message, status=400):
         super().__init__(message)
@@ -2269,6 +2280,7 @@ def main():
     parser = argparse.ArgumentParser(description='Notki server with SQLite database.')
     parser.add_argument('--create-admin', action='store_true', help='Create the initial administrator account.')
     parser.add_argument('--disable-2fa', metavar='USER', help='Disable two-factor authentication (2FA) for the specified user email or ID.')
+    parser.add_argument('--disable-all-2fa', action='store_true', help='Completely disable two-factor authentication (2FA) server-wide for all users.')
     parser.add_argument('--host', default=os.environ.get('NOTKI_HOST', '127.0.0.1'))
     parser.add_argument('--port', type=int, default=int(os.environ.get('NOTKI_PORT', '8000')))
     args = parser.parse_args()
@@ -2279,6 +2291,9 @@ def main():
         return
     if args.disable_2fa:
         disable_user_2fa_cli(args.disable_2fa)
+        return
+    if args.disable_all_2fa:
+        disable_all_2fa_cli()
         return
     server = ThreadingHTTPServer((args.host, args.port), NotkiHandler)
     print(f'Notki running at http://{args.host}:{args.port}')
