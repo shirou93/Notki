@@ -339,30 +339,97 @@ def verify_totp_code(secret_b32, code, time_step=30, window=1):
             pass
     return False
 
-def verify_passkey_signature(public_key_pem, sig_bytes, signed_data):
-    pub_file = tempfile.NamedTemporaryFile('wb', delete=False)
-    sig_file = tempfile.NamedTemporaryFile('wb', delete=False)
-    data_file = tempfile.NamedTemporaryFile('wb', delete=False)
+_P256_P = 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF
+_P256_A = _P256_P - 3
+_P256_B = 0x5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B
+_P256_N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
+_P256_G = (
+    0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296,
+    0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5,
+)
+
+def _ecc_point_add(p1, p2):
+    if p1 is None:
+        return p2
+    if p2 is None:
+        return p1
+    x1, y1 = p1
+    x2, y2 = p2
+    if x1 == x2 and y1 != y2:
+        return None
+    if x1 == x2:
+        s = (3 * x1 * x1 + _P256_A) * pow(2 * y1, -1, _P256_P) % _P256_P
+    else:
+        s = (y2 - y1) * pow(x2 - x1, -1, _P256_P) % _P256_P
+    x3 = (s * s - x1 - x2) % _P256_P
+    y3 = (s * (x1 - x3) - y1) % _P256_P
+    return (x3, y3)
+
+def _ecc_point_mul(k, p):
+    res = None
+    for bit in bin(k)[2:]:
+        if res is not None:
+            res = _ecc_point_add(res, res)
+        if bit == '1':
+            res = _ecc_point_add(res, p) if res is not None else p
+    return res
+
+def _decode_der_sig(sig_bytes):
+    if not isinstance(sig_bytes, (bytes, bytearray)) or len(sig_bytes) < 8 or sig_bytes[0] != 0x30:
+        return None, None
     try:
-        pub_file.write(public_key_pem.encode('utf-8'))
-        pub_file.close()
-        sig_file.write(sig_bytes)
-        sig_file.close()
-        data_file.write(signed_data)
-        data_file.close()
-        proc = subprocess.run(
-            ['openssl', 'dgst', '-sha256', '-verify', pub_file.name, '-signature', sig_file.name, data_file.name],
-            capture_output=True
-        )
-        return proc.returncode == 0
+        seq_len = sig_bytes[1]
+        idx = 2
+        if seq_len & 0x80:
+            len_bytes_count = seq_len & 0x7f
+            idx += len_bytes_count
+        if sig_bytes[idx] != 0x02:
+            return None, None
+        r_len = sig_bytes[idx + 1]
+        r_bytes = sig_bytes[idx + 2 : idx + 2 + r_len]
+        idx += 2 + r_len
+        if idx >= len(sig_bytes) or sig_bytes[idx] != 0x02:
+            return None, None
+        s_len = sig_bytes[idx + 1]
+        s_bytes = sig_bytes[idx + 2 : idx + 2 + s_len]
+        r = int.from_bytes(r_bytes, 'big')
+        s = int.from_bytes(s_bytes, 'big')
+        return r, s
+    except Exception:
+        return None, None
+
+def _decode_pub_pem(pem_str):
+    try:
+        lines = [l.strip() for l in str(pem_str or '').strip().splitlines() if l.strip() and not l.startswith('---')]
+        der = base64.b64decode(''.join(lines))
+        if len(der) >= 65:
+            idx = der.find(b'\x04')
+            if idx != -1 and len(der[idx:]) == 65:
+                qx = int.from_bytes(der[idx + 1 : idx + 33], 'big')
+                qy = int.from_bytes(der[idx + 33 : idx + 65], 'big')
+                return qx, qy
+        return None, None
+    except Exception:
+        return None, None
+
+def verify_passkey_signature(public_key_pem, sig_bytes, signed_data):
+    try:
+        qx, qy = _decode_pub_pem(public_key_pem)
+        r, s = _decode_der_sig(sig_bytes)
+        if qx is None or r is None or not (1 <= r < _P256_N) or not (1 <= s < _P256_N):
+            return False
+        if (qy * qy - (qx * qx * qx + _P256_A * qx + _P256_B)) % _P256_P != 0:
+            return False
+        e = int.from_bytes(hashlib.sha256(signed_data).digest(), 'big')
+        w = pow(s, -1, _P256_N)
+        u1 = (e * w) % _P256_N
+        u2 = (r * w) % _P256_N
+        pt = _ecc_point_add(_ecc_point_mul(u1, _P256_G), _ecc_point_mul(u2, (qx, qy)))
+        if pt is None:
+            return False
+        return (pt[0] % _P256_N) == r
     except Exception:
         return False
-    finally:
-        for path in (pub_file.name, sig_file.name, data_file.name):
-            try:
-                os.unlink(path)
-            except OSError:
-                pass
 
 
 def parse_version(version_str):
