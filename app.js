@@ -4250,6 +4250,8 @@
       getTaskStatsFromHtml,
       tableCell,
       createIconSvg,
+      saveLocalCache,
+      getLocalCache,
       saveCachedUser,
       getCachedUser,
       setTaskListsState,
