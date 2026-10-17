@@ -411,6 +411,29 @@ describe('saveLocalCache', () => {
     expect(localStorage.setItem).toHaveBeenCalledWith('notki.cache.notes.user_55', JSON.stringify([{ id: '1' }]));
   });
 
+  it('should save data when containing only sharedNotes or only labels', () => {
+    const userId = 'user_77';
+
+    saveLocalCache(userId, { sharedNotes: [{ id: 'sn1' }] });
+    expect(localStorage.setItem).toHaveBeenCalledTimes(1);
+    expect(localStorage.setItem).toHaveBeenCalledWith('notki.cache.sharedNotes.user_77', JSON.stringify([{ id: 'sn1' }]));
+
+    localStorage.setItem.mockClear();
+
+    saveLocalCache(userId, { labels: ['work', 'personal'] });
+    expect(localStorage.setItem).toHaveBeenCalledTimes(1);
+    expect(localStorage.setItem).toHaveBeenCalledWith('notki.cache.labels.user_77', JSON.stringify(['work', 'personal']));
+  });
+
+  it('should handle data with empty arrays correctly', () => {
+    const userId = 'user_empty';
+    saveLocalCache(userId, { notes: [], sharedNotes: [], labels: [] });
+
+    expect(localStorage.setItem).toHaveBeenCalledWith('notki.cache.notes.user_empty', '[]');
+    expect(localStorage.setItem).toHaveBeenCalledWith('notki.cache.sharedNotes.user_empty', '[]');
+    expect(localStorage.setItem).toHaveBeenCalledWith('notki.cache.labels.user_empty', '[]');
+  });
+
   it('should catch and handle localStorage.setItem exceptions gracefully', () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     localStorage.setItem.mockImplementation(() => {
