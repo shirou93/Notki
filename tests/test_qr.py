@@ -58,6 +58,24 @@ class TestQRGenerator(unittest.TestCase):
         self.assertIn('viewBox="0 0 116 116"', svg)  # (21 + 8) * 4 = 116
         self.assertIn('<rect', svg)
 
+        # Test default parameters (module_size=4, border=4)
+        svg_default = qr.generate_qr_svg("hello")
+        self.assertEqual(svg, svg_default)
+
+        # Test custom module_size and border dimensions calculation
+        # Version 1 size = 21, border = 2, total modules = 25, module_size = 5 -> total_size = 125
+        svg_custom = qr.generate_qr_svg("hello", module_size=5, border=2)
+        self.assertIn('viewBox="0 0 125 125"', svg_custom)
+        self.assertIn('width="125"', svg_custom)
+        self.assertIn('height="125"', svg_custom)
+        self.assertIn('width="5" height="5"', svg_custom)
+
+        # Test TOTP URI SVG generation as used in server.py
+        totp_uri = "otpauth://totp/Notki:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Notki"
+        svg_totp = qr.generate_qr_svg(totp_uri)
+        self.assertIn('<svg xmlns="http://www.w3.org/2000/svg"', svg_totp)
+        self.assertIn('<rect', svg_totp)
+
     def test_qr_data_too_long(self):
         huge_text = "A" * 1000
         with self.assertRaises(qr.QRError):
