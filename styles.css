@@ -577,6 +577,7 @@ body.is-dragging-task-active, body.is-dragging-task-active * { cursor: var(--dra
   .capture-box { height: 47px; font-size: 12px; }
   .notes-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .notes-grid.is-list-view { grid-template-columns: 1fr; }
+  .notes-grid .note-card:nth-child(odd):last-child { grid-column: 1 / -1; }
   .note-card { min-height: 140px; }
   .card-inner { padding: 10px 11px; }
   .card-drag, .card-pin { opacity: .65; }

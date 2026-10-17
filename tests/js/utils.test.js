@@ -424,3 +424,12 @@ describe('Note dragging and sorting across tabs', () => {
     document.body.removeChild(card);
   });
 });
+
+describe('Mobile grid layout styling', () => {
+  it('should include a responsive grid column spanning rule for single/odd last note card in styles.css', () => {
+    const cssPath = path.join(__dirname, '../../styles.css');
+    const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+    expect(cssContent).toMatch(/\.notes-grid\s+\.note-card:nth-child\(odd\):last-child\s*\{\s*grid-column:\s*1\s*\/\s*-1;?\s*\}/);
+  });
+});
