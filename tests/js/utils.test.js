@@ -352,4 +352,38 @@ describe('Note dragging and sorting across tabs', () => {
     const reordered = filteredNotes();
     expect(reordered.map(n => n.id)).toEqual(['b', 'a']);
   });
+
+  it('should update note.body and card progress when toggling card checkbox without re-rendering card body HTML or completed groups on card', () => {
+    const initialBody = '<ul class="task-list"><li><input type="checkbox" class="task-checkbox"><span class="task-text">Task 1</span></li><li><input type="checkbox" class="task-checkbox"><span class="task-text">Task 2</span></li></ul>';
+    const note = {
+      id: 'cb-test-1',
+      title: 'Checkbox Test',
+      body: initialBody,
+      bodyFormat: 1,
+      updatedAt: new Date().toISOString()
+    };
+
+    const card = makeCard(note);
+    const cardBody = card.querySelector('.card-body');
+    const initialCardBodyHtml = cardBody.innerHTML;
+
+    const checkbox = card.querySelector('input[type="checkbox"]');
+    expect(checkbox).not.toBeNull();
+    expect(checkbox.checked).toBe(false);
+
+    // Toggle checkbox
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+
+    // Verify note.body updated
+    expect(note.body).toContain('checked');
+
+    // Verify progress indicator updated
+    const progressText = card.querySelector('.card-progress-text');
+    expect(progressText).not.toBeNull();
+    expect(progressText.textContent).toBe('1/2 (50%)');
+
+    // Verify card body DOM structure was NOT re-rendered / expanded with completed list HTML structure
+    expect(cardBody.innerHTML).toBe(initialCardBodyHtml);
+  });
 });
