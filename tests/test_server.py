@@ -1190,6 +1190,40 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertTrue(invite['url'].startswith('https://notki.multi.proxy/?invite='))
 
+    def test_session_cookie_flags(self):
+        # Test session cookie under plain HTTP without NOTKI_COOKIE_SECURE
+        client = self.new_client()
+        req_data = json.dumps({'email': 'admin@example.com', 'password': 'secure-passphrase-1'}).encode('utf-8')
+        request = Request(
+            self.base_url + '/api/login',
+            data=req_data,
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+        with client.open(request) as response:
+            set_cookie = response.headers.get('Set-Cookie', '')
+            self.assertIn('HttpOnly', set_cookie)
+            self.assertIn('SameSite=Strict', set_cookie)
+            self.assertNotIn('Secure', set_cookie)
+
+        # Test session cookie with NOTKI_COOKIE_SECURE=1 env var override
+        try:
+            os.environ['NOTKI_COOKIE_SECURE'] = '1'
+            client = self.new_client()
+            request = Request(
+                self.base_url + '/api/login',
+                data=req_data,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            with client.open(request) as response:
+                set_cookie = response.headers.get('Set-Cookie', '')
+                self.assertIn('Secure', set_cookie)
+                self.assertIn('HttpOnly', set_cookie)
+                self.assertIn('SameSite=Strict', set_cookie)
+        finally:
+            os.environ.pop('NOTKI_COOKIE_SECURE', None)
+
     def test_disable_user_2fa_cli(self):
         user_client = self.register_user('cli2fa@example.com', 'user-passphrase-123')
         # Setup 2FA (TOTP and Passkey) for user

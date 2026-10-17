@@ -871,6 +871,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         return self._session_days
 
     def session_headers(self, token, max_age=None):
+        """Return Set-Cookie session headers configured with HttpOnly, SameSite=Strict, Max-Age, and Secure flags."""
         if max_age is None:
             max_age = self.get_session_days() * 24 * 60 * 60
         is_https = (
