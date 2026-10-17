@@ -1342,6 +1342,20 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     else:
                         archive.extract(member, path=ROOT)
 
+    def _finalize_update_index_html(self, is_beta):
+        index_path = ROOT / 'index.html'
+        if not index_path.exists():
+            return
+        try:
+            content = index_path.read_text(encoding='utf-8')
+            pattern = r'(<span class="sidebar-version">\s*NOTKI ·\s*)(?:ALPHA|BETA)?\s*(\d[^<]*</span>)'
+            replacement = r'\1BETA \2' if is_beta else r'\1\2'
+            new_content = re.sub(pattern, replacement, content)
+            if new_content != content:
+                index_path.write_text(new_content, encoding='utf-8')
+        except Exception as e:
+            add_log('ERROR', f'Failed to update index.html version footer: {e}')
+
     def perform_update(self, payload):
         self.require_user(admin=True)
         tarball_url = payload.get('tarballUrl')
@@ -1360,6 +1374,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 if not is_beta:
                     self._verify_update_version(archive, members)
                 self._extract_update_archive(archive, members)
+                self._finalize_update_index_html(is_beta)
         except APIError:
             raise
         except Exception:

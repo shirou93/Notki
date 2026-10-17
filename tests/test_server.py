@@ -656,6 +656,31 @@ class ServerFlowTests(unittest.TestCase):
             self.assertTrue(res.get('success', False))
             self.assertTrue(mock_extract.called)
 
+    def test_finalize_update_index_html(self):
+        handler = server.NotkiHandler
+        dummy_handler = unittest.mock.MagicMock(spec=server.NotkiHandler)
+
+        # Test beta update replaces ALPHA or empty badge with BETA
+        with unittest.mock.patch('pathlib.Path.exists', return_value=True), \
+             unittest.mock.patch('pathlib.Path.read_text', return_value='<span class="sidebar-version">NOTKI · ALPHA 0.1.5.87</span>'), \
+             unittest.mock.patch('pathlib.Path.write_text') as mock_write:
+            server.NotkiHandler._finalize_update_index_html(dummy_handler, is_beta=True)
+            mock_write.assert_called_once_with('<span class="sidebar-version">NOTKI · BETA 0.1.5.87</span>', encoding='utf-8')
+
+        # Test standard update removes ALPHA/BETA badge and keeps only digits
+        with unittest.mock.patch('pathlib.Path.exists', return_value=True), \
+             unittest.mock.patch('pathlib.Path.read_text', return_value='<span class="sidebar-version">NOTKI · ALPHA 0.1.6.0</span>'), \
+             unittest.mock.patch('pathlib.Path.write_text') as mock_write:
+            server.NotkiHandler._finalize_update_index_html(dummy_handler, is_beta=False)
+            mock_write.assert_called_once_with('<span class="sidebar-version">NOTKI · 0.1.6.0</span>', encoding='utf-8')
+
+        # Test standard update removes BETA badge if previously updated from beta
+        with unittest.mock.patch('pathlib.Path.exists', return_value=True), \
+             unittest.mock.patch('pathlib.Path.read_text', return_value='<span class="sidebar-version">NOTKI · BETA 0.1.6.0</span>'), \
+             unittest.mock.patch('pathlib.Path.write_text') as mock_write:
+            server.NotkiHandler._finalize_update_index_html(dummy_handler, is_beta=False)
+            mock_write.assert_called_once_with('<span class="sidebar-version">NOTKI · 0.1.6.0</span>', encoding='utf-8')
+
     def test_admin_settings_and_logs(self):
         # Non-admin / unauthenticated cannot access settings or logs
         user = self.new_client()
