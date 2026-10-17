@@ -8,18 +8,20 @@ A fast, lightweight, and private web-based note-taking application written in pu
 
 ## 🚀 Key Features
 
-- 📝 **Note Creation & Editing**: Rich text formatting (bold, italic, underline), bulleted and numbered lists, plus interactive checklists with progress bars and drag-and-drop handles.
-- 🏷️ **Labels & Organization**: Flexible tagging system, pin essential notes, archive inactive items, send unwanted notes to trash, and personalize cards with distinct background colors.
-- 🤝 **Note Sharing**: Securely share notes with other users on your server with read-only or read-write permissions.
-- 📶 **Offline Support & Sync**: Work seamlessly offline thanks to browser `localStorage` caching and automated background synchronization when connectivity is restored.
-- 👤 **User Profiles & Avatars**: Personalize user accounts and upload custom avatars.
-- 🔐 **Advanced Security**:
-  - Two-Factor Authentication (2FA) via TOTP authenticator apps and WebAuthn Passkeys / hardware security keys.
-  - Sliding-window rate limiting on login endpoints to prevent brute-force attacks.
-  - Enforce 2FA server-wide via administrative settings.
-- 💾 **JSON Backups**: Create, download, restore, and import complete server backups in transparent `.json` format.
-- ⚙️ **Admin Panel**: Manage user accounts, create invitation links with customizable expiration periods (in days), monitor server statistics, and perform automated updates directly from GitHub.
-- 🎨 **Themes & Multi-Language (i18n)**: Native Light, Dark, and System themes, with built-in support for multiple languages (English, Polish, German, French, Japanese, Korean, Italian, Spanish).
+- 📝 **Note Creation & Rich Formatting**: Rich text formatting (bold, italic, underline, font sizing), bulleted/numbered lists, and interactive checklists with real-time progress indicators and drag-and-drop task handles.
+- 📅 **Due Dates & Daily Plan**: Schedule notes with due dates, view timeline sections (overdue, today, tomorrow, this week, later), and export events to iCalendar (`.ics`).
+- 🏷️ **Labels & Flexible Organization**: Categorize with custom labels/tags, pin essential notes to the top, archive inactive items, manage trash, and personalize cards with adaptive pastel colors.
+- 🤝 **Note Sharing & Collaboration**: Securely share notes with other users on your server using configurable read-only or read-write permissions.
+- 📶 **Offline First & Auto-Sync**: Work seamlessly offline thanks to browser caching and background sync when connection is restored.
+- 👤 **User Profiles & Avatars**: Profile customization, password management, and custom avatar upload support.
+- 🔐 **Advanced Security & Authentication**:
+  - Two-Factor Authentication (2FA) supporting both TOTP (Authenticator Apps) and WebAuthn Passkeys / Hardware Security Keys (FIDO2/Touch ID/Face ID).
+  - Emergency 2FA recovery backup codes.
+  - Option to enforce 2FA server-wide via administrative settings.
+  - Rate limiting on login endpoints to prevent brute-force attempts.
+- 💾 **Transparent JSON Backups**: Full server state backup, download, upload, and restore in transparent `.json` format, with backup import support during first-run setup.
+- ⚙️ **Comprehensive Admin Panel**: User account management, single-use invitation link generation with custom expiration, server system stats, pinned server announcements, and direct update checks via GitHub releases.
+- 🎨 **Themes & Multi-Language Support (i18n)**: Native Light, Dark, and System theme integration, with built-in translations for English, Polish, German, French, Japanese, Korean, Italian, and Spanish.
 
 ---
 
@@ -27,7 +29,7 @@ A fast, lightweight, and private web-based note-taking application written in pu
 
 | View | Desktop (Light) | Desktop (Dark) | Mobile (Light) | Mobile (Dark) |
 |---|---|---|---|---|
-| **Notes** | ![Notes on Desktop Light](docs/desktop_notes_light.png) | ![Notes on Desktop Dark](docs/desktop_notes_dark.png) | ![Notes on Mobile Light](docs/mobile_notes_light.png) | ![Notes on Mobile Dark](docs/mobile_notes_dark.png) |
+| **Notes View** | ![Notes on Desktop Light](docs/desktop_notes_light.png) | ![Notes on Desktop Dark](docs/desktop_notes_dark.png) | ![Notes on Mobile Light](docs/mobile_notes_light.png) | ![Notes on Mobile Dark](docs/mobile_notes_dark.png) |
 | **Admin Panel** | ![Admin Panel on Desktop Light](docs/desktop_admin_light.png) | ![Admin Panel on Desktop Dark](docs/desktop_admin_dark.png) | ![Admin Panel on Mobile Light](docs/mobile_admin_light.png) | ![Admin Panel on Mobile Dark](docs/mobile_admin_dark.png) |
 
 ---
