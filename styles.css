@@ -315,6 +315,7 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .editor-progress-fill.is-complete { background: #388e3c; }
 
 .card-body { display: -webkit-box; margin: 0 0 15px; overflow: hidden; color: #59645d; font-size: 12px; line-height: 1.65; white-space: normal; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 5; }
+.card-body:has(.task-list, input[type="checkbox"]) { display: block; -webkit-line-clamp: unset; overflow: visible; }
 .card-body p { margin: 0 0 8px; }
 .card-body ul, .card-body ol { margin: 0 0 8px; padding-left: 18px; }
 .card-body .task-list { padding-left: 0; list-style: none; }

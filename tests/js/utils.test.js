@@ -531,3 +531,14 @@ describe('Mobile grid layout styling', () => {
     expect(cssContent).toMatch(/\.notes-grid\s+\.note-card:nth-child\(odd\):last-child\s*\{\s*grid-column:\s*1\s*\/\s*-1;?\s*\}/);
   });
 });
+
+describe('Card body checklist styling', () => {
+  it('should include CSS rule in styles.css allowing full display of checkbox lists without line clamp', () => {
+    const cssPath = path.join(__dirname, '../../styles.css');
+    const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+    expect(cssContent).toMatch(/\.card-body:has\([^)]*task-list[^)]*\)\s*\{\s*display:\s*block;/);
+    expect(cssContent).toMatch(/-webkit-line-clamp:\s*unset;/);
+    expect(cssContent).toMatch(/overflow:\s*visible;/);
+  });
+});
