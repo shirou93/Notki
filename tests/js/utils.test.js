@@ -37,6 +37,8 @@ const {
   getTaskStatsFromHtml,
   tableCell,
   createIconSvg,
+  saveLocalCache,
+  getLocalCache,
   saveCachedUser,
   getCachedUser,
   filteredNotes,
@@ -283,6 +285,141 @@ describe('getCachedUser', () => {
     const result = getCachedUser();
 
     expect(result).toBeNull();
+  });
+});
+
+describe('getLocalCache', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        setItem: jest.fn(),
+        removeItem: jest.fn(),
+        getItem: jest.fn(),
+      },
+      writable: true
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should return default object with null values when userId is falsy', () => {
+    const defaultResult = { notes: null, sharedNotes: null, labels: null };
+    expect(getLocalCache(null)).toEqual(defaultResult);
+    expect(getLocalCache(undefined)).toEqual(defaultResult);
+    expect(getLocalCache('')).toEqual(defaultResult);
+    expect(localStorage.getItem).not.toHaveBeenCalled();
+  });
+
+  it('should retrieve and parse valid cached data for userId from localStorage', () => {
+    const userId = 'user_abc';
+    const sampleNotes = [{ id: 'n1', title: 'Note 1' }];
+    const sampleShared = [{ id: 's1', title: 'Shared 1' }];
+    const sampleLabels = ['work', 'personal'];
+
+    localStorage.getItem.mockImplementation((key) => {
+      if (key === 'notki.cache.notes.user_abc') return JSON.stringify(sampleNotes);
+      if (key === 'notki.cache.sharedNotes.user_abc') return JSON.stringify(sampleShared);
+      if (key === 'notki.cache.labels.user_abc') return JSON.stringify(sampleLabels);
+      return null;
+    });
+
+    const result = getLocalCache(userId);
+
+    expect(localStorage.getItem).toHaveBeenCalledWith('notki.cache.notes.user_abc');
+    expect(localStorage.getItem).toHaveBeenCalledWith('notki.cache.sharedNotes.user_abc');
+    expect(localStorage.getItem).toHaveBeenCalledWith('notki.cache.labels.user_abc');
+    expect(result).toEqual({
+      notes: sampleNotes,
+      sharedNotes: sampleShared,
+      labels: sampleLabels,
+    });
+  });
+
+  it('should handle missing entries in localStorage gracefully', () => {
+    localStorage.getItem.mockReturnValue(null);
+
+    const result = getLocalCache('user_123');
+
+    expect(result).toEqual({ notes: null, sharedNotes: null, labels: null });
+  });
+
+  it('should catch JSON parse errors for malformed cached data and return default object', () => {
+    localStorage.getItem.mockImplementation((key) => {
+      if (key === 'notki.cache.notes.user_123') return '{"malformed: true';
+      return null;
+    });
+
+    const result = getLocalCache('user_123');
+
+    expect(result).toEqual({ notes: null, sharedNotes: null, labels: null });
+  });
+
+  it('should catch localStorage.getItem exceptions and return default object', () => {
+    localStorage.getItem.mockImplementation(() => {
+      throw new Error('SecurityError: Access denied');
+    });
+
+    const result = getLocalCache('user_123');
+
+    expect(result).toEqual({ notes: null, sharedNotes: null, labels: null });
+  });
+});
+
+describe('saveLocalCache', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        setItem: jest.fn(),
+        removeItem: jest.fn(),
+        getItem: jest.fn(),
+      },
+      writable: true
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should not call setItem if userId is falsy', () => {
+    saveLocalCache(null, { notes: [] });
+    saveLocalCache(undefined, { notes: [] });
+    saveLocalCache('', { notes: [] });
+    expect(localStorage.setItem).not.toHaveBeenCalled();
+  });
+
+  it('should save defined data properties into localStorage under correct keys', () => {
+    const userId = 'user_99';
+    const notes = [{ id: '1' }];
+    const sharedNotes = [{ id: '2' }];
+    const labels = ['tag1'];
+
+    saveLocalCache(userId, { notes, sharedNotes, labels });
+
+    expect(localStorage.setItem).toHaveBeenCalledWith('notki.cache.notes.user_99', JSON.stringify(notes));
+    expect(localStorage.setItem).toHaveBeenCalledWith('notki.cache.sharedNotes.user_99', JSON.stringify(sharedNotes));
+    expect(localStorage.setItem).toHaveBeenCalledWith('notki.cache.labels.user_99', JSON.stringify(labels));
+  });
+
+  it('should only set keys for properties that are defined', () => {
+    const userId = 'user_55';
+    saveLocalCache(userId, { notes: [{ id: '1' }] });
+
+    expect(localStorage.setItem).toHaveBeenCalledTimes(1);
+    expect(localStorage.setItem).toHaveBeenCalledWith('notki.cache.notes.user_55', JSON.stringify([{ id: '1' }]));
+  });
+
+  it('should catch and handle localStorage.setItem exceptions gracefully', () => {
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    localStorage.setItem.mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+
+    expect(() => saveLocalCache('user_1', { notes: [] })).not.toThrow();
+    expect(consoleSpy).toHaveBeenCalledWith('Failed to save to local cache:', expect.any(Error));
+    consoleSpy.mockRestore();
   });
 });
 
