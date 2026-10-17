@@ -3512,23 +3512,57 @@
     }
   });
   elements.noteBody.addEventListener('pointerdown', event => {
-    const checkbox = event.target.closest?.('input[type="checkbox"], .task-checkbox');
-    if (checkbox) {
+    const directCheckbox = event.target.closest?.('input[type="checkbox"], .task-checkbox');
+    if (directCheckbox) {
       if (document.activeElement && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
         document.activeElement.blur();
       }
       event.preventDefault();
-      checkbox.checked = !checkbox.checked;
-      checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+      directCheckbox.checked = !directCheckbox.checked;
+      directCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
       return;
     }
-    if (event.target.closest?.('.task-drag-handle')) {
-      if (document.activeElement && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
-        document.activeElement.blur();
+
+    const taskItem = event.target.closest?.('ul.task-list li, li');
+    const cb = taskItem?.querySelector?.('input[type="checkbox"], .task-checkbox');
+    if (cb) {
+      const isDragHandle = Boolean(event.target.closest?.('.task-drag-handle'));
+      if (isDragHandle) {
+        if (document.activeElement && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+          document.activeElement.blur();
+        }
+        event.preventDefault();
+        return;
       }
-      event.preventDefault();
-      return;
+
+      let isNearCheckbox = false;
+      const cbRect = cb.getBoundingClientRect?.();
+      if (cbRect && (cbRect.width > 0 || cbRect.height > 0)) {
+        const expandedLeft = cbRect.left - 20;
+        const expandedRight = cbRect.right + 16;
+        const expandedTop = cbRect.top - 12;
+        const expandedBottom = cbRect.bottom + 12;
+        if (event.clientX >= expandedLeft && event.clientX <= expandedRight &&
+            event.clientY >= expandedTop && event.clientY <= expandedBottom) {
+          isNearCheckbox = true;
+        }
+      } else {
+        if (event.target === taskItem || event.target.closest?.('.task-checkbox')) {
+          isNearCheckbox = true;
+        }
+      }
+
+      if (isNearCheckbox) {
+        if (document.activeElement && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+          document.activeElement.blur();
+        }
+        event.preventDefault();
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event('change', { bubbles: true }));
+        return;
+      }
     }
+
     if (event.button === 0) placeTaskCaretFromPointer(event);
   });
   elements.noteBody.addEventListener('change', event => {
@@ -3613,6 +3647,8 @@
     cleanupAllTaskDrags();
     taskDragItem = item;
     taskPointerId = event.pointerId;
+    const startX = event.clientX;
+    const startY = event.clientY;
     const itemRect = item.getBoundingClientRect();
     taskOffsetX = event.clientX - itemRect.left;
     taskOffsetY = event.clientY - itemRect.top;
@@ -3660,12 +3696,22 @@
       window.removeEventListener('pointerup', endTaskPointerDrag);
       window.removeEventListener('pointercancel', endTaskPointerDrag);
 
+      const dragDist = e ? Math.hypot(e.clientX - startX, e.clientY - startY) : 0;
+      const handleItem = taskDragItem;
+      const cb = handleItem?.querySelector?.('input[type="checkbox"], .task-checkbox');
+
       try { handle.releasePointerCapture(taskPointerId); } catch {}
       cleanupAllTaskDrags();
       taskDragItem = null;
       taskPointerId = null;
-      normalizeChecklistGroups();
-      scheduleSave();
+
+      if (cb && dragDist < 5) {
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        normalizeChecklistGroups();
+        scheduleSave();
+      }
     };
 
     window.addEventListener('pointermove', onTaskPointerMove);
