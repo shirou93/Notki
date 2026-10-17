@@ -67,8 +67,9 @@
     if (!buffer) return '';
     const bytes = new Uint8Array(buffer);
     let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
+    const CHUNK_SIZE = 0x8000;
+    for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK_SIZE));
     }
     return btoa(binary);
   }
@@ -3392,7 +3393,10 @@
   function encodeBase64Url(value) {
     const bytes = new TextEncoder().encode(value);
     let binary = '';
-    bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+    const CHUNK_SIZE = 0x8000;
+    for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK_SIZE));
+    }
     return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
   }
 
@@ -4247,6 +4251,7 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       bufferToBase64,
+      encodeBase64Url,
       getTaskStatsFromHtml,
       tableCell,
       createIconSvg,

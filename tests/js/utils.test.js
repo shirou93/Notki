@@ -1,5 +1,9 @@
 const fs = require('fs');
 const path = require('path');
+const { TextEncoder, TextDecoder } = require('util');
+
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder;
 
 const indexHtmlPath = path.join(__dirname, '../../index.html');
 const indexHtmlContent = fs.readFileSync(indexHtmlPath, 'utf8');
@@ -34,6 +38,7 @@ window.i18n = {
 // require the module
 const {
   bufferToBase64,
+  encodeBase64Url,
   getTaskStatsFromHtml,
   tableCell,
   createIconSvg,
@@ -200,6 +205,31 @@ describe('bufferToBase64', () => {
   it('should work with ArrayBuffer inputs from standard JS types', () => {
     const arr = new Uint8Array([1, 2, 3]);
     expect(bufferToBase64(arr.buffer)).toBe("AQID");
+  });
+});
+
+describe('encodeBase64Url', () => {
+  it('should encode a plain ASCII string into URL-safe base64', () => {
+    expect(encodeBase64Url('Hello World')).toBe('SGVsbG8gV29ybGQ');
+  });
+
+  it('should handle UTF-8 characters properly', () => {
+    expect(encodeBase64Url('🔑 Note with emoji 🎉')).toBe('8J-UkSBOb3RlIHdpdGggZW1vamkg8J-OiQ');
+  });
+
+  it('should convert standard base64 characters + / and strip trailing padding =', () => {
+    // String that generates + and / in standard base64
+    const input = '>>>???';
+    const result = encodeBase64Url(input);
+    expect(result).not.toContain('+');
+    expect(result).not.toContain('/');
+    expect(result).not.toContain('=');
+  });
+
+  it('should handle large string payloads efficiently without error', () => {
+    const largeInput = 'Large string contents for testing '.repeat(1000);
+    const result = encodeBase64Url(largeInput);
+    expect(result.length).toBeGreaterThan(0);
   });
 });
 
