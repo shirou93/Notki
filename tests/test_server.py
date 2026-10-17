@@ -2118,5 +2118,39 @@ class TestParseHeaderParams(unittest.TestCase):
                 result = server.parse_header_params(input_str)
                 self.assertEqual(result, expected)
 
+
+class TestVerifyPassword(unittest.TestCase):
+    def test_verify_password_valid(self):
+        password = "secret_password_123"
+        encoded = server.hash_password(password)
+        self.assertTrue(server.verify_password(password, encoded))
+
+    def test_verify_password_invalid_password(self):
+        password = "secret_password_123"
+        encoded = server.hash_password(password)
+        self.assertFalse(server.verify_password("wrong_password", encoded))
+
+    def test_verify_password_invalid_formats_and_algorithms(self):
+        valid_encoded = server.hash_password("secret_password_123")
+        parts = valid_encoded.split('$')
+        alg, iters, salt_hex, digest_hex = parts[0], parts[1], parts[2], parts[3]
+
+        cases = [
+            ("unsupported algorithm", f"pbkdf2_sha512${iters}${salt_hex}${digest_hex}", False),
+            ("argon2 algorithm", f"argon2${iters}${salt_hex}${digest_hex}", False),
+            ("too few segments", f"{alg}${iters}${salt_hex}", False),
+            ("too many segments", f"{alg}${iters}${salt_hex}${digest_hex}$extra", False),
+            ("non-integer iterations", f"{alg}$invalid_iters${salt_hex}${digest_hex}", False),
+            ("non-hex salt", f"{alg}${iters}$not_hex_salt_string!${digest_hex}", False),
+            ("empty string encoded", "", False),
+            ("None encoded value", None, False),
+            ("integer encoded value", 12345, False),
+        ]
+
+        for name, encoded_str, expected in cases:
+            with self.subTest(name=name):
+                self.assertIs(server.verify_password("secret_password_123", encoded_str), expected)
+
+
 if __name__ == '__main__':
     unittest.main()

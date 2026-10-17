@@ -521,7 +521,7 @@ def verify_password(password, encoded):
             return False
         actual = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), bytes.fromhex(salt_hex), int(iterations))
         return hmac.compare_digest(actual.hex(), expected_hex)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, AttributeError):
         return False
 
 
