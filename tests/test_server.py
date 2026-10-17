@@ -122,12 +122,15 @@ class ServerFlowTests(unittest.TestCase):
         return client
 
     @staticmethod
-    def note_payload(note_id, title, body='Treść'):
-        return {
+    def note_payload(note_id, title, body='Treść', due_date=None):
+        payload = {
             'id': note_id, 'title': title, 'body': body, 'bodyFormat': 0, 'color': 'default', 'tags': [],
             'pinned': False, 'archived': False, 'deleted': False,
             'createdAt': server.iso_time(), 'updatedAt': server.iso_time(), 'order': 1,
         }
+        if due_date is not None:
+            payload['dueDate'] = due_date
+        return payload
 
     def test_sharing_grants_read_and_write_access(self):
         owner = self.register_user('owner@example.com')
@@ -315,6 +318,19 @@ class ServerFlowTests(unittest.TestCase):
         })
         self.assertEqual(status, 403)
         self.assertIn('invitation', error['error'].lower())
+
+    def test_save_notes_with_due_date_and_snapshot(self):
+        owner = self.register_user('duedate_owner@example.com')
+        payload = [
+            self.note_payload('due-1', 'Plan Dnia Task', due_date='2026-10-20T10:00')
+        ]
+        status, _ = self.request(owner, 'PUT', '/api/notes', {'notes': payload})
+        self.assertEqual(status, 200)
+
+        status, notes_resp = self.request(owner, 'GET', '/api/notes')
+        self.assertEqual(status, 200)
+        self.assertEqual(len(notes_resp['notes']), 1)
+        self.assertEqual(notes_resp['notes'][0]['dueDate'], '2026-10-20T10:00')
 
     def test_log_message_handles_missing_path_and_command(self):
         import socket

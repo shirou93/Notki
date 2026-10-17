@@ -323,6 +323,17 @@ describe('Note dragging and sorting across tabs', () => {
     expect(sortedCard.querySelector('.card-drag').hidden).toBe(true);
   });
 
+  it('should filter notes with dueDate in dailyPlan view sorted chronologically', () => {
+    const note1 = { id: 'due-1', title: 'Task 1', archived: false, deleted: false, dueDate: '2026-10-25T14:00' };
+    const note2 = { id: 'due-2', title: 'Task 2', archived: false, deleted: false, dueDate: '2026-10-20T09:00' };
+    const note3 = { id: 'nodue', title: 'No Due', archived: false, deleted: false, dueDate: null };
+    setNotes([note1, note2, note3]);
+
+    setView('dailyPlan');
+    const result = filteredNotes();
+    expect(result.map(n => n.id)).toEqual(['due-2', 'due-1']);
+  });
+
   it('should preserve order-based sorting in archive and trash views', () => {
     const note1 = { id: 'arch-1', title: 'Arch 1', archived: true, deleted: false, order: 10, updatedAt: '2026-01-01T00:00:00Z' };
     const note2 = { id: 'arch-2', title: 'Arch 2', archived: true, deleted: false, order: 50, updatedAt: '2025-01-01T00:00:00Z' };

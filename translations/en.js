@@ -33,6 +33,7 @@ window.notkiTranslations.en = {
   'nav.aria': 'Navigation',
   'nav.viewsAria': 'Note views',
   'nav.all': 'All',
+  'nav.dailyPlan': 'Daily Plan',
   'nav.pinned': 'Pinned',
   'nav.archive': 'Archive',
   'nav.trash': 'Trash',
@@ -46,6 +47,7 @@ window.notkiTranslations.en = {
   'nav.syncFailed': 'Could not synchronize with server: {message}',
 
   'view.all': 'All notes',
+  'view.dailyPlan': 'Daily plan',
   'view.pinned': 'Pinned',
   'view.archive': 'Archive',
   'view.trash': 'Trash',
@@ -177,6 +179,8 @@ window.notkiTranslations.en = {
 
   'empty.all.title': 'A good thought starts here.',
   'empty.all.copy': 'Write your first note. It will be waiting for you right here.',
+  'empty.dailyPlan.title': 'No scheduled tasks.',
+  'empty.dailyPlan.copy': 'You don’t have any notes scheduled for this day yet.',
   'empty.pinned.title': 'Nothing here yet.',
   'empty.pinned.copy': 'Pin an important note to always keep it at hand.',
   'empty.archive.title': 'The archive is empty.',
@@ -225,6 +229,7 @@ window.notkiTranslations.en = {
   'editor.clearFormat': 'Clear formatting',
   'editor.bodyPlaceholder': 'Start writing...',
   'editor.progressLabel': 'CHECKLIST PROGRESS',
+  'editor.dueDate': 'DUE DATE / DAILY PLAN',
   'editor.tags': 'TAGS',
   'editor.editLabels': 'Edit labels',
   'editor.tagsPlaceholder': 'e.g. work, ideas',
@@ -257,6 +262,7 @@ window.notkiTranslations.en = {
   'editor.deletedToast': 'Note deleted permanently.',
   'editor.saveFailed': 'Could not save notes: {message}',
 
+  'card.dueDate': 'Due: {date}',
   'card.drag': 'Reorder note',
   'card.dragTitle': 'Drag to reorder',
 

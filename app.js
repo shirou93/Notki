@@ -5,12 +5,12 @@
   const TASK_DRAG_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>';
   const t = (key, params) => window.i18n.t(key, params);
   const pluralText = (key, count) => window.i18n.plural(key, count);
-  const VIEW_KEYS = { all: 'view.all', pinned: 'view.pinned', archive: 'view.archive', trash: 'view.trash', shared: 'view.shared' };
-  const NAV_KEYS = { all: 'nav.all', pinned: 'nav.pinned', archive: 'nav.archive', trash: 'nav.trash', shared: 'nav.shared' };
+  const VIEW_KEYS = { all: 'view.all', dailyPlan: 'view.dailyPlan', pinned: 'view.pinned', archive: 'view.archive', trash: 'view.trash', shared: 'view.shared' };
+  const NAV_KEYS = { all: 'nav.all', dailyPlan: 'nav.dailyPlan', pinned: 'nav.pinned', archive: 'nav.archive', trash: 'nav.trash', shared: 'nav.shared' };
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const elements = {
-    allCount: $('#count-all'), pinnedCount: $('#count-pinned'), archiveCount: $('#count-archive'), trashCount: $('#count-trash'), labelsCount: $('#count-labels'),
+    allCount: $('#count-all'), dailyPlanCount: $('#count-dailyPlan'), pinnedCount: $('#count-pinned'), archiveCount: $('#count-archive'), trashCount: $('#count-trash'), labelsCount: $('#count-labels'),
     nav: $$('.nav-item'), breadcrumb: $('#breadcrumb-view'), title: $('#page-title'), countLabel: $('#note-count-label'),
     pinnedLabel: $('#pinned-label'), pinnedGrid: $('#pinned-grid'), otherLabel: $('#other-label'), otherLabelText: $('#other-label-text'),
     grid: $('#notes-grid'), empty: $('#empty-state'), emptyTitle: $('#empty-title'), emptyCopy: $('#empty-copy'),
@@ -2077,6 +2077,7 @@
       deleted: false,
       createdAt: now,
       updatedAt: now,
+      dueDate: data.dueDate || null,
         order: Date.now(),
       };
     }
@@ -2112,6 +2113,7 @@
     }
     const filtered = notes.filter(note => {
       if (view === 'all' && !isActive(note)) return false;
+      if (view === 'dailyPlan' && (!isActive(note) || !note.dueDate)) return false;
       if (view === 'pinned' && (!isActive(note) || !note.pinned)) return false;
       if (view === 'archive' && (!note.archived || note.deleted)) return false;
       if (view === 'trash' && !note.deleted) return false;
@@ -2119,6 +2121,12 @@
       const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')}`.toLocaleLowerCase();
       return searchable.includes(q);
     });
+
+    if (view === 'dailyPlan') {
+      return filtered.sort((a, b) => {
+        return (Date.parse(a.dueDate) || 0) - (Date.parse(b.dueDate) || 0);
+      });
+    }
 
     if (!query && currentSort === 'newest') {
       return filtered.sort((a, b) => {
@@ -2144,9 +2152,11 @@
 
   function updateSidebarCounts() {
     const active = notes.filter(isActive);
+    const dailyPlan = active.filter(note => Boolean(note.dueDate)).length;
     const pinned = active.filter(note => note.pinned).length;
     const sharedByMeCount = active.filter(note => note.shareCount && note.shareCount > 0).length;
     elements.allCount.textContent = String(active.length);
+    if (elements.dailyPlanCount) elements.dailyPlanCount.textContent = String(dailyPlan);
     elements.pinnedCount.textContent = String(pinned);
     elements.archiveCount.textContent = String(notes.filter(note => note.archived && !note.deleted).length);
     elements.trashCount.textContent = String(notes.filter(note => note.deleted).length);
@@ -2365,14 +2375,21 @@
   }
 
   function setupCardTags(card, note, shared, readOnly) {
+    const tags = $('.card-tags', card);
+    if (note.dueDate) {
+      const dueBadge = document.createElement('span');
+      dueBadge.className = 'card-tag card-due-badge';
+      dueBadge.style.fontWeight = '600';
+      dueBadge.textContent = t('card.dueDate', { date: window.i18n.formatDateTime(note.dueDate) });
+      tags.append(dueBadge);
+    }
     if (shared) {
       const badge = document.createElement('span');
       badge.className = `card-owner${readOnly ? ' is-read-only' : ''}`;
       badge.textContent = readOnly ? t('share.readOnlyBadge') : t('share.writeBadge');
       badge.title = t('share.ownerLabel', { email: note.ownerEmail });
-      $('.card-tags', card).append(badge);
+      tags.append(badge);
     }
-    const tags = $('.card-tags', card);
     (note.tags || []).slice(0, 3).forEach(tag => {
       const label = document.createElement('span');
       label.className = 'card-tag';
@@ -2782,6 +2799,10 @@
     activeColor = note.color;
     returnFocus = document.activeElement;
     elements.noteTitle.value = note.title;
+    const dueDateInput = $('#note-due-date');
+    if (dueDateInput) {
+      dueDateInput.value = note.dueDate ? note.dueDate.slice(0, 16) : '';
+    }
     editorRange = null;
     elements.noteBody.innerHTML = note.bodyFormat === 1 ? sanitizeRichHtml(note.body) : plainTextToHtml(note.body);
     normalizeChecklistGroups();
@@ -3033,6 +3054,8 @@
     note.title = elements.noteTitle.value.trim();
     note.body = serializedEditorBody();
     note.bodyFormat = 1;
+    const dueDateInput = $('#note-due-date');
+    note.dueDate = dueDateInput && dueDateInput.value ? dueDateInput.value : null;
     note.tags = [...elements.labelsContainer.querySelectorAll('.label-chip.is-active')].map(chip => chip.dataset.label);
     note.color = activeColor;
     note.updatedAt = new Date().toISOString();
@@ -3581,7 +3604,7 @@
       render();
     });
   }
-  [elements.noteTitle, elements.noteBody].forEach(input => input.addEventListener('input', event => {
+  [elements.noteTitle, elements.noteBody, $('#note-due-date')].filter(Boolean).forEach(input => input.addEventListener('input', event => {
     if (input === elements.noteBody) {
       normalizeChecklistItemMarkup();
       updateWordCount();

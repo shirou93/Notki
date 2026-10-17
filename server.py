@@ -509,6 +509,10 @@ def initialize_database():
         if 'backup_codes_json' not in columns:
             connection.execute("ALTER TABLE users ADD COLUMN backup_codes_json TEXT")
 
+        note_columns = {row['name'] for row in connection.execute('PRAGMA table_info(notes)')}
+        if 'due_date' not in note_columns:
+            connection.execute('ALTER TABLE notes ADD COLUMN due_date TEXT')
+
 
 def verify_password(password, encoded):
     try:
@@ -1478,12 +1482,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
         archived = bool(note.get('archived'))
         deleted = bool(note.get('deleted'))
         pinned = False if (archived or deleted) else bool(note.get('pinned'))
+        due_date = str(note.get('dueDate'))[:64] if note.get('dueDate') else None
         return (
             note_id, user_id, title, body, 1 if note.get('bodyFormat') == 1 else 0,
             color if isinstance(color, str) and color in NOTE_COLORS else 'default',
             json.dumps([str(tag)[:80] for tag in tags[:64]], ensure_ascii=False),
             int(pinned), int(archived), int(deleted),
             self.snapshot_date(note.get('createdAt')), self.snapshot_date(note.get('updatedAt')), sort_order,
+            due_date,
         )
 
     def _prepare_snapshot_notes(self, notes, user_ids):
@@ -1589,8 +1595,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             )
             connection.executemany('''
                 INSERT INTO notes (id, user_id, title, body, body_format, color, tags_json, pinned, archived,
-                                   deleted, created_at, updated_at, sort_order)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   deleted, created_at, updated_at, sort_order, due_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', prepared_notes)
             connection.executemany(
                 'INSERT INTO invites (token_hash, created_by, created_at, expires_at, used_at) VALUES (?, ?, ?, ?, ?)',
@@ -1978,12 +1984,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
         archived = bool(note.get('archived'))
         deleted = bool(note.get('deleted'))
         pinned = False if (archived or deleted) else bool(note.get('pinned'))
+        due_date = str(note.get('dueDate'))[:64] if note.get('dueDate') else None
         return (
             note_id, user_id, title, body, 1 if note.get('bodyFormat') == 1 else 0,
             note.get('color') if note.get('color') in NOTE_COLORS else 'default',
             json.dumps([str(tag)[:80] for tag in tags[:64]], ensure_ascii=False),
             int(pinned), int(archived), int(deleted),
             created, updated, sort_order,
+            due_date,
         )
 
     def save_notes(self, user_id, notes):
@@ -2000,8 +2008,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 connection.execute('DELETE FROM notes WHERE user_id = ?', (user_id,))
             connection.executemany('''
                 INSERT INTO notes (id, user_id, title, body, body_format, color, tags_json, pinned, archived,
-                                   deleted, created_at, updated_at, sort_order)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   deleted, created_at, updated_at, sort_order, due_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     title = excluded.title,
                     body = excluded.body,
@@ -2013,7 +2021,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     deleted = excluded.deleted,
                     created_at = excluded.created_at,
                     updated_at = excluded.updated_at,
-                    sort_order = excluded.sort_order
+                    sort_order = excluded.sort_order,
+                    due_date = excluded.due_date
                 WHERE user_id = excluded.user_id
             ''', prepared)
 
@@ -2024,6 +2033,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             'color': row['color'], 'tags': json.loads(row['tags_json']), 'pinned': bool(row['pinned']),
             'archived': bool(row['archived']), 'deleted': bool(row['deleted']), 'createdAt': row['created_at'],
             'updatedAt': row['updated_at'], 'order': row['sort_order'],
+            'dueDate': row['due_date'] if 'due_date' in row.keys() else None,
         }
         try:
             note['shareCount'] = row['share_count']
