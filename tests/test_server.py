@@ -1,4 +1,5 @@
 import base64
+import binascii
 import hashlib
 import os
 import http.cookiejar
@@ -2150,6 +2151,64 @@ class TestVerifyPassword(unittest.TestCase):
         for name, encoded_str, expected in cases:
             with self.subTest(name=name):
                 self.assertIs(server.verify_password("secret_password_123", encoded_str), expected)
+
+
+class TestSafeB64Decode(unittest.TestCase):
+    def test_falsy_and_empty_inputs(self):
+        cases = [
+            ("None", None),
+            ("empty string", ""),
+            ("empty bytes", b""),
+            ("zero integer", 0),
+            ("False boolean", False),
+            ("empty list", []),
+            ("empty dict", {}),
+        ]
+        for name, val in cases:
+            with self.subTest(name=name):
+                self.assertEqual(server.safe_b64decode(val), b'')
+
+    def test_standard_base64(self):
+        cases = [
+            ("padded exact len 8", "SGVsbG8=", b"Hello"),
+            ("unpadded missing 1 equal sign", "SGVsbG8", b"Hello"),
+            ("padded exact len 16", "SGVsbG8gV29ybGQ=", b"Hello World"),
+            ("unpadded missing 2 equal signs", "aA", b"\x68"),
+            ("single byte with padding", "aA==", b"\x68"),
+        ]
+        for name, val, expected in cases:
+            with self.subTest(name=name):
+                self.assertEqual(server.safe_b64decode(val), expected)
+
+    def test_url_safe_base64(self):
+        cases = [
+            ("url safe hyphen and underscore padded", "aGVsbG8_d29ybGQ-", b"hello?world>"),
+            ("url safe hyphen and underscore unpadded", "aGVsbG8_d29ybGQ-", b"hello?world>"),
+            ("url safe minus and underscore only", "-___", b"\xfb\xff\xff"),
+            ("url safe minus and underscore unpadded", "-_", b"\xfb"),
+        ]
+        for name, val, expected in cases:
+            with self.subTest(name=name):
+                self.assertEqual(server.safe_b64decode(val), expected)
+
+    def test_whitespace_handling(self):
+        cases = [
+            ("leading and trailing spaces", "  SGVsbG8=  ", b"Hello"),
+            ("newlines and tabs wrapped", "\n\tSGVsbG8\r\n", b"Hello"),
+        ]
+        for name, val, expected in cases:
+            with self.subTest(name=name):
+                self.assertEqual(server.safe_b64decode(val), expected)
+
+    def test_invalid_base64(self):
+        invalid_inputs = [
+            "!!!NotBase64!!!",
+            "a",
+        ]
+        for val in invalid_inputs:
+            with self.subTest(val=val):
+                with self.assertRaises((binascii.Error, ValueError)):
+                    server.safe_b64decode(val)
 
 
 if __name__ == '__main__':
