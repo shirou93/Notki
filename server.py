@@ -1275,9 +1275,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
         backup_dir.mkdir(parents=True, exist_ok=True)
         filename = f"notki-backup-{created_at.strftime('%Y%m%d-%H%M%SZ')}-{secrets.token_hex(4)}.json"
         backup_path = backup_dir / filename
-        temporary_path = backup_dir / f'.{secrets.token_hex(16)}.tmp'
+        temporary_file = tempfile.NamedTemporaryFile(dir=backup_dir, delete=False, prefix='.tmp-', suffix='.tmp')
+        temporary_path = Path(temporary_file.name)
         try:
-            with temporary_path.open('xb') as stream:
+            with temporary_file as stream:
                 stream.write(backup_bytes)
             os.replace(temporary_path, backup_path)
         except OSError as error:

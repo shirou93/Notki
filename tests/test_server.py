@@ -2143,5 +2143,58 @@ class TestGenerateTOTPSecret(unittest.TestCase):
         self.assertEqual(len(secrets_set), 20)
 
 
+class TestCreateServerBackupTemporaryFile(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.backup_dir = Path(self.temp_dir.name) / 'backups'
+        self.data_dir = Path(self.temp_dir.name) / 'data'
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.db_file = self.data_dir / 'notki.db'
+
+        self.backup_dir_patch = unittest.mock.patch('server.backup_directory', return_value=self.backup_dir)
+        self.db_path_patch = unittest.mock.patch('server.DB_PATH', self.db_file)
+        self.backup_dir_patch.start()
+        self.db_path_patch.start()
+
+        server.initialize_database()
+
+    def tearDown(self):
+        self.backup_dir_patch.stop()
+        self.db_path_patch.stop()
+        self.temp_dir.cleanup()
+
+    def test_create_server_backup_uses_named_temp_file(self):
+        class DummyHandler(server.NotkiHandler):
+            def __init__(self):
+                self.user = {'id': 1, 'role': 'admin', 'isAdmin': True}
+                self.response_body = None
+                self.response_status = None
+
+            def current_user(self):
+                return self.user
+
+            def send_json(self, data, status=200):
+                self.response_body = data
+                self.response_status = status
+
+        handler = DummyHandler()
+        original_named_temp_file = tempfile.NamedTemporaryFile
+        temp_files_created = []
+
+        def mock_named_temp_file(*args, **kwargs):
+            tf = original_named_temp_file(*args, **kwargs)
+            temp_files_created.append(tf.name)
+            return tf
+
+        with unittest.mock.patch('tempfile.NamedTemporaryFile', side_effect=mock_named_temp_file):
+            handler.create_server_backup()
+
+        self.assertEqual(handler.response_status, 201)
+        self.assertEqual(len(temp_files_created), 1)
+        created_backup = self.backup_dir / handler.response_body['filename']
+        self.assertTrue(created_backup.exists())
+        self.assertFalse(os.path.exists(temp_files_created[0]))
+
+
 if __name__ == '__main__':
     unittest.main()
