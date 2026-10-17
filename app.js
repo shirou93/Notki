@@ -3265,7 +3265,6 @@
     if (shared && note.permission !== 'write') {
       elements.saveState.classList.remove('is-saving');
       elements.saveState.innerHTML = `<span class="save-dot"></span><span>${t('share.readOnlyBadge')}</span>`;
-      showToast(t('share.readOnlySaveFailed'));
       return;
     }
     normalizeChecklistGroups();
