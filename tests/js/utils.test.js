@@ -492,6 +492,39 @@ describe('Note dragging and sorting across tabs', () => {
 
     document.body.removeChild(card);
   });
+
+  it('should toggle checkbox when clicking surrounding space or drag handle in open note editor', () => {
+    const noteBody = document.querySelector('#note-body');
+    expect(noteBody).not.toBeNull();
+
+    noteBody.innerHTML = '<ul class="task-list"><li><span class="task-drag-handle">::</span><input type="checkbox" class="task-checkbox"><span class="task-text">Task item</span></li></ul>';
+    const li = noteBody.querySelector('li');
+    const dragHandle = noteBody.querySelector('.task-drag-handle');
+    const checkbox = noteBody.querySelector('input[type="checkbox"]');
+
+    expect(checkbox.checked).toBe(false);
+
+    // 1. Simulate pointerdown on task list item (surrounding space / gap around checkbox)
+    const pdEvent = new Event('pointerdown', { bubbles: true, cancelable: true });
+    Object.defineProperty(pdEvent, 'target', { value: li });
+    noteBody.dispatchEvent(pdEvent);
+
+    expect(checkbox.checked).toBe(true);
+
+    // 2. Simulate pointerdown & pointerup on task drag handle without dragging
+    const handlePdEvent = new Event('pointerdown', { bubbles: true, cancelable: true });
+    Object.defineProperty(handlePdEvent, 'target', { value: dragHandle });
+    Object.defineProperty(handlePdEvent, 'clientX', { value: 100 });
+    Object.defineProperty(handlePdEvent, 'clientY', { value: 100 });
+    noteBody.dispatchEvent(handlePdEvent);
+
+    const handlePuEvent = new Event('pointerup', { bubbles: true, cancelable: true });
+    Object.defineProperty(handlePuEvent, 'clientX', { value: 100 });
+    Object.defineProperty(handlePuEvent, 'clientY', { value: 100 });
+    window.dispatchEvent(handlePuEvent);
+
+    expect(checkbox.checked).toBe(false);
+  });
 });
 
 describe('Mobile grid layout styling', () => {
