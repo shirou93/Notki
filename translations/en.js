@@ -119,6 +119,7 @@ window.notkiTranslations.en = {
   'topbar.2fa.passkeyNotSupported': 'Passkeys (WebAuthn) are not supported by this browser or require a secure connection (HTTPS).',
   'topbar.2fa.removePasskey': 'Remove',
   'topbar.2fa.confirmRemovePasskey': 'Remove this Passkey?',
+  'topbar.2fa.requiredNotice': 'Two-factor authentication (2FA) is required by the administrator.',
 
   'page.countLabel': 'YOUR CALM, YOUR NOTES',
   'capture.aria': 'Quick note',

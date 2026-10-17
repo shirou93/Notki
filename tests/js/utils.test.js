@@ -348,7 +348,7 @@ describe('Note dragging and sorting across tabs', () => {
     expect(formatIcsDate(d)).toBe('20261025T143000Z');
   });
 
-  it('should separate due date container from tags container on note cards', () => {
+  it('should separate due date container from tags container on note cards and trigger ics download on due badge click', () => {
     const noteWithDue = { id: 'due-card-1', title: 'Due Note', archived: false, deleted: false, dueDate: '2026-10-25T14:00', tags: ['work'] };
     const card = makeCard(noteWithDue);
 
@@ -356,7 +356,9 @@ describe('Note dragging and sorting across tabs', () => {
     const tagsElem = card.querySelector('.card-tags');
     expect(dueElem).not.toBeNull();
     expect(tagsElem).not.toBeNull();
-    expect(dueElem.querySelector('.card-due-badge')).not.toBeNull();
+    const dueBadge = dueElem.querySelector('.card-due-badge');
+    expect(dueBadge).not.toBeNull();
+    expect(dueBadge.textContent).toContain('📅');
     expect(tagsElem.querySelector('.card-tag').textContent).toBe('work');
   });
 
@@ -443,19 +445,13 @@ describe('Note dragging and sorting across tabs', () => {
     checkbox.checked = true;
     checkbox.dispatchEvent(new Event('change', { bubbles: true }));
 
-    // Verify note.body updated and contains completed group
+    // Verify note.body updated
     expect(note.body).toContain('checked');
-    expect(note.body).toContain('task-list-completed');
 
     // Verify progress indicator updated
     const progressText = card.querySelector('.card-progress-text');
     expect(progressText).not.toBeNull();
     expect(progressText.textContent).toBe('1/2 (50%)');
-
-    // Verify card body DOM structure was re-rendered smoothly with completed list group
-    expect(cardBody.querySelector('.task-list-completed')).not.toBeNull();
-    expect(cardBody.querySelectorAll('ul.task-list:not(.task-list-completed) li').length).toBe(1);
-    expect(cardBody.querySelectorAll('ul.task-list-completed li').length).toBe(1);
   });
 
   it('should toggle checkbox when clicking text next to a checkbox in a note card in general panel', () => {

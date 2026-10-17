@@ -117,6 +117,7 @@ window.notkiTranslations.pl = {
   'topbar.2fa.passkeyNotSupported': 'Klucze zabezpieczeń (Passkeys) nie są obsługiwane w tej przeglądarce lub wymagają bezpiecznego połączenia (HTTPS).',
   'topbar.2fa.removePasskey': 'Usuń',
   'topbar.2fa.confirmRemovePasskey': 'Usunąć ten klucz zabezpieczeń?',
+  'topbar.2fa.requiredNotice': 'Administrator wymaga skonfigurowania dwuskładnikowego uwierzytelniania (2FA).',
 
   'page.countLabel': 'TWÓJ SPOKÓJ, TWOJE NOTATKI',
   'capture.aria': 'Szybka notatka',
