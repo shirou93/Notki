@@ -335,12 +335,10 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .card-bottom { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
 .card-due { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .card-due:empty { display: none; }
-.card-due-badge { padding: 3px 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.06); color: var(--ink); border: 1px solid rgba(0, 0, 0, 0.12); font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+.card-due-badge { padding: 3px 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.06); color: var(--ink); border: 1px solid rgba(0, 0, 0, 0.12); font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; transition: background 0.15s; }
+.card-due-badge:hover { background: rgba(0, 0, 0, 0.12); }
 :root[data-theme="dark"] .card-due-badge { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.15); }
-.card-cal-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 3px 7px; border: 1px solid rgba(0,0,0,0.12); border-radius: 4px; background: transparent; color: var(--ink); font-size: 10px; font-weight: 500; cursor: pointer; transition: background 0.15s; }
-.card-cal-btn:hover { background: rgba(0,0,0,0.08); }
-:root[data-theme="dark"] .card-cal-btn { border-color: rgba(255,255,255,0.18); }
-:root[data-theme="dark"] .card-cal-btn:hover { background: rgba(255,255,255,0.12); }
+:root[data-theme="dark"] .card-due-badge:hover { background: rgba(255, 255, 255, 0.16); }
 .card-tags { display: flex; flex-wrap: wrap; gap: 5px; }
 .card-tag { padding: 3px 7px; border-radius: 3px; background: #ffffff9c; color: #63746a; font-size: 9px; }
 .card-owner { padding: 3px 7px; border-radius: 3px; background: #e8f0e0; color: #4f6b45; font-size: 9px; font-weight: 700; }

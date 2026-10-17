@@ -535,7 +535,7 @@ def normalize_email(value):
     return email
 
 
-def public_user(row):
+def public_user(row, connection=None):
     labels = []
     try:
         if row['labels_json']:
@@ -549,10 +549,38 @@ def public_user(row):
     except (IndexError, KeyError):
         pass
 
+    has_totp = False
+    has_passkey = False
+    require_2fa = False
+
+    def check_user_2fa(conn):
+        nonlocal has_totp, has_passkey, require_2fa
+        u_row = conn.execute('SELECT totp_secret FROM users WHERE id = ?', (row['id'],)).fetchone()
+        if u_row:
+            totp_secret = u_row['totp_secret']
+            has_totp = bool(totp_secret and not totp_secret.startswith('pending:'))
+        pk_count = conn.execute('SELECT COUNT(*) FROM passkeys WHERE user_id = ?', (row['id'],)).fetchone()[0]
+        has_passkey = pk_count > 0
+        req_row = conn.execute("SELECT value FROM settings WHERE key = 'require2FA'").fetchone()
+        require_2fa = bool(req_row and req_row['value'] == 'true')
+
+    try:
+        if connection:
+            check_user_2fa(connection)
+        else:
+            with database() as conn:
+                check_user_2fa(conn)
+    except Exception:
+        with database() as conn:
+            check_user_2fa(conn)
+
+    has_2fa = has_totp or has_passkey
+    must_setup_2fa = require_2fa and not has_2fa
+
     return {
         'id': row['id'], 'email': row['email'], 'isAdmin': row['role'] == 'admin',
         'createdAt': row['created_at'], 'avatar': avatar,
-        'labels': labels
+        'labels': labels, 'has2FA': has_2fa, 'mustSetup2FA': must_setup_2fa
     }
 
 
@@ -716,7 +744,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 FROM sessions JOIN users ON users.id = sessions.user_id
                 WHERE sessions.token_hash = ? AND sessions.expires_at > ?
             ''', (token_hash(token), iso_time())).fetchone()
-            return public_user(row) if row else None
+            return public_user(row, connection) if row else None
 
     def require_user(self, admin=False):
         user = self.current_user()
@@ -765,7 +793,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
         token = self.new_session(user_id)
         with database() as connection:
             user = connection.execute('SELECT id, email, role, created_at, avatar, labels_json FROM users WHERE id = ?', (user_id,)).fetchone()
-        self.send_json({'user': public_user(user)}, 201, self.session_headers(token))
+            user_data = public_user(user, connection)
+        self.send_json({'user': user_data}, 201, self.session_headers(token))
 
     def handle_setup_get(self, path):
         if path == '/api/setup/status':
@@ -1719,13 +1748,13 @@ class NotkiHandler(BaseHTTPRequestHandler):
             req_row = connection.execute("SELECT value FROM settings WHERE key = 'require2FA'").fetchone()
             require_2fa = req_row and req_row['value'] == 'true'
 
-        if has_totp or has_passkey or require_2fa:
+        if has_totp or has_passkey:
             temp_token = create_temp_2fa_token(row['id'])
             self.send_json({'requires2FA': True, 'tempToken': temp_token, 'hasTotp': has_totp, 'hasPasskey': has_passkey})
             return
 
         token = self.new_session(row['id'])
-        self.send_json({'user': public_user(row)}, extra_headers=self.session_headers(token))
+        self.send_json({'user': public_user(row, connection)}, extra_headers=self.session_headers(token))
 
     def login_2fa(self, payload):
         user_id = consume_temp_2fa_token(payload.get('tempToken'))
@@ -1754,7 +1783,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 record_failed_auth(client_ip)
                 raise APIError('Invalid two-factor code.', 401)
         token = self.new_session(user_id)
-        self.send_json({'user': public_user(row)}, extra_headers=self.session_headers(token))
+        with database() as connection:
+            user_data = public_user(row, connection)
+        self.send_json({'user': user_data}, extra_headers=self.session_headers(token))
 
     def login_passkey(self, payload):
         key_id = payload.get('id')
@@ -1796,7 +1827,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('Invalid passkey signature.', 401)
 
         token = self.new_session(user_id)
-        self.send_json({'user': public_user(row)}, extra_headers=self.session_headers(token))
+        with database() as connection:
+            user_data = public_user(row, connection)
+        self.send_json({'user': user_data}, extra_headers=self.session_headers(token))
 
     def setup_totp(self):
         user = self.require_user()

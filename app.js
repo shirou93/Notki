@@ -468,6 +468,10 @@
     readSharedNote();
     updateStorageIndicator();
 
+    if (currentUser && currentUser.mustSetup2FA) {
+      openProfile();
+    }
+
     if (loadedFromOnline) {
       syncPendingChanges();
     }
@@ -974,6 +978,10 @@
   }
 
   function closeProfile() {
+    if (currentUser && currentUser.mustSetup2FA) {
+      showToast(t('topbar.2fa.requiredNotice') || '2FA is required by administrator.');
+      return;
+    }
     elements.profilePanel.classList.remove('is-open');
     elements.profilePanel.setAttribute('aria-hidden', 'true');
     elements.profilePanel.hidden = true;
@@ -1356,6 +1364,11 @@
   async function refresh2faStatus() {
     try {
       const status = await apiRequest('/api/account/2fa');
+      const has2FA = Boolean(status.hasTotp || (status.passkeys && status.passkeys.length > 0));
+      if (currentUser && currentUser.mustSetup2FA && has2FA) {
+        currentUser.mustSetup2FA = false;
+        currentUser.has2FA = true;
+      }
       if ($('#totp-active-area')) $('#totp-active-area').hidden = !status.hasTotp;
       if ($('#totp-setup-area')) $('#totp-setup-area').hidden = status.hasTotp;
       if ($('#setup-totp-btn')) $('#setup-totp-btn').hidden = status.hasTotp;
@@ -2584,19 +2597,13 @@
       if (note.dueDate) {
         const dueBadge = document.createElement('span');
         dueBadge.className = 'card-due-badge';
-        dueBadge.textContent = t('card.dueDate', { date: window.i18n.formatDateTime(note.dueDate) });
-        dueContainer.appendChild(dueBadge);
-
-        const calBtn = document.createElement('button');
-        calBtn.type = 'button';
-        calBtn.className = 'card-cal-btn';
-        calBtn.innerHTML = `📅 <span>${t('card.addToCalendar')}</span>`;
-        calBtn.title = t('card.addToCalendar');
-        calBtn.addEventListener('click', (e) => {
+        dueBadge.textContent = `📅 ${window.i18n.formatDateTime(note.dueDate)}`;
+        dueBadge.title = t('card.addToCalendar') || 'Add to calendar';
+        dueBadge.addEventListener('click', (e) => {
           e.stopPropagation();
           downloadIcsFile(`${note.title || 'note'}.ics`, [note]);
         });
-        dueContainer.appendChild(calBtn);
+        dueContainer.appendChild(dueBadge);
       }
     }
 
@@ -3865,20 +3872,6 @@
       currentSort = sortSelectEl.value;
       localStorage.setItem('notki.sort', currentSort);
       render();
-    });
-  }
-  const editorAddCalBtn = $('#editor-add-cal-btn');
-  if (editorAddCalBtn) {
-    editorAddCalBtn.addEventListener('click', () => {
-      const dueDateInput = $('#note-due-date');
-      if (!dueDateInput || !dueDateInput.value) return;
-      const tempNote = {
-        id: activeId || 'note',
-        title: elements.noteTitle.value.trim() || t('editor.untitled'),
-        body: serializedEditorBody(),
-        dueDate: dueDateInput.value
-      };
-      downloadIcsFile(`${tempNote.title}.ics`, [tempNote]);
     });
   }
 

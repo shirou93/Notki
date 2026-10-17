@@ -876,6 +876,16 @@ class ServerFlowTests(unittest.TestCase):
         status, res = self.request(user_client, 'GET', '/api/account/2fa')
         self.assertTrue(res['hasTotp'])
 
+        # Test required 2FA when user does not have 2FA configured
+        self.register_user('no2fa@example.com', 'user-passphrase-123')
+        self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': True, 'logLevel': 'INFO'})
+        unauth_no2fa = self.new_client()
+        status, login_res = self.request(unauth_no2fa, 'POST', '/api/login', {'email': 'no2fa@example.com', 'password': 'user-passphrase-123'})
+        self.assertEqual(status, 200)
+        self.assertFalse(login_res.get('requires2FA', False))
+        self.assertTrue(login_res['user']['mustSetup2FA'])
+        self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': False, 'logLevel': 'INFO'})
+
         # 3. Test 2FA login with TOTP
         unauth_client = self.new_client()
         status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa@example.com', 'password': 'user-passphrase-123'})
