@@ -2055,8 +2055,8 @@
     const target = notes.find(note => note.id === targetId);
     if (sourceIndex < 0 || !target) return;
     const [source] = notes.splice(sourceIndex, 1);
-      // Preserve pinned status when moving in 'all' view
-      if (view === 'all' && !query) source.pinned = target.pinned;
+      // Preserve pinned status when moving in 'all' or 'pinned' view
+      if ((view === 'all' || view === 'pinned') && !query) source.pinned = target.pinned;
       const targetIndex = notes.findIndex(note => note.id === targetId);
       notes.splice(targetIndex + Number(after), 0, source);
       persist();
@@ -2120,7 +2120,7 @@
       return searchable.includes(q);
     });
 
-    if (view === 'all' && !query && currentSort === 'newest') {
+    if ((view === 'all' || view === 'pinned') && !query && currentSort === 'newest') {
       return filtered.sort((a, b) => {
         if (a.pinned !== b.pinned) return Number(b.pinned) - Number(a.pinned);
         return b.order - a.order;
@@ -2352,9 +2352,12 @@
         nextHandle?.focus();
       }
     });
-    if (shared) {
+    const canDrag = !shared && !query && currentSort === 'newest' && (view === 'all' || view === 'pinned');
+    if (!canDrag) {
       dragHandle.hidden = true;
-      if (pin) pin.hidden = true;
+    }
+    if (shared && pin) {
+      pin.hidden = true;
     }
   }
 
