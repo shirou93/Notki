@@ -2707,6 +2707,7 @@
           }
           const cardDate = $('.card-date', card);
           if (cardDate) cardDate.textContent = window.i18n.formatDate(note.updatedAt);
+          setupCardBody(card, note);
 
           const taskStats = getTaskStats(note);
           let progressEl = $('.card-progress', card);

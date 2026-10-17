@@ -353,7 +353,7 @@ describe('Note dragging and sorting across tabs', () => {
     expect(reordered.map(n => n.id)).toEqual(['b', 'a']);
   });
 
-  it('should update note.body and card progress when toggling card checkbox without re-rendering card body HTML or completed groups on card', () => {
+  it('should update note.body, card progress, and card body DOM with completed task groups when toggling card checkbox', () => {
     const initialBody = '<ul class="task-list"><li><input type="checkbox" class="task-checkbox"><span class="task-text">Task 1</span></li><li><input type="checkbox" class="task-checkbox"><span class="task-text">Task 2</span></li></ul>';
     const note = {
       id: 'cb-test-1',
@@ -365,7 +365,6 @@ describe('Note dragging and sorting across tabs', () => {
 
     const card = makeCard(note);
     const cardBody = card.querySelector('.card-body');
-    const initialCardBodyHtml = cardBody.innerHTML;
 
     const checkbox = card.querySelector('input[type="checkbox"]');
     expect(checkbox).not.toBeNull();
@@ -375,16 +374,19 @@ describe('Note dragging and sorting across tabs', () => {
     checkbox.checked = true;
     checkbox.dispatchEvent(new Event('change', { bubbles: true }));
 
-    // Verify note.body updated
+    // Verify note.body updated and contains completed group
     expect(note.body).toContain('checked');
+    expect(note.body).toContain('task-list-completed');
 
     // Verify progress indicator updated
     const progressText = card.querySelector('.card-progress-text');
     expect(progressText).not.toBeNull();
     expect(progressText.textContent).toBe('1/2 (50%)');
 
-    // Verify card body DOM structure was NOT re-rendered / expanded with completed list HTML structure
-    expect(cardBody.innerHTML).toBe(initialCardBodyHtml);
+    // Verify card body DOM structure was re-rendered smoothly with completed list group
+    expect(cardBody.querySelector('.task-list-completed')).not.toBeNull();
+    expect(cardBody.querySelectorAll('ul.task-list:not(.task-list-completed) li').length).toBe(1);
+    expect(cardBody.querySelectorAll('ul.task-list-completed li').length).toBe(1);
   });
 
   it('should toggle checkbox when clicking text next to a checkbox in a note card in general panel', () => {
@@ -408,13 +410,16 @@ describe('Note dragging and sorting across tabs', () => {
     // Click on the task text next to checkbox
     taskText.click();
 
-    // Verify checkbox is now checked
-    expect(checkbox.checked).toBe(true);
+    // Verify checkbox is now checked (re-query updated DOM)
+    let updatedCheckbox = card.querySelector('input[type="checkbox"]');
+    expect(updatedCheckbox.checked).toBe(true);
     expect(note.body).toContain('checked');
 
-    // Click again to uncheck
-    taskText.click();
-    expect(checkbox.checked).toBe(false);
+    // Click again to uncheck (re-query updated taskText)
+    const updatedTaskText = card.querySelector('.task-text');
+    updatedTaskText.click();
+    updatedCheckbox = card.querySelector('input[type="checkbox"]');
+    expect(updatedCheckbox.checked).toBe(false);
 
     document.body.removeChild(card);
   });
