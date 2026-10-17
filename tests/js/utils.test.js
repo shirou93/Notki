@@ -24,11 +24,33 @@ window.i18n = {
   t: jest.fn(),
   plural: jest.fn(),
   onChange: jest.fn(),
-  applyTranslations: jest.fn()
+  applyTranslations: jest.fn(),
+  formatDate: jest.fn(d => d || ''),
+  formatFullDate: jest.fn(d => d || ''),
+  formatDateTime: jest.fn(d => d || ''),
+  getLanguage: jest.fn(() => 'pl')
 };
 
 // require the module
-const { bufferToBase64, getTaskStatsFromHtml, tableCell, createIconSvg, saveCachedUser, getCachedUser } = require('../../app.js');
+const {
+  bufferToBase64,
+  getTaskStatsFromHtml,
+  tableCell,
+  createIconSvg,
+  saveCachedUser,
+  getCachedUser,
+  filteredNotes,
+  moveNote,
+  makeCard,
+  getView,
+  setView,
+  getNotes,
+  setNotes,
+  getCurrentSort,
+  setCurrentSort,
+  getQuery,
+  setQuery,
+} = require('../../app.js');
 
 describe('createIconSvg', () => {
   it('should return an SVGSVGElement', () => {
@@ -257,5 +279,77 @@ describe('getCachedUser', () => {
     const result = getCachedUser();
 
     expect(result).toBeNull();
+  });
+});
+
+describe('Note dragging and sorting across tabs', () => {
+  beforeEach(() => {
+    setQuery('');
+    setCurrentSort('newest');
+    setView('all');
+    setNotes([]);
+  });
+
+  it('should allow note dragging (.card-drag handle visible) in all note tabs for user own notes', () => {
+    const note = { id: 'note-1', title: 'Test Note', body: 'Body', order: 100, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+
+    ['all', 'pinned', 'archive', 'trash', 'shared'].forEach(targetView => {
+      setView(targetView);
+      const card = makeCard(note);
+      const dragHandle = card.querySelector('.card-drag');
+      expect(dragHandle).not.toBeNull();
+      expect(dragHandle.hidden).toBe(false);
+    });
+  });
+
+  it('should hide drag handle when note is shared from someone else or when searching or not sorting by newest', () => {
+    const ownNote = { id: 'note-1', title: 'Own Note', order: 100 };
+    const sharedNote = { id: 'note-2', title: 'Shared Note', ownerEmail: 'other@example.com', order: 90 };
+
+    setView('all');
+    // Shared note owned by someone else
+    const sharedCard = makeCard(sharedNote);
+    expect(sharedCard.querySelector('.card-drag').hidden).toBe(true);
+
+    // Active search query
+    setQuery('search text');
+    const searchCard = makeCard(ownNote);
+    expect(searchCard.querySelector('.card-drag').hidden).toBe(true);
+
+    // Custom non-newest sort
+    setQuery('');
+    setCurrentSort('titleAsc');
+    const sortedCard = makeCard(ownNote);
+    expect(sortedCard.querySelector('.card-drag').hidden).toBe(true);
+  });
+
+  it('should preserve order-based sorting in archive and trash views', () => {
+    const note1 = { id: 'arch-1', title: 'Arch 1', archived: true, deleted: false, order: 10, updatedAt: '2026-01-01T00:00:00Z' };
+    const note2 = { id: 'arch-2', title: 'Arch 2', archived: true, deleted: false, order: 50, updatedAt: '2025-01-01T00:00:00Z' };
+    setNotes([note1, note2]);
+
+    setView('archive');
+    const resultArch = filteredNotes();
+    expect(resultArch.map(n => n.id)).toEqual(['arch-2', 'arch-1']);
+
+    const trash1 = { id: 'trash-1', title: 'Trash 1', archived: false, deleted: true, order: 15, updatedAt: '2026-01-01T00:00:00Z' };
+    const trash2 = { id: 'trash-2', title: 'Trash 2', archived: false, deleted: true, order: 80, updatedAt: '2025-01-01T00:00:00Z' };
+    setNotes([trash1, trash2]);
+
+    setView('trash');
+    const resultTrash = filteredNotes();
+    expect(resultTrash.map(n => n.id)).toEqual(['trash-2', 'trash-1']);
+  });
+
+  it('should reorder notes correctly via moveNote in archive view', () => {
+    const noteA = { id: 'a', title: 'A', archived: true, deleted: false, order: 30 };
+    const noteB = { id: 'b', title: 'B', archived: true, deleted: false, order: 20 };
+    setNotes([noteA, noteB]);
+    setView('archive');
+
+    moveNote('b', 'a', false); // move B before A
+    expect(getNotes().map(n => n.id)).toEqual(['b', 'a']);
+    const reordered = filteredNotes();
+    expect(reordered.map(n => n.id)).toEqual(['b', 'a']);
   });
 });
