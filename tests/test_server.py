@@ -2073,6 +2073,73 @@ class RecordFailedAuthTests(unittest.TestCase):
         self.assertEqual(server.AUTH_FAILURES['192.168.1.3'], [1050.0, 1120.0, 4600.0])
 
 
+class IsRateLimitedTests(unittest.TestCase):
+    def setUp(self):
+        server.FAILED_AUTH_ATTEMPTS.clear()
+
+    def tearDown(self):
+        server.FAILED_AUTH_ATTEMPTS.clear()
+
+    def test_is_rate_limited_empty_ip(self):
+        self.assertFalse(server.is_rate_limited('192.168.1.100'))
+
+    @unittest.mock.patch('server.time.time')
+    def test_is_rate_limited_under_threshold(self, mock_time):
+        mock_time.return_value = 1000.0
+        server.FAILED_AUTH_ATTEMPTS['192.168.1.100'] = [1000.0] * 14
+        self.assertFalse(server.is_rate_limited('192.168.1.100'))
+
+    @unittest.mock.patch('server.time.time')
+    def test_is_rate_limited_at_threshold(self, mock_time):
+        mock_time.return_value = 1000.0
+        server.FAILED_AUTH_ATTEMPTS['192.168.1.100'] = [1000.0] * 15
+        self.assertTrue(server.is_rate_limited('192.168.1.100'))
+
+    @unittest.mock.patch('server.time.time')
+    def test_is_rate_limited_above_threshold(self, mock_time):
+        mock_time.return_value = 1000.0
+        server.FAILED_AUTH_ATTEMPTS['192.168.1.100'] = [1000.0] * 16
+        self.assertTrue(server.is_rate_limited('192.168.1.100'))
+
+    @unittest.mock.patch('server.time.time')
+    def test_is_rate_limited_window_expiration(self, mock_time):
+        # 15 attempts recorded at t=1000.0
+        server.FAILED_AUTH_ATTEMPTS['192.168.1.100'] = [1000.0] * 15
+
+        # At t=1059.0 (59 seconds later, within 60s window), still rate limited
+        mock_time.return_value = 1059.0
+        self.assertTrue(server.is_rate_limited('192.168.1.100'))
+
+        # At t=1060.0 (60 seconds later, 1060.0 - 1000.0 = 60, not < 60), attempts expire
+        mock_time.return_value = 1060.0
+        self.assertFalse(server.is_rate_limited('192.168.1.100'))
+        self.assertEqual(server.FAILED_AUTH_ATTEMPTS['192.168.1.100'], [])
+
+    @unittest.mock.patch('server.time.time')
+    def test_is_rate_limited_custom_params(self, mock_time):
+        mock_time.return_value = 1000.0
+        server.FAILED_AUTH_ATTEMPTS['192.168.1.100'] = [995.0, 998.0, 1000.0]
+
+        # With default max_failed=15, 3 attempts is False
+        self.assertFalse(server.is_rate_limited('192.168.1.100'))
+
+        # With custom max_failed=3, 3 attempts is True
+        self.assertTrue(server.is_rate_limited('192.168.1.100', max_failed=3))
+
+        # With custom window_seconds=3 (attempts at 995.0 are now 1000.0 - 995.0 = 5 >= 3),
+        # only 998.0 and 1000.0 remain (2 attempts)
+        self.assertFalse(server.is_rate_limited('192.168.1.100', max_failed=3, window_seconds=3))
+
+    @unittest.mock.patch('server.time.time')
+    def test_is_rate_limited_ip_isolation(self, mock_time):
+        mock_time.return_value = 1000.0
+        server.FAILED_AUTH_ATTEMPTS['192.168.1.1'] = [1000.0] * 15
+        server.FAILED_AUTH_ATTEMPTS['192.168.1.2'] = [1000.0] * 5
+
+        self.assertTrue(server.is_rate_limited('192.168.1.1'))
+        self.assertFalse(server.is_rate_limited('192.168.1.2'))
+
+
 class AddLogTests(unittest.TestCase):
     def setUp(self):
         server.LOG_BUFFER.clear()
