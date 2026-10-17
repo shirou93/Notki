@@ -2934,7 +2934,6 @@
             checkboxes[index].removeAttribute('checked');
             checkboxes[index].checked = false;
           }
-          normalizeChecklistGroups(wrapper);
           note.body = sanitizeRichHtml(wrapper.innerHTML);
           note.updatedAt = new Date().toISOString();
           if (shared && !readOnly) {
@@ -2944,7 +2943,6 @@
           }
           const cardDate = $('.card-date', card);
           if (cardDate) cardDate.textContent = window.i18n.formatDate(note.updatedAt);
-          setupCardBody(card, note);
 
           const taskStats = getTaskStats(note);
           let progressEl = $('.card-progress', card);
