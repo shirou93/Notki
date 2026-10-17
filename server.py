@@ -772,6 +772,44 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('Invalid request data.')
         return value
 
+    def get_client_ip(self):
+        """Return client IP address.
+
+        By default, returns self.client_address[0] to prevent IP spoofing attacks
+        via X-Forwarded-For headers. If NOTKI_TRUST_PROXY is set, X-Forwarded-For
+        is used if NOTKI_TRUST_PROXY is boolean true ('1', 'true', 'yes', 'all', '*')
+        or if self.client_address[0] matches a configured trusted proxy IP or subnet.
+        """
+        trust_proxy = os.environ.get('NOTKI_TRUST_PROXY', '').strip().lower()
+        if not trust_proxy or trust_proxy in ('0', 'false', 'no'):
+            return self.client_address[0]
+
+        if trust_proxy in ('1', 'true', 'yes', 'all', '*'):
+            forwarded = self.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+            return forwarded or self.client_address[0]
+
+        try:
+            client_ip_obj = ipaddress.ip_address(self.client_address[0].split('%', 1)[0])
+            for proxy_str in trust_proxy.split(','):
+                proxy_str = proxy_str.strip()
+                if not proxy_str:
+                    continue
+                try:
+                    if '/' in proxy_str:
+                        if client_ip_obj in ipaddress.ip_network(proxy_str, strict=False):
+                            forwarded = self.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+                            return forwarded or self.client_address[0]
+                    else:
+                        if client_ip_obj == ipaddress.ip_address(proxy_str):
+                            forwarded = self.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+                            return forwarded or self.client_address[0]
+                except ValueError:
+                    continue
+        except ValueError:
+            pass
+
+        return self.client_address[0]
+
     def get_forwarded_host(self):
         forwarded = self.headers.get('X-Forwarded-Host')
         if forwarded:
@@ -1088,7 +1126,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             self.check_origin()
             path = urlsplit(self.path).path
             if path in ('/api/login', '/api/login/2fa', '/api/login/passkey', '/api/account/password', '/api/account/totp/verify'):
-                client_ip = self.headers.get('X-Forwarded-For', '').split(',')[0].strip() or self.client_address[0]
+                client_ip = self.get_client_ip()
                 if is_rate_limited(client_ip):
                     raise APIError('Too many failed attempts. Please try again later.', 429)
             if path == '/api/setup/import-backup':
@@ -1855,7 +1893,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             password_hash = row['password_hash'] if row else DUMMY_PASSWORD_HASH
             valid_password = verify_password(password, password_hash)
             if not row or not valid_password:
-                client_ip = self.headers.get('X-Forwarded-For', '').split(',')[0].strip() or self.client_address[0]
+                client_ip = self.get_client_ip()
                 record_failed_auth(client_ip)
                 self.send_error_json('Invalid e-mail or password.', 401)
                 return
@@ -1897,7 +1935,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 connection.execute('UPDATE users SET backup_codes_json = ? WHERE id = ?', (json.dumps(backup_codes), user_id))
 
             if not totp_valid and not backup_valid:
-                client_ip = self.headers.get('X-Forwarded-For', '').split(',')[0].strip() or self.client_address[0]
+                client_ip = self.get_client_ip()
                 record_failed_auth(client_ip)
                 raise APIError('Invalid two-factor code.', 401)
         token = self.new_session(user_id)
@@ -1940,7 +1978,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('Invalid key data.', 400) from err
 
         if not verify_passkey_signature(pk_row['public_key_pem'], sig_bytes, signed_data):
-            client_ip = self.headers.get('X-Forwarded-For', '').split(',')[0].strip() or self.client_address[0]
+            client_ip = self.get_client_ip()
             record_failed_auth(client_ip)
             raise APIError('Invalid passkey signature.', 401)
 
@@ -1968,7 +2006,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             totp_secret = row['totp_secret']
             secret = totp_secret.removeprefix('pending:') if totp_secret.startswith('pending:') else totp_secret
             if not verify_totp_code(secret, code):
-                client_ip = self.headers.get('X-Forwarded-For', '').split(',')[0].strip() or self.client_address[0]
+                client_ip = self.get_client_ip()
                 record_failed_auth(client_ip)
                 raise APIError('Invalid two-factor code.', 400)
 
@@ -2048,7 +2086,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         with database() as connection:
             row = connection.execute('SELECT password_hash FROM users WHERE id = ?', (user['id'],)).fetchone()
             if not row or not verify_password(current, row['password_hash']):
-                client_ip = self.headers.get('X-Forwarded-For', '').split(',')[0].strip() or self.client_address[0]
+                client_ip = self.get_client_ip()
                 record_failed_auth(client_ip)
                 raise APIError('The current password is incorrect.', 403)
             connection.execute('UPDATE users SET password_hash = ? WHERE id = ?', (hash_password(password), user['id']))
