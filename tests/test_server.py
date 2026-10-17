@@ -1717,6 +1717,23 @@ class ParseMultipartDataTests(unittest.TestCase):
         fields2 = server.parse_multipart_data(rfile2, "boundary", len(body2))
         self.assertEqual(fields2, {})
 
+    def test_read_archive_from_request_oversized_multipart(self):
+        class DummyHandler(server.NotkiHandler):
+            def __init__(self, headers, rfile):
+                self.headers = headers
+                self.rfile = rfile
+
+        headers = {
+            'Content-Type': 'multipart/form-data; boundary=boundary',
+            'Content-Length': str(server.MAX_SNAPSHOT_BYTES + 1)
+        }
+        rfile = io.BytesIO(b'')
+        handler = DummyHandler(headers, rfile)
+        with self.assertRaises(server.APIError) as cm:
+            handler.read_archive_from_request()
+        self.assertEqual(cm.exception.status, 413)
+        self.assertEqual(str(cm.exception), 'The backup file exceeds the size limit.')
+
 
 class PerformUpdateHelperTests(unittest.TestCase):
     def setUp(self):

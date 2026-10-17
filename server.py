@@ -990,6 +990,11 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 raise APIError('Invalid request data.', 400)
             try:
                 content_length = int(self.headers.get('Content-Length', 0))
+            except (ValueError, TypeError):
+                content_length = 0
+            if content_length > MAX_SNAPSHOT_BYTES:
+                raise APIError('The backup file exceeds the size limit.', 413)
+            try:
                 fields = parse_multipart_data(self.rfile, boundary, content_length)
             except Exception:
                 fields = {}
