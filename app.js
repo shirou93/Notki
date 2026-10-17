@@ -2407,7 +2407,7 @@
       elements.captureWrap.hidden = false;
       elements.notesArea.hidden = false;
       elements.topbarSearch.hidden = false;
-      if ($('#view-toggle')) $('#view-toggle').hidden = false;
+      if ($('#view-toggle')) $('#view-toggle').hidden = (view === 'dailyPlan');
       elements.adminArea.hidden = true;
       elements.breadcrumb.textContent = t(NAV_KEYS[view]);
       if (window.location.pathname === '/admin') {

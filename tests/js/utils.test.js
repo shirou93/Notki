@@ -49,6 +49,7 @@ const {
   getCurrentSort,
   setCurrentSort,
   renderStandardView,
+  render,
   formatIcsDate,
   downloadIcsFile,
   getQuery,
@@ -376,6 +377,19 @@ describe('Note dragging and sorting across tabs', () => {
     expect(timelineArea).not.toBeNull();
     expect(timelineArea.hidden).toBe(false);
     expect(timelineArea.querySelectorAll('.section-label').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should hide view-toggle button in dailyPlan view and show it in standard views', () => {
+    const viewToggle = document.getElementById('view-toggle');
+    expect(viewToggle).not.toBeNull();
+
+    setView('dailyPlan');
+    render();
+    expect(viewToggle.hidden).toBe(true);
+
+    setView('all');
+    render();
+    expect(viewToggle.hidden).toBe(false);
   });
 
   it('should preserve order-based sorting in archive and trash views', () => {
