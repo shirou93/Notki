@@ -2713,8 +2713,6 @@
           } else if (progressEl) {
             progressEl.remove();
           }
-
-          setupCardBody(card, note);
         }
       }
     });
