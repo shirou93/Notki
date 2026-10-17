@@ -588,12 +588,12 @@ def create_admin_account():
     initialize_database()
     with database() as connection:
         if connection.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").fetchone():
-            print('Administrator już istnieje.')
+            print('Administrator account already exists.')
             return
     try:
-        email = normalize_email(input('E-mail administratora: '))
-        password = getpass.getpass('Hasło (minimum 12 znaków): ')
-        confirmation = getpass.getpass('Powtórz hasło: ')
+        email = normalize_email(input('Admin email: '))
+        password = getpass.getpass('Password (minimum 12 characters): ')
+        confirmation = getpass.getpass('Confirm password: ')
         if len(password) < 12:
             raise ValueError('The password must be at least 12 characters long.')
         if password != confirmation:
@@ -603,10 +603,34 @@ def create_admin_account():
                 'INSERT INTO users (email, password_hash, role, created_at) VALUES (?, ?, ?, ?)',
                 (email, hash_password(password), 'admin', iso_time()),
             )
-        print(f'Konto administratora {email} zostało utworzone.')
+        print(f'Administrator account {email} created successfully.')
     except (ValueError, sqlite3.IntegrityError) as error:
-        print(f'Nie udało się utworzyć administratora: {error}', file=sys.stderr)
+        print(f'Failed to create administrator account: {error}', file=sys.stderr)
         raise SystemExit(1) from error
+
+
+def disable_user_2fa_cli(identifier):
+    initialize_database()
+    identifier = (identifier or '').strip()
+    if not identifier:
+        print('Please provide a user email or ID.', file=sys.stderr)
+        raise SystemExit(1)
+
+    with database() as connection:
+        user = None
+        if identifier.isdigit():
+            user = connection.execute('SELECT id, email FROM users WHERE id = ?', (int(identifier),)).fetchone()
+        if not user:
+            email = normalize_email(identifier)
+            user = connection.execute('SELECT id, email FROM users WHERE email = ?', (email,)).fetchone()
+
+        if not user:
+            print(f'User "{identifier}" not found.', file=sys.stderr)
+            raise SystemExit(1)
+
+        connection.execute('UPDATE users SET totp_secret = NULL, backup_codes_json = NULL WHERE id = ?', (user['id'],))
+        connection.execute('DELETE FROM passkeys WHERE user_id = ?', (user['id'],))
+        print(f'Disabled 2FA for user {user["email"]} (ID: {user["id"]}).')
 
 
 class APIError(Exception):
@@ -2242,8 +2266,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Lokalny serwer Notki z bazą SQLite.')
-    parser.add_argument('--create-admin', action='store_true', help='Utwórz pierwsze konto administratora.')
+    parser = argparse.ArgumentParser(description='Notki server with SQLite database.')
+    parser.add_argument('--create-admin', action='store_true', help='Create the initial administrator account.')
+    parser.add_argument('--disable-2fa', metavar='USER', help='Disable two-factor authentication (2FA) for the specified user email or ID.')
     parser.add_argument('--host', default=os.environ.get('NOTKI_HOST', '127.0.0.1'))
     parser.add_argument('--port', type=int, default=int(os.environ.get('NOTKI_PORT', '8000')))
     args = parser.parse_args()
@@ -2252,16 +2277,19 @@ def main():
     if args.create_admin:
         create_admin_account()
         return
+    if args.disable_2fa:
+        disable_user_2fa_cli(args.disable_2fa)
+        return
     server = ThreadingHTTPServer((args.host, args.port), NotkiHandler)
-    print(f'Notki działa pod adresem http://{args.host}:{args.port}')
+    print(f'Notki running at http://{args.host}:{args.port}')
     with database() as connection:
         needs_setup = connection.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").fetchone() is None
     if needs_setup:
-        print(f'Pierwsza konfiguracja administratora: http://127.0.0.1:{args.port}/setup')
+        print(f'Initial admin setup: http://127.0.0.1:{args.port}/setup')
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print('\nZatrzymywanie serwera...')
+        print('\nStopping server...')
     finally:
         server.server_close()
 
