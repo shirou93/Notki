@@ -1643,26 +1643,35 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('The snapshot must contain an administrator account.')
         return user_ids, emails, prepared_users
 
-    def _prepare_snapshot_note(self, note, user_ids, note_ids):
+    def _validate_snapshot_note_identity(self, note, user_ids, note_ids):
         if not isinstance(note, dict):
             raise APIError('Invalid note in the snapshot.')
         note_id = str(note.get('id') or '')
         user_id = note.get('userId')
-        title = str(note.get('title') or '')
-        body = str(note.get('body') or '')
-        tags = note.get('tags') if isinstance(note.get('tags'), list) else []
         if (not note_id or len(note_id) > 200 or note_id in note_ids or isinstance(user_id, bool)
                 or not isinstance(user_id, int) or user_id not in user_ids):
             raise APIError('Invalid note or owner in the snapshot.')
-        if len(title) > 160 or len(body) > 1_000_000:
-            raise APIError('A note in the snapshot exceeds the size limit.')
+        return note_id, user_id
+
+    def _parse_snapshot_note_order(self, note):
         try:
             sort_order = float(note.get('order') or 0)
         except (TypeError, ValueError) as error:
             raise APIError('Invalid note order in the snapshot.') from error
         if not math.isfinite(sort_order):
             raise APIError('Invalid note order in the snapshot.')
+        return sort_order
+
+    def _prepare_snapshot_note(self, note, user_ids, note_ids):
+        note_id, user_id = self._validate_snapshot_note_identity(note, user_ids, note_ids)
+        title = str(note.get('title') or '')
+        body = str(note.get('body') or '')
+        if len(title) > 160 or len(body) > 1_000_000:
+            raise APIError('A note in the snapshot exceeds the size limit.')
+        sort_order = self._parse_snapshot_note_order(note)
         note_ids.add(note_id)
+
+        tags = note.get('tags') if isinstance(note.get('tags'), list) else []
         color = note.get('color')
         archived = bool(note.get('archived'))
         deleted = bool(note.get('deleted'))
