@@ -2078,5 +2078,28 @@ class AddLogTests(unittest.TestCase):
         finally:
             server.MAX_LOG_ENTRIES = old_max
 
+
+class TestParseHeaderParams(unittest.TestCase):
+    def test_parse_header_params(self):
+        cases = [
+            ("empty header", "", ("", {})),
+            ("None header", None, ("", {})),
+            ("simple content-type", "application/json", ("application/json", {})),
+            ("simple content-type uppercase", "APPLICATION/JSON", ("application/json", {})),
+            ("content-type with charset", "text/html; charset=utf-8", ("text/html", {"charset": "utf-8"})),
+            ("content-type with quotes", 'text/html; charset="utf-8"', ("text/html", {"charset": "utf-8"})),
+            ("content-type with single quotes", "text/html; charset='utf-8'", ("text/html", {"charset": "utf-8"})),
+            ("multiple parameters", 'form-data; name="field"; filename="file.txt"', ("form-data", {"name": "field", "filename": "file.txt"})),
+            ("uppercase param keys", 'TEXT/HTML; CHARSET=UTF-8; BOUNDARY="xyz"', ("text/html", {"charset": "UTF-8", "boundary": "xyz"})),
+            ("whitespace formatting", '  text/html ;  charset =  utf-8  ', ("text/html", {"charset": "utf-8"})),
+            ("value with equals sign", 'text/plain; boundary=key=value', ("text/plain", {"boundary": "key=value"})),
+            ("malformed param missing equals", 'text/html; charset', ("text/html", {})),
+            ("mixed valid and malformed params", 'text/html; invalid; charset=utf-8', ("text/html", {"charset": "utf-8"})),
+        ]
+        for name, input_str, expected in cases:
+            with self.subTest(name=name):
+                result = server.parse_header_params(input_str)
+                self.assertEqual(result, expected)
+
 if __name__ == '__main__':
     unittest.main()
