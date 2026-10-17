@@ -129,3 +129,27 @@ describe('applyTranslations', () => {
     expect(root2.querySelector('span').textContent).toBe(''); // Should remain unchanged
   });
 });
+
+describe('admin panel translation keys', () => {
+  const fs = require('fs');
+  const path = require('path');
+
+  const languages = ['pl', 'en', 'de', 'es', 'fr', 'it', 'ja', 'ko'];
+  const requiredAdminKeys = [
+    'admin.security.apply',
+    'admin.backups.restoreFailed',
+    'admin.invites.validityDays',
+    'admin.security.sessionDays',
+    'admin.update.betaChannel'
+  ];
+
+  languages.forEach(lang => {
+    it(`should contain all required admin translation keys for language '${lang}'`, () => {
+      const filePath = path.join(__dirname, `../../translations/${lang}.js`);
+      const fileContent = fs.readFileSync(filePath, 'utf8');
+      requiredAdminKeys.forEach(key => {
+        expect(fileContent.includes(`'${key}'`) || fileContent.includes(`"${key}"`)).toBe(true);
+      });
+    });
+  });
+});

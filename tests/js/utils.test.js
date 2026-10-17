@@ -386,4 +386,36 @@ describe('Note dragging and sorting across tabs', () => {
     // Verify card body DOM structure was NOT re-rendered / expanded with completed list HTML structure
     expect(cardBody.innerHTML).toBe(initialCardBodyHtml);
   });
+
+  it('should toggle checkbox when clicking text next to a checkbox in a note card in general panel', () => {
+    const initialBody = '<ul class="task-list"><li><input type="checkbox" class="task-checkbox"><span class="task-text">Task 1</span></li></ul>';
+    const note = {
+      id: 'cb-text-test-1',
+      title: 'Task Text Click Test',
+      body: initialBody,
+      bodyFormat: 1,
+      updatedAt: new Date().toISOString()
+    };
+
+    const card = makeCard(note);
+    document.body.appendChild(card);
+
+    const checkbox = card.querySelector('input[type="checkbox"]');
+    const taskText = card.querySelector('.task-text');
+
+    expect(checkbox.checked).toBe(false);
+
+    // Click on the task text next to checkbox
+    taskText.click();
+
+    // Verify checkbox is now checked
+    expect(checkbox.checked).toBe(true);
+    expect(note.body).toContain('checked');
+
+    // Click again to uncheck
+    taskText.click();
+    expect(checkbox.checked).toBe(false);
+
+    document.body.removeChild(card);
+  });
 });

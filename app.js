@@ -2564,6 +2564,19 @@
       if (event.target.closest('input[type="checkbox"], .task-checkbox, .task-drag-handle')) return;
       if (event.target.closest('button')) return;
       if (event.target.closest('.card-drag, .card-pin')) return;
+      if (!readOnly) {
+        const taskItem = event.target.closest('li, p, label');
+        const checkbox = (taskItem ? taskItem.querySelector('input[type="checkbox"], .task-checkbox') : null)
+          || event.target.closest('label')?.querySelector('input[type="checkbox"], .task-checkbox')
+          || (event.target.getAttribute?.('for') && card.querySelector(`#${CSS.escape ? CSS.escape(event.target.getAttribute('for')) : event.target.getAttribute('for')}`));
+        if (checkbox) {
+          event.preventDefault();
+          event.stopPropagation();
+          checkbox.checked = !checkbox.checked;
+          checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+          return;
+        }
+      }
       openEditor(note.id);
     });
   }
