@@ -2120,7 +2120,7 @@
       return searchable.includes(q);
     });
 
-    if ((view === 'all' || view === 'pinned') && !query && currentSort === 'newest') {
+    if (!query && currentSort === 'newest') {
       return filtered.sort((a, b) => {
         if (a.pinned !== b.pinned) return Number(b.pinned) - Number(a.pinned);
         return b.order - a.order;
@@ -2176,13 +2176,16 @@
       return searchable.includes(query.toLocaleLowerCase());
     }).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
 
-    const sharedByMe = notes.filter(note => {
+    const sharedByMeFiltered = notes.filter(note => {
       if (!isActive(note)) return false;
       if (!note.shareCount || note.shareCount <= 0) return false;
       if (!query) return true;
       const searchable = `${note.title} ${noteText(note)} ${(note.tags || []).join(' ')}`.toLocaleLowerCase();
       return searchable.includes(query.toLocaleLowerCase());
-    }).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+    });
+    const sharedByMe = (!query && currentSort === 'newest')
+      ? sharedByMeFiltered.sort((a, b) => b.order - a.order)
+      : sortNotesList(sharedByMeFiltered);
 
     const totalVisible = sharedWithMe.length + sharedByMe.length;
 
@@ -2352,7 +2355,7 @@
         nextHandle?.focus();
       }
     });
-    const canDrag = !shared && !query && currentSort === 'newest' && (view === 'all' || view === 'pinned');
+    const canDrag = !shared && !query && currentSort === 'newest';
     if (!canDrag) {
       dragHandle.hidden = true;
     }
@@ -3941,7 +3944,19 @@
       createIconSvg,
       saveCachedUser,
       getCachedUser,
-      setTaskListsState
+      setTaskListsState,
+      moveNote,
+      filteredNotes,
+      setupCardDrag,
+      makeCard,
+      getView: () => view,
+      setView: (v) => { view = v; },
+      getNotes: () => notes,
+      setNotes: (n) => { notes = n; },
+      getCurrentSort: () => currentSort,
+      setCurrentSort: (s) => { currentSort = s; },
+      getQuery: () => query,
+      setQuery: (q) => { query = q; }
     };
   }
 })();
