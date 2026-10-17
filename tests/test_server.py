@@ -1877,27 +1877,66 @@ class PerformUpdateHelperTests(unittest.TestCase):
 
         mock_member1 = unittest.mock.MagicMock()
         mock_member1.name = 'Notki-master/file1.py'
+        mock_member1.isreg.return_value = True
+        mock_member1.isdir.return_value = False
 
         mock_member2 = unittest.mock.MagicMock()
         mock_member2.name = 'Notki-master/'
+        mock_member2.isreg.return_value = False
+        mock_member2.isdir.return_value = True
 
         # Test path traversal prevention
         mock_member3 = unittest.mock.MagicMock()
         mock_member3.name = 'Notki-master/../etc/passwd'
+        mock_member3.isreg.return_value = True
+        mock_member3.isdir.return_value = False
 
-        members = [mock_member1, mock_member2, mock_member3]
+        # Test absolute path / leading slash prevention
+        mock_member4 = unittest.mock.MagicMock()
+        mock_member4.name = 'Notki-master//etc/passwd'
+        mock_member4.isreg.return_value = True
+        mock_member4.isdir.return_value = False
+
+        # Test symlink prevention
+        mock_member5 = unittest.mock.MagicMock()
+        mock_member5.name = 'Notki-master/symlink_file'
+        mock_member5.isreg.return_value = False
+        mock_member5.isdir.return_value = False
+
+        members = [mock_member1, mock_member2, mock_member3, mock_member4, mock_member5]
 
         mock_target_path = unittest.mock.MagicMock()
         mock_target_path.is_relative_to.return_value = True
+        mock_root.resolve.return_value = mock_root
         mock_root.__truediv__.return_value.resolve.return_value = mock_target_path
 
         mock_tarfile.data_filter = True # Simulate Python 3.12+
 
         self.handler._extract_update_archive(mock_archive, members)
 
-        # Should only extract file1.py
+        # Should extract file1.py with filter='data'
         self.assertEqual(mock_member1.name, 'file1.py')
         mock_archive.extract.assert_called_once_with(mock_member1, path=mock_root, filter='data')
+
+    @unittest.mock.patch('server.ROOT')
+    def test_extract_update_archive_without_data_filter(self, mock_root):
+        mock_archive = unittest.mock.MagicMock()
+
+        mock_member = unittest.mock.MagicMock()
+        mock_member.name = 'Notki-master/app.js'
+        mock_member.isreg.return_value = True
+        mock_member.isdir.return_value = False
+
+        mock_target_path = unittest.mock.MagicMock()
+        mock_target_path.is_relative_to.return_value = True
+        mock_root.resolve.return_value = mock_root
+        mock_root.__truediv__.return_value.resolve.return_value = mock_target_path
+
+        with unittest.mock.patch('server.tarfile', spec=[]):
+            self.handler._extract_update_archive(mock_archive, [mock_member])
+
+        self.assertEqual(mock_member.name, 'app.js')
+        mock_archive.extract.assert_called_once_with(mock_member, path=mock_root)
 
 
 class GetForwardedProtoTests(unittest.TestCase):

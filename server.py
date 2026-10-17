@@ -1471,18 +1471,27 @@ class NotkiHandler(BaseHTTPRequestHandler):
                         raise APIError('No newer version available.', 400)
 
     def _extract_update_archive(self, archive, members):
+        root_resolved = ROOT.resolve()
         for member in members:
             parts = member.name.split('/', 1)
             if len(parts) > 1:
                 member.name = parts[1]
-                if not member.name or member.name.startswith('/') or '..' in member.name:
+                if not member.name or member.name.startswith('/'):
                     continue
-                target_path = (ROOT / member.name).resolve()
-                if target_path.is_relative_to(ROOT):
+                member_path = Path(member.name)
+                if member_path.is_absolute() or '..' in member_path.parts:
+                    continue
+                if not (member.isreg() or member.isdir()):
+                    continue
+                try:
+                    target_path = (root_resolved / member_path).resolve()
+                except Exception:
+                    continue
+                if target_path.is_relative_to(root_resolved):
                     if hasattr(tarfile, 'data_filter'):
-                        archive.extract(member, path=ROOT, filter='data')
+                        archive.extract(member, path=root_resolved, filter='data')
                     else:
-                        archive.extract(member, path=ROOT)
+                        archive.extract(member, path=root_resolved)
 
     def _finalize_update_index_html(self, is_beta):
         index_path = ROOT / 'index.html'
