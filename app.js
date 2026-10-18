@@ -693,21 +693,84 @@
   }
 
 
+  async function unbanIp(ip) {
+    try {
+      await apiRequest(`/api/admin/fail2ban/${encodeURIComponent(ip)}`, { method: 'DELETE' });
+      showToast(t('admin.fail2ban.unbannedIp', { ip }));
+      await refreshAdmin();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  async function unbanAllIps() {
+    if (!confirm(t('admin.fail2ban.confirmUnbanAll'))) return;
+    try {
+      await apiRequest('/api/admin/fail2ban/all', { method: 'DELETE' });
+      showToast(t('admin.fail2ban.unbannedAll'));
+      await refreshAdmin();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
+
+  function renderBannedIps(bannedIps) {
+    const body = document.querySelector('#admin-banned-ips');
+    if (!body) return;
+    if (!bannedIps || !bannedIps.length) {
+      const row = document.createElement('tr');
+      const empty = tableCell(t('admin.fail2ban.noBannedIps'));
+      empty.colSpan = 5;
+      empty.className = 'admin-empty-cell';
+      empty.style.textAlign = 'center';
+      row.append(empty);
+      body.replaceChildren(row);
+      return;
+    }
+    const rows = bannedIps.map(item => {
+      const row = document.createElement('tr');
+      const ipCell = tableCell(item.ip);
+
+      const attemptsCell = tableCell(String(item.attempts));
+
+      const statusCell = document.createElement('td');
+      const statusBadge = document.createElement('span');
+      statusBadge.className = `admin-badge ${item.isBanned ? 'admin-badge-status-expired' : 'admin-badge-status-pending'}`;
+      statusBadge.textContent = t(item.isBanned ? 'admin.fail2ban.statusBanned' : 'admin.fail2ban.statusActive');
+      statusCell.append(statusBadge);
+
+      const lastAttemptCell = tableCell(formatDate(item.lastAttempt));
+
+      const actionsCell = document.createElement('td');
+      actionsCell.className = 'admin-table-actions backup-actions';
+      actionsCell.append(backupAction(t('admin.fail2ban.unban'), t('admin.fail2ban.unban'), () => unbanIp(item.ip)));
+
+      row.append(ipCell, attemptsCell, statusCell, lastAttemptCell, actionsCell);
+      return row;
+    });
+    body.replaceChildren(...rows);
+  }
+
   async function refreshAdmin() {
-    const [summary, backupList, settings] = await Promise.all([
+    const [summary, backupList, settings, fail2ban] = await Promise.all([
       apiRequest('/api/admin/summary'),
       apiRequest('/api/admin/backups'),
-      apiRequest('/api/admin/settings').catch(() => ({}))
+      apiRequest('/api/admin/settings').catch(() => ({})),
+      apiRequest('/api/admin/fail2ban').catch(() => ({ bannedIps: [] }))
     ]);
     renderStats(summary.stats);
     renderUsers(summary.users);
     renderInvites(summary.invites);
     renderBackups(backupList.backups);
+    renderBannedIps(fail2ban ? fail2ban.bannedIps || [] : []);
 
     if (settings) {
       if ($('#admin-require-2fa')) $('#admin-require-2fa').checked = settings.require2FA;
       if ($('#admin-session-days')) $('#admin-session-days').value = settings.sessionDays ?? 30;
       if ($('#admin-announcement')) $('#admin-announcement').value = settings.announcement ?? '';
+      if ($('#admin-fail2ban-enabled')) $('#admin-fail2ban-enabled').checked = settings.fail2banEnabled ?? true;
+      if ($('#admin-fail2ban-max-attempts')) $('#admin-fail2ban-max-attempts').value = settings.fail2banMaxAttempts ?? 15;
+      if ($('#admin-fail2ban-ban-time')) $('#admin-fail2ban-ban-time').value = settings.fail2banBanTime ?? 60;
     }
   }
 
@@ -716,9 +779,12 @@
       const require2FA = $('#admin-require-2fa')?.checked ?? false;
       const sessionDays = parseInt($('#admin-session-days')?.value, 10) || 30;
       const announcement = $('#admin-announcement')?.value || '';
+      const fail2banEnabled = $('#admin-fail2ban-enabled')?.checked ?? true;
+      const fail2banMaxAttempts = parseInt($('#admin-fail2ban-max-attempts')?.value, 10) || 15;
+      const fail2banBanTime = parseInt($('#admin-fail2ban-ban-time')?.value, 10) || 60;
       const res = await apiRequest('/api/admin/settings', {
         method: 'POST',
-        body: JSON.stringify({ require2FA, sessionDays, announcement })
+        body: JSON.stringify({ require2FA, sessionDays, announcement, fail2banEnabled, fail2banMaxAttempts, fail2banBanTime })
       });
       if (res && res.announcement !== undefined) {
         currentAnnouncement = res.announcement;
@@ -730,6 +796,7 @@
   }
 
   $('#admin-security-apply')?.addEventListener('click', saveAdminSettings);
+  $('#admin-unban-all-btn')?.addEventListener('click', unbanAllIps);
 
   function setBackupMessage(message, isError = false) {
     const element = document.querySelector('#backup-message');

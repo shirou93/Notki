@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import os
+import secrets
 import http.cookiejar
 import io
 import json
@@ -10,8 +11,11 @@ import tempfile
 import threading
 import unittest
 import unittest.mock
+from datetime import timedelta
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+import urllib.request
+import urllib.error
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import HTTPCookieProcessor, Request, build_opener, urlopen
@@ -2388,6 +2392,169 @@ class TestClientIPAndProxyTrust(unittest.TestCase):
         # From untrusted IP address
         h3 = self._make_handler('172.16.0.1', '203.0.113.30')
         self.assertEqual(h3.get_client_ip(), '172.16.0.1')
+
+
+class Fail2banUnitTests(unittest.TestCase):
+    def setUp(self):
+        server.initialize_database()
+        server.unban_all()
+
+    def tearDown(self):
+        server.unban_all()
+
+    def test_record_failed_auth_and_get_banned_ips(self):
+        ip = '10.20.30.40'
+        for _ in range(5):
+            server.record_failed_auth(ip)
+        banned = server.get_banned_ips()
+        self.assertTrue(any(item['ip'] == ip for item in banned))
+
+    def test_unban_single_and_all(self):
+        ip1 = '10.0.0.1'
+        ip2 = '10.0.0.2'
+        server.record_failed_auth(ip1)
+        server.record_failed_auth(ip2)
+
+        self.assertTrue(server.unban_ip(ip1))
+        banned = [item['ip'] for item in server.get_banned_ips()]
+        self.assertNotIn(ip1, banned)
+        self.assertIn(ip2, banned)
+
+        server.unban_all()
+        self.assertEqual(len(server.get_banned_ips()), 0)
+
+    def test_unban_cli_english_output(self):
+        ip = '192.168.1.88'
+        server.record_failed_auth(ip)
+
+        buf = io.StringIO()
+        with unittest.mock.patch('sys.stdout', buf):
+            server.unban_ip_cli(ip)
+        self.assertIn(f'Unbanned IP {ip}.', buf.getvalue())
+
+        buf_all = io.StringIO()
+        with unittest.mock.patch('sys.stdout', buf_all):
+            server.unban_all_cli()
+        self.assertIn('Unbanned all IPs', buf_all.getvalue())
+
+
+class Fail2banAPITests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp_dir = tempfile.TemporaryDirectory()
+        cls.db_file = Path(cls.tmp_dir.name) / 'test_notki.sqlite3'
+        os.environ['NOTKI_DB_PATH'] = str(cls.db_file)
+        server.DB_PATH = cls.db_file
+
+        server.initialize_database()
+
+        cls.server = server.ThreadingHTTPServer(('127.0.0.1', 0), server.NotkiHandler)
+        cls.port = cls.server.server_address[1]
+        cls.thread = threading.Thread(target=cls.server.serve_forever)
+        cls.thread.daemon = True
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+        cls.thread.join()
+        cls.tmp_dir.cleanup()
+
+    def setUp(self):
+        server.unban_all()
+        with server.database() as conn:
+            conn.execute('DELETE FROM sessions')
+            conn.execute('DELETE FROM users')
+            conn.execute('DELETE FROM settings')
+        self.admin = self.register_user('admin_f2b@example.com', 'admin-passphrase-123', role='admin')
+        self.user = self.register_user('user_f2b@example.com', 'user-passphrase-123', role='user')
+
+    def register_user(self, email, password, role='user'):
+        now = server.iso_time()
+        with server.database() as conn:
+            cursor = conn.execute(
+                'INSERT INTO users (email, password_hash, role, created_at) VALUES (?, ?, ?, ?)',
+                (email, server.hash_password(password), role, now)
+            )
+            user_id = cursor.lastrowid
+
+        token = secrets.token_urlsafe(32)
+        with server.database() as conn:
+            conn.execute(
+                'INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)',
+                (server.token_hash(token), user_id, server.iso_time(server.utc_now() + timedelta(days=1)))
+            )
+        return f'{server.SESSION_COOKIE}={token}'
+
+    def request(self, cookie, method, path, body=None):
+        url = f'http://127.0.0.1:{self.port}{path}'
+        headers = {'Cookie': cookie} if cookie else {}
+        data = None
+        if body is not None:
+            data = json.dumps(body).encode('utf-8')
+            headers['Content-Type'] = 'application/json'
+
+        req = urllib.request.Request(url, data=data, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                payload = json.loads(resp.read().decode('utf-8'))
+                return resp.status, payload
+        except urllib.error.HTTPError as e:
+            payload = json.loads(e.read().decode('utf-8'))
+            return e.code, payload
+
+    def test_fail2ban_api_workflow(self):
+        server.record_failed_auth('192.168.100.1')
+        server.record_failed_auth('192.168.100.2')
+
+        # Non-admin forbidden
+        status, _ = self.request(self.user, 'GET', '/api/admin/fail2ban')
+        self.assertEqual(status, 403)
+
+        # Admin GET
+        status, res = self.request(self.admin, 'GET', '/api/admin/fail2ban')
+        self.assertEqual(status, 200)
+        self.assertIn('bannedIps', res)
+        ips = [item['ip'] for item in res['bannedIps']]
+        self.assertIn('192.168.100.1', ips)
+        self.assertIn('192.168.100.2', ips)
+
+        # Admin DELETE single IP
+        status, res = self.request(self.admin, 'DELETE', '/api/admin/fail2ban/192.168.100.1')
+        self.assertEqual(status, 200)
+        self.assertEqual(res['unbannedIp'], '192.168.100.1')
+
+        status, res = self.request(self.admin, 'GET', '/api/admin/fail2ban')
+        ips = [item['ip'] for item in res['bannedIps']]
+        self.assertNotIn('192.168.100.1', ips)
+        self.assertIn('192.168.100.2', ips)
+
+        # Admin DELETE all
+        status, res = self.request(self.admin, 'DELETE', '/api/admin/fail2ban/all')
+        self.assertEqual(status, 200)
+        self.assertTrue(res['unbannedAll'])
+
+        status, res = self.request(self.admin, 'GET', '/api/admin/fail2ban')
+        self.assertEqual(len(res['bannedIps']), 0)
+
+    def test_save_fail2ban_settings_api(self):
+        status, res = self.request(self.admin, 'POST', '/api/admin/settings', {
+            'fail2banEnabled': False,
+            'fail2banMaxAttempts': 10,
+            'fail2banBanTime': 300
+        })
+        self.assertEqual(status, 200)
+        self.assertFalse(res['fail2banEnabled'])
+        self.assertEqual(res['fail2banMaxAttempts'], 10)
+        self.assertEqual(res['fail2banBanTime'], 300)
+
+        status, settings = self.request(self.admin, 'GET', '/api/admin/settings')
+        self.assertEqual(status, 200)
+        self.assertFalse(settings['fail2banEnabled'])
+        self.assertEqual(settings['fail2banMaxAttempts'], 10)
+        self.assertEqual(settings['fail2banBanTime'], 300)
+
 
 if __name__ == '__main__':
     unittest.main()

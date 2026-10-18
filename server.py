@@ -171,6 +171,24 @@ FAILED_AUTH_LOCK = threading.Lock()
 
 AUTH_FAILURES = {}
 
+def get_fail2ban_config():
+    enabled = True
+    max_attempts = 15
+    ban_time = 60
+    try:
+        with database() as connection:
+            rows = connection.execute("SELECT key, value FROM settings WHERE key LIKE 'fail2ban%'").fetchall()
+            settings_dict = {row['key']: row['value'] for row in rows}
+            if 'fail2banEnabled' in settings_dict:
+                enabled = settings_dict['fail2banEnabled'] == 'true'
+            if 'fail2banMaxAttempts' in settings_dict:
+                max_attempts = int(settings_dict['fail2banMaxAttempts'])
+            if 'fail2banBanTime' in settings_dict:
+                ban_time = int(settings_dict['fail2banBanTime'])
+    except Exception:
+        pass
+    return {'enabled': enabled, 'max_attempts': max_attempts, 'ban_time': ban_time}
+
 def record_failed_auth(ip):
     now = time.time()
     if ip not in AUTH_FAILURES:
@@ -183,12 +201,124 @@ def record_failed_auth(ip):
         attempts.append(now)
         FAILED_AUTH_ATTEMPTS[ip] = attempts
 
-def is_rate_limited(ip, max_failed=15, window_seconds=60):
+    try:
+        with database() as connection:
+            connection.execute('INSERT INTO fail2ban_attempts (ip, created_at) VALUES (?, ?)', (ip, now))
+    except Exception:
+        pass
+
+def is_rate_limited(ip, max_failed=None, window_seconds=None):
+    config = get_fail2ban_config()
+    if not config['enabled'] and max_failed is None and window_seconds is None:
+        return False
+    if max_failed is None:
+        max_failed = config['max_attempts']
+    if window_seconds is None:
+        window_seconds = config['ban_time']
+
     now = time.time()
+    cutoff = now - window_seconds
+
     with FAILED_AUTH_LOCK:
-        attempts = [t for t in FAILED_AUTH_ATTEMPTS.get(ip, []) if now - t < window_seconds]
-        FAILED_AUTH_ATTEMPTS[ip] = attempts
-        return len(attempts) >= max_failed
+        mem_attempts = [t for t in FAILED_AUTH_ATTEMPTS.get(ip, []) if t > cutoff]
+        FAILED_AUTH_ATTEMPTS[ip] = mem_attempts
+        if len(mem_attempts) >= max_failed:
+            return True
+
+    try:
+        with database() as connection:
+            row = connection.execute(
+                'SELECT COUNT(*) FROM fail2ban_attempts WHERE ip = ? AND created_at > ?',
+                (ip, cutoff)
+            ).fetchone()
+            if row and row[0] >= max_failed:
+                return True
+    except Exception:
+        pass
+
+    return False
+
+def unban_ip(ip):
+    ip = str(ip or '').strip()
+    if not ip:
+        return False
+
+    with FAILED_AUTH_LOCK:
+        mem_found = ip in FAILED_AUTH_ATTEMPTS
+        FAILED_AUTH_ATTEMPTS.pop(ip, None)
+    if ip in AUTH_FAILURES:
+        AUTH_FAILURES.pop(ip, None)
+
+    db_found = False
+    try:
+        with database() as connection:
+            cursor = connection.execute('DELETE FROM fail2ban_attempts WHERE ip = ?', (ip,))
+            db_found = cursor.rowcount > 0
+    except Exception:
+        pass
+
+    return mem_found or db_found
+
+def unban_all():
+    with FAILED_AUTH_LOCK:
+        mem_count = len(FAILED_AUTH_ATTEMPTS)
+        FAILED_AUTH_ATTEMPTS.clear()
+    AUTH_FAILURES.clear()
+
+    db_count = 0
+    try:
+        with database() as connection:
+            cursor = connection.execute('DELETE FROM fail2ban_attempts')
+            db_count = cursor.rowcount
+    except Exception:
+        pass
+
+    return max(mem_count, db_count)
+
+def get_banned_ips():
+    config = get_fail2ban_config()
+    max_failed = config['max_attempts']
+    window_seconds = config['ban_time']
+    now = time.time()
+    cutoff = now - window_seconds
+
+    ip_attempts = {}
+
+    with FAILED_AUTH_LOCK:
+        for ip, attempts in FAILED_AUTH_ATTEMPTS.items():
+            valid = [t for t in attempts if t > cutoff]
+            if valid:
+                ip_attempts[ip] = list(valid)
+
+    try:
+        with database() as connection:
+            rows = connection.execute(
+                'SELECT ip, created_at FROM fail2ban_attempts WHERE created_at > ? ORDER BY created_at DESC',
+                (cutoff,)
+            ).fetchall()
+            for row in rows:
+                ip = row['ip']
+                t = row['created_at']
+                if ip not in ip_attempts:
+                    ip_attempts[ip] = []
+                if t not in ip_attempts[ip]:
+                    ip_attempts[ip].append(t)
+    except Exception:
+        pass
+
+    banned_list = []
+    for ip, attempts in ip_attempts.items():
+        if len(attempts) > 0:
+            last_t = max(attempts)
+            banned_list.append({
+                'ip': ip,
+                'attempts': len(attempts),
+                'isBanned': len(attempts) >= max_failed,
+                'lastAttempt': datetime.fromtimestamp(last_t, timezone.utc).isoformat()
+            })
+
+    banned_list.sort(key=lambda x: (x['isBanned'], x['lastAttempt']), reverse=True)
+    return banned_list
 
 def parse_header_params(header_str):
     if not header_str:
@@ -565,6 +695,12 @@ def initialize_database():
                 created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS passkeys_user_idx ON passkeys(user_id);
+            CREATE TABLE IF NOT EXISTS fail2ban_attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip TEXT NOT NULL,
+                created_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS fail2ban_ip_idx ON fail2ban_attempts(ip);
         ''')
         columns = {row['name'] for row in connection.execute('PRAGMA table_info(users)')}
         if 'avatar' not in columns:
@@ -733,6 +869,25 @@ def disable_all_2fa_cli():
     with TEMP_2FA_LOCK:
         TEMP_2FA_TOKENS.clear()
     print('Disabled 2FA server-wide for all users.')
+
+
+def unban_ip_cli(ip):
+    initialize_database()
+    ip = str(ip or '').strip()
+    if not ip:
+        print('Please provide an IP address.', file=sys.stderr)
+        raise SystemExit(1)
+    unbanned = unban_ip(ip)
+    if unbanned:
+        print(f'Unbanned IP {ip}.')
+    else:
+        print(f'IP {ip} was not found in banned list.')
+
+
+def unban_all_cli():
+    initialize_database()
+    count = unban_all()
+    print(f'Unbanned all IPs ({count} unbanned).')
 
 
 class APIError(Exception):
@@ -1064,6 +1219,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 'invites': [{'tokenHash': row['token_hash'], 'createdAt': row['created_at'], 'expiresAt': row['expires_at'], 'usedAt': row['used_at']} for row in invites],
             })
             return True
+        elif path == '/api/admin/fail2ban':
+            self.require_user(admin=True)
+            self.send_json({'bannedIps': get_banned_ips(), 'config': get_fail2ban_config()})
+            return True
         elif path == '/api/admin/backups':
             self.list_server_backups()
             return True
@@ -1247,6 +1406,18 @@ class NotkiHandler(BaseHTTPRequestHandler):
             user_match = re.fullmatch(r'/api/admin/users/(\d+)', path)
             if user_match:
                 self.delete_user(int(user_match.group(1)))
+                return
+            fail2ban_match = re.fullmatch(r'/api/admin/fail2ban(?:/(.+))?', path)
+            if fail2ban_match:
+                self.require_user(admin=True)
+                target = fail2ban_match.group(1)
+                if not target or target.lower() == 'all':
+                    unban_all()
+                    self.send_json({'unbannedAll': True})
+                else:
+                    target_ip = unquote(target)
+                    unban_ip(target_ip)
+                    self.send_json({'unbannedIp': target_ip})
                 return
             self.send_error_json('Endpoint not found.', 404)
         except APIError as error:
@@ -1806,6 +1977,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 connection.execute('DELETE FROM invites')
                 connection.execute('DELETE FROM passkeys')
                 connection.execute('DELETE FROM settings')
+                connection.execute('DELETE FROM fail2ban_attempts')
                 connection.execute('DELETE FROM users')
             connection.executemany(
                 'INSERT INTO users (id, email, password_hash, role, created_at, avatar, labels_json, totp_secret, backup_codes_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -2396,7 +2568,16 @@ class NotkiHandler(BaseHTTPRequestHandler):
             session_days = int(settings_dict.get('sessionDays', SESSION_DAYS))
         except (ValueError, TypeError):
             session_days = SESSION_DAYS
-        self.send_json({'require2FA': require_2fa, 'logLevel': log_level, 'sessionDays': session_days, 'announcement': announcement})
+        fail2ban_config = get_fail2ban_config()
+        self.send_json({
+            'require2FA': require_2fa,
+            'logLevel': log_level,
+            'sessionDays': session_days,
+            'announcement': announcement,
+            'fail2banEnabled': fail2ban_config['enabled'],
+            'fail2banMaxAttempts': fail2ban_config['max_attempts'],
+            'fail2banBanTime': fail2ban_config['ban_time'],
+        })
 
     def save_settings(self, payload):
         self.require_user(admin=True)
@@ -2409,12 +2590,35 @@ class NotkiHandler(BaseHTTPRequestHandler):
             session_days = max(1, min(3650, int(payload.get('sessionDays', SESSION_DAYS))))
         except (ValueError, TypeError):
             session_days = SESSION_DAYS
+        fail2ban_enabled = 'true' if payload.get('fail2banEnabled', True) else 'false'
+        try:
+            fail2ban_max_attempts = max(1, min(1000, int(payload.get('fail2banMaxAttempts', 15))))
+        except (ValueError, TypeError):
+            fail2ban_max_attempts = 15
+        try:
+            fail2ban_ban_time = max(1, min(86400, int(payload.get('fail2banBanTime', 60))))
+        except (ValueError, TypeError):
+            fail2ban_ban_time = 60
+
         with database() as connection:
             connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('require2FA', require_2fa))
             connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('logLevel', log_level))
             connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('sessionDays', str(session_days)))
             connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('announcement', announcement))
-        self.send_json({'require2FA': require_2fa == 'true', 'logLevel': log_level, 'sessionDays': session_days, 'announcement': announcement})
+            if any(k in payload for k in ('fail2banEnabled', 'fail2banMaxAttempts', 'fail2banBanTime')):
+                connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('fail2banEnabled', fail2ban_enabled))
+                connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('fail2banMaxAttempts', str(fail2ban_max_attempts)))
+                connection.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ('fail2banBanTime', str(fail2ban_ban_time)))
+
+        self.send_json({
+            'require2FA': require_2fa == 'true',
+            'logLevel': log_level,
+            'sessionDays': session_days,
+            'announcement': announcement,
+            'fail2banEnabled': fail2ban_enabled == 'true',
+            'fail2banMaxAttempts': fail2ban_max_attempts,
+            'fail2banBanTime': fail2ban_ban_time,
+        })
 
     def get_logs(self):
         self.require_user(admin=True)
@@ -2436,6 +2640,8 @@ def main():
     parser.add_argument('--create-admin', action='store_true', help='Create the initial administrator account.')
     parser.add_argument('--disable-2fa', metavar='USER', help='Disable two-factor authentication (2FA) for the specified user email or ID.')
     parser.add_argument('--disable-all-2fa', action='store_true', help='Completely disable two-factor authentication (2FA) server-wide for all users.')
+    parser.add_argument('--unban', '--unban-ip', metavar='IP', help='Unban a specific IP address from fail2ban.')
+    parser.add_argument('--unban-all', action='store_true', help='Unban all IP addresses from fail2ban.')
     parser.add_argument('--host', default=os.environ.get('NOTKI_HOST', '127.0.0.1'))
     parser.add_argument('--port', type=int, default=int(os.environ.get('NOTKI_PORT', '8000')))
     args = parser.parse_args()
@@ -2449,6 +2655,12 @@ def main():
         return
     if args.disable_all_2fa:
         disable_all_2fa_cli()
+        return
+    if args.unban:
+        unban_ip_cli(args.unban)
+        return
+    if args.unban_all:
+        unban_all_cli()
         return
     server = ThreadingHTTPServer((args.host, args.port), NotkiHandler)
     print(f'Notki running at http://{args.host}:{args.port}')
