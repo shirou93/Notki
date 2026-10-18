@@ -847,6 +847,40 @@ class ServerFlowTests(unittest.TestCase):
             status, _ = self.request(self.admin, 'DELETE', f'/api/admin/backups/{filename}')
             self.assertEqual(status, 404)
 
+    def test_add_passkey_account_takeover(self):
+        userA = self.register_user('userA@example.com', 'passphrase-A-123')
+        userB = self.register_user('userB@example.com', 'passphrase-B-123')
+
+        with tempfile.NamedTemporaryFile('wb', delete=False) as key_file:
+            key_path = key_file.name
+        try:
+            subprocess.run(['openssl', 'ecparam', '-name', 'prime256v1', '-genkey', '-noout', '-out', key_path], check=True)
+            spki_der = subprocess.run(['openssl', 'ec', '-in', key_path, '-pubout', '-outform', 'DER'], capture_output=True, check=True).stdout
+            pub_b64 = base64.b64encode(spki_der).decode('utf-8')
+        finally:
+            os.unlink(key_path)
+
+        passkey_id = 'test-passkey-id-at'
+
+        # userA registers a passkey
+        status, res = self.request(userA, 'POST', '/api/account/passkey', {
+            'id': passkey_id, 'name': 'Laptop A', 'publicKey': pub_b64
+        })
+        self.assertEqual(status, 201)
+
+        # userB tries to register a passkey with the same ID
+        status, res = self.request(userB, 'POST', '/api/account/passkey', {
+            'id': passkey_id, 'name': 'Laptop B', 'publicKey': pub_b64
+        })
+        self.assertEqual(status, 409)
+
+        # Verify userA's passkey hasn't changed
+        status, res = self.request(userA, 'GET', '/api/account/2fa')
+        self.assertEqual(status, 200)
+        self.assertEqual(len(res['passkeys']), 1)
+        self.assertEqual(res['passkeys'][0]['id'], passkey_id)
+        self.assertEqual(res['passkeys'][0]['name'], 'Laptop A')
+
     def test_totp_and_passkey_2fa_flow(self):
         user_client = self.register_user('user2fa@example.com', 'user-passphrase-123')
 
