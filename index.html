@@ -205,7 +205,38 @@
           <input class="auth-input" id="admin-announcement" type="text" placeholder="e.g. Patching in progress..." data-i18n-placeholder="admin.security.announcementPlaceholder" maxlength="255">
         </div>
       </div>
+      <div class="admin-security-controls" style="margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border-color, rgba(0,0,0,0.1));">
+        <div class="admin-security-row">
+          <label class="admin-toggle-label">
+            <input type="checkbox" id="admin-fail2ban-enabled"> <span data-i18n="admin.fail2ban.enable">Enable Fail2ban (IP rate limiting)</span>
+          </label>
+        </div>
+        <div class="admin-security-row" style="flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label class="field-label" for="admin-fail2ban-max-attempts" data-i18n="admin.fail2ban.maxAttempts" style="margin: 0;">Max failed attempts</label>
+            <input class="auth-input" id="admin-fail2ban-max-attempts" type="number" min="1" max="1000" value="15" style="max-width: 100px; margin: 0;">
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label class="field-label" for="admin-fail2ban-ban-time" data-i18n="admin.fail2ban.banTime" style="margin: 0;">Ban duration (seconds)</label>
+            <input class="auth-input" id="admin-fail2ban-ban-time" type="number" min="5" max="86400" value="60" style="max-width: 120px; margin: 0;">
+          </div>
+        </div>
+      </div>
       <button class="button-primary" id="admin-security-apply" type="button" style="margin-top: 12px;" data-i18n="admin.security.apply">Apply</button>
+    </section>
+
+    <section class="admin-section">
+      <header class="admin-section-header">
+        <div><h2 data-i18n="admin.fail2ban.bannedTitle">Banned & Rate-Limited IP Addresses</h2><p data-i18n="admin.fail2ban.description">Protect server from brute-force login attempts.</p></div>
+        <button class="button-secondary" id="admin-unban-all-btn" type="button" data-i18n="admin.fail2ban.unbanAll">Unban all IPs</button>
+      </header>
+      <p class="admin-message" id="fail2ban-message" role="status" hidden></p>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead><tr><th data-i18n="admin.table.ip">IP ADDRESS</th><th data-i18n="admin.table.attempts">ATTEMPTS</th><th data-i18n="admin.table.status">STATUS</th><th data-i18n="admin.table.lastAttempt">LAST ATTEMPT</th><th data-i18n="admin.table.actions">ACTIONS</th></tr></thead>
+          <tbody id="admin-banned-ips"></tbody>
+        </table>
+      </div>
     </section>
 
     <section class="admin-section">
