@@ -352,13 +352,13 @@ h1 { margin: 0; font-family: var(--serif); font-size: 36px; font-weight: 500; le
 .share-panel.is-open { transform: translateX(0); box-shadow: -18px 0 40px #14261c1f; visibility: visible; }
 .share-list { display: flex; flex-direction: column; gap: 7px; margin: 0 0 14px; padding: 0; list-style: none; }
 .share-item { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; align-items: center; gap: 9px; padding: 8px 10px; border: 1px solid #e8ece7; border-radius: 6px; background: #fbfcfa; }
-.share-avatar { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--forest); color: #fff; font-size: 11px; font-weight: 700; background-size: cover; background-position: center; }
+.share-avatar { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--forest); color: #fff; font-size: 11px; font-weight: 700; background-size: cover; background-position: center; flex-shrink: 0; }
 .share-email { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .share-badge { padding: 3px 7px; border-radius: 3px; background: #eef0ee; color: #6d7a70; font-size: 9px; font-weight: 700; white-space: nowrap; }
 .share-badge.is-write { background: #e8f0e0; color: #4f6b45; }
 .share-revoke { padding: 4px 8px; border: 1px solid #e6d9d6; border-radius: 4px; background: #fff; color: #9a5b4d; font-size: 9px; font-weight: 700; cursor: pointer; }
 .share-revoke:hover { background: #fbf1ef; }
-.share-empty { margin: 0 0 14px; color: #9aa39c; font-size: 11px; }
+.share-empty { margin: 0 0 14px; color: #9aa39c; font-size: 11px; display: flex; align-items: center; gap: 8px; }
 .editor-panel.is-read-only .editor-title, .editor-panel.is-read-only .tags-input { color: #6d7a70; }
 .editor-panel.is-read-only .editor-body { background: transparent; }
 .empty-state { min-height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px 16px 44px; text-align: center; animation: rise-in .4s both; }

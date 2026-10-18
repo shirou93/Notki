@@ -1021,7 +1021,12 @@
       item.append(avatar, label, badge, revoke);
       return item;
     }));
-    elements.shareEmpty.hidden = shares.length !== 0;
+    if (shares.length === 0) {
+      elements.shareEmpty.textContent = t('share.empty');
+      elements.shareEmpty.hidden = false;
+    } else {
+      elements.shareEmpty.hidden = true;
+    }
   }
 
   async function loadShares() {
@@ -1067,10 +1072,22 @@
     const shared = Boolean(note.ownerEmail);
     if (shared) {
       elements.shareForm.hidden = true;
-      elements.shareEmpty.textContent = t('share.ownerLabel', { email: note.ownerEmail });
+      elements.shareEmpty.replaceChildren();
+      const avatar = document.createElement('span');
+      avatar.className = 'share-avatar';
+      const initial = (note.ownerEmail || '?').slice(0, 1).toUpperCase();
+      avatar.textContent = note.ownerAvatar ? '' : initial;
+      if (note.ownerAvatar) {
+        avatar.style.backgroundImage = `url("${note.ownerAvatar}")`;
+        avatar.classList.add('has-image');
+      }
+      const label = document.createElement('span');
+      label.textContent = t('share.ownerLabel', { email: note.ownerEmail });
+      elements.shareEmpty.append(avatar, label);
       elements.shareEmpty.hidden = false;
     } else {
       elements.shareForm.hidden = false;
+      elements.shareEmpty.textContent = t('share.empty');
       window.setTimeout(() => elements.shareEmail.focus(), 180);
       await Promise.all([loadShares(), loadDirectory()]);
     }
@@ -4271,6 +4288,7 @@
       render,
       formatIcsDate,
       downloadIcsFile,
+      openShare,
       getView: () => view,
       setView: (v) => { view = v; },
       getNotes: () => notes,

@@ -59,6 +59,7 @@ const {
   render,
   formatIcsDate,
   downloadIcsFile,
+  openShare,
   getQuery,
   setQuery,
 } = require('../../app.js');
@@ -731,5 +732,60 @@ describe('Card body checklist styling', () => {
     expect(cssContent).toMatch(/\.card-body:has\([^)]*task-list[^)]*\)\s*\{\s*display:\s*block;/);
     expect(cssContent).toMatch(/-webkit-line-clamp:\s*unset;/);
     expect(cssContent).toMatch(/overflow:\s*visible;/);
+  });
+});
+
+describe('openShare modal owner avatar', () => {
+  beforeEach(() => {
+    window.i18n.t.mockImplementation((key, params) => {
+      if (key === 'share.ownerLabel') return `Shared by ${params.email}`;
+      if (key === 'share.empty') return 'This note is not shared with anyone yet.';
+      return key;
+    });
+  });
+
+  it('renders owner avatar circle with image and label when opening share modal for a shared note', async () => {
+    const sharedNote = {
+      id: 'sn-123',
+      title: 'Shared Note Test',
+      ownerEmail: 'alice@example.com',
+      ownerAvatar: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+    };
+    setNotes([sharedNote]);
+
+    await openShare('sn-123');
+
+    const shareEmpty = document.querySelector('#share-empty');
+    expect(shareEmpty).not.toBeNull();
+    expect(shareEmpty.hidden).toBe(false);
+
+    const avatar = shareEmpty.querySelector('.share-avatar');
+    expect(avatar).not.toBeNull();
+    expect(avatar.classList.contains('has-image')).toBe(true);
+    expect(avatar.style.backgroundImage).toContain('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB');
+
+    expect(shareEmpty.textContent).toContain('Shared by alice@example.com');
+  });
+
+  it('renders owner initial in avatar circle when owner avatar is not provided', async () => {
+    const sharedNote = {
+      id: 'sn-456',
+      title: 'Shared Note No Avatar',
+      ownerEmail: 'bob@example.com',
+      ownerAvatar: null,
+    };
+    setNotes([sharedNote]);
+
+    await openShare('sn-456');
+
+    const shareEmpty = document.querySelector('#share-empty');
+    expect(shareEmpty).not.toBeNull();
+
+    const avatar = shareEmpty.querySelector('.share-avatar');
+    expect(avatar).not.toBeNull();
+    expect(avatar.classList.contains('has-image')).toBe(false);
+    expect(avatar.textContent).toBe('B');
+
+    expect(shareEmpty.textContent).toContain('Shared by bob@example.com');
   });
 });
