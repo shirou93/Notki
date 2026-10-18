@@ -1006,6 +1006,18 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('Sign in to continue.', 401)
         if admin and not user['isAdmin']:
             raise APIError('This section is available only to the administrator.', 403)
+
+        if not admin and user.get('mustSetup2FA'):
+            with database() as connection:
+                req_row = connection.execute("SELECT value FROM settings WHERE key = 'require2FA'").fetchone()
+                require_2fa_enabled = req_row and req_row['value'] == 'true'
+
+            if require_2fa_enabled:
+                path = urlsplit(self.path).path
+                allowed_paths = ('/api/session', '/api/logout', '/api/account/totp', '/api/account/totp/verify', '/api/account/passkey')
+                if path not in allowed_paths:
+                    raise APIError('Administrator requires two-factor authentication. Please configure it.', 403)
+
         return user
 
     def get_session_days(self):
@@ -2046,6 +2058,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
             has_passkey = pk_count > 0
             req_row = connection.execute("SELECT value FROM settings WHERE key = 'require2FA'").fetchone()
             require_2fa = req_row and req_row['value'] == 'true'
+
+        if require_2fa and not (has_totp or has_passkey):
+            raise APIError('Two-factor authentication is required by the administrator. Please configure it.', 403)
 
         if has_totp or has_passkey:
             temp_token = create_temp_2fa_token(row['id'])
