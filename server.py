@@ -2243,9 +2243,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
         except Exception as err:
             raise APIError('Invalid key data.', 400) from err
         with database() as connection:
+            existing = connection.execute('SELECT user_id FROM passkeys WHERE id = ?', (key_id,)).fetchone()
+            if existing and existing['user_id'] != user['id']:
+                raise APIError('Conflict: Passkey ID already exists and belongs to another user.', 409)
+
             connection.execute(
                 'INSERT INTO passkeys (id, user_id, public_key_pem, name, created_at) VALUES (?, ?, ?, ?, ?) '
-                'ON CONFLICT(id) DO UPDATE SET public_key_pem = excluded.public_key_pem, name = excluded.name',
+                'ON CONFLICT(id) DO UPDATE SET public_key_pem = excluded.public_key_pem, name = excluded.name '
+                'WHERE passkeys.user_id = excluded.user_id',
                 (key_id, user['id'], pem, name, iso_time())
             )
         self.send_json({'added': True}, 201)
