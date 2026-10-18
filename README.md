@@ -18,7 +18,7 @@ A fast, lightweight, and private web-based note-taking application written in pu
   - Two-Factor Authentication (2FA) supporting both TOTP (Authenticator Apps) and WebAuthn Passkeys / Hardware Security Keys (FIDO2/Touch ID/Face ID).
   - Emergency 2FA recovery backup codes.
   - Option to enforce 2FA server-wide via administrative settings.
-  - Rate limiting on login endpoints to prevent brute-force attempts.
+  - Fail2ban rate limiting on login and 2FA endpoints to prevent brute-force attempts, with configurable ban thresholds and duration in the Admin Panel.
 - 💾 **Transparent JSON Backups**: Full server state backup, download, upload, and restore in transparent `.json` format, with backup import support during first-run setup.
 - ⚙️ **Comprehensive Admin Panel**: User account management, single-use invitation link generation with custom expiration, server system stats, pinned server announcements, and direct update checks via GitHub releases.
 - 🎨 **Themes & Multi-Language Support (i18n)**: Native Light, Dark, and System theme integration, with built-in translations for English, Polish, German, French, Japanese, Korean, Italian, and Spanish.
@@ -50,6 +50,32 @@ The easiest and recommended way to deploy Notki is using **Docker Compose**.
    ```
 
 3. Open your browser at `http://localhost:8000/setup` and complete the initial administrator setup.
+
+---
+
+## 💻 Command-Line Interface (CLI Options)
+
+Notki provides administrative CLI flags for command-line management and disaster recovery:
+
+```bash
+# Create initial administrator account
+python3 server.py --create-admin
+
+# Disable 2FA for a specific user (by email or user ID)
+python3 server.py --disable-2fa user@example.com
+
+# Completely disable 2FA server-wide for all users
+python3 server.py --disable-all-2fa
+
+# Unban a specific IP address from Fail2ban
+python3 server.py --unban 192.168.1.100
+
+# Unban all banned IP addresses from Fail2ban
+python3 server.py --unban-all
+
+# Run server with custom host or port
+python3 server.py --host 0.0.0.0 --port 8000
+```
 
 ---
 
