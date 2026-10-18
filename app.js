@@ -2356,7 +2356,10 @@
           exportBtn.className = 'button-secondary';
           exportBtn.style.fontSize = '12px';
           exportBtn.style.padding = '6px 12px';
-          exportBtn.innerHTML = `📅 <span>${t('dailyPlan.exportCalendar')}</span>`;
+          exportBtn.style.display = 'inline-flex';
+          exportBtn.style.alignItems = 'center';
+          exportBtn.style.gap = '6px';
+          exportBtn.innerHTML = `<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>${t('dailyPlan.exportCalendar')}</span>`;
           exportBtn.addEventListener('click', () => {
             downloadIcsFile('plan-dnia.ics', visible);
           });
@@ -2598,7 +2601,7 @@
       if (note.dueDate) {
         const dueBadge = document.createElement('span');
         dueBadge.className = 'card-due-badge';
-        dueBadge.textContent = `📅 ${window.i18n.formatDateTime(note.dueDate)}`;
+        dueBadge.innerHTML = `<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>${window.i18n.formatDateTime(note.dueDate)}</span>`;
         dueBadge.title = t('card.addToCalendar') || 'Add to calendar';
         dueBadge.addEventListener('click', (e) => {
           e.stopPropagation();
