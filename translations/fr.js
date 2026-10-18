@@ -278,6 +278,7 @@ window.notkiTranslations.fr = {
   'admin.security.require2fa': 'Exiger la 2FA pour tous les utilisateurs',
   'admin.security.sessionDays': 'Durée de la session (jours, 30 par défaut)',
   'admin.security.apply': 'Appliquer',
+  'admin.security.saved': 'Paramètres de sécurité enregistrés.',
   'admin.update.title': 'Mise à jour du système',
   'admin.update.description': 'Vérifier et installer les mises à jour depuis GitHub.',
   'admin.update.check': 'Vérifier les mises à jour',

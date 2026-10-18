@@ -790,6 +790,7 @@
         currentAnnouncement = res.announcement;
         renderAnnouncementBanner();
       }
+      showToast(t('admin.security.saved'));
     } catch (e) {
       showToast(e.message);
     }

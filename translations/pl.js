@@ -305,6 +305,7 @@ window.notkiTranslations.pl = {
   'admin.security.require2fa': 'Wymagaj 2FA dla wszystkich użytkowników',
   'admin.security.sessionDays': 'Czas trwania sesji (dni, domyślnie 30)',
   'admin.security.apply': 'Zastosuj',
+  'admin.security.saved': 'Ustawienia bezpieczeństwa zostały zapisane.',
   'admin.update.title': 'Aktualizacja systemu',
   'admin.update.description': 'Sprawdź i zainstaluj aktualizacje z GitHub.',
   'admin.update.check': 'Sprawdź aktualizacje',

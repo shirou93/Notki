@@ -2555,6 +2555,29 @@ class Fail2banAPITests(unittest.TestCase):
         self.assertEqual(settings['fail2banMaxAttempts'], 10)
         self.assertEqual(settings['fail2banBanTime'], 300)
 
+    def test_save_fail2ban_limit_settings_effect(self):
+        status, res = self.request(self.admin, 'POST', '/api/admin/settings', {
+            'fail2banEnabled': True,
+            'fail2banMaxAttempts': 3,
+            'fail2banBanTime': 60
+        })
+        self.assertEqual(status, 200)
+        self.assertTrue(res['fail2banEnabled'])
+        self.assertEqual(res['fail2banMaxAttempts'], 3)
+        self.assertEqual(res['fail2banBanTime'], 60)
+
+        test_ip = '192.168.200.5'
+        server.unban_ip(test_ip)
+
+        self.assertFalse(server.is_rate_limited(test_ip))
+        server.record_failed_auth(test_ip)
+        server.record_failed_auth(test_ip)
+        self.assertFalse(server.is_rate_limited(test_ip))
+        server.record_failed_auth(test_ip)
+        self.assertTrue(server.is_rate_limited(test_ip))
+
+        server.unban_ip(test_ip)
+
 
 if __name__ == '__main__':
     unittest.main()

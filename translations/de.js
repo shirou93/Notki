@@ -278,6 +278,7 @@ window.notkiTranslations.de = {
   'admin.security.require2fa': '2FA für alle Benutzer erzwingen',
   'admin.security.sessionDays': 'Sitzungsdauer (Tage, Standard 30)',
   'admin.security.apply': 'Anwenden',
+  'admin.security.saved': 'Sicherheitseinstellungen gespeichert.',
   'admin.update.title': 'Systemaktualisierung',
   'admin.update.description': 'Auf Updates von GitHub prüfen und installieren.',
   'admin.update.check': 'Auf Updates prüfen',

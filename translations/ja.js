@@ -278,6 +278,7 @@ window.notkiTranslations.ja = {
   'admin.security.require2fa': 'すべてのユーザーに2段階認証を義務付ける',
   'admin.security.sessionDays': 'セッション有効期間（日、デフォルト30）',
   'admin.security.apply': '適用',
+  'admin.security.saved': 'セキュリティ設定を保存しました。',
   'admin.update.title': 'システムアップデート',
   'admin.update.description': 'GitHub からアップデートを確認してインストールします。',
   'admin.update.check': 'アップデートを確認',

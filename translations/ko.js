@@ -278,6 +278,7 @@ window.notkiTranslations.ko = {
   'admin.security.require2fa': '모든 사용자에게 2단계 인증 필수 적용',
   'admin.security.sessionDays': '세션 유지 기간 (일, 기본값 30)',
   'admin.security.apply': '적용',
+  'admin.security.saved': '보안 설정이 저장되었습니다.',
   'admin.update.title': '시스템 업데이트',
   'admin.update.description': 'GitHub에서 업데이트를 확인하고 설치합니다.',
   'admin.update.check': '업데이트 확인',
