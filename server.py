@@ -2185,7 +2185,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         self.send_json({'url': f'{scheme}://{host}/?invite={token}', 'expiresAt': iso_time(expires)}, 201)
 
     @staticmethod
-    def _prepare_note_for_db(note, user_id, seen):
+    def _prepare_note_for_db(note, user_id, seen, default_now=None):
         if not isinstance(note, dict):
             raise APIError('Invalid note.')
         note_id = str(note.get('id') or '')
@@ -2195,7 +2195,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         if not note_id or len(note_id) > 200 or note_id in seen or len(title) > 160 or len(body) > 1_000_000:
             raise APIError('The note data is invalid or too large.')
         seen.add(note_id)
-        created = str(note.get('createdAt') or iso_time())[:64]
+        created = str(note.get('createdAt') or (default_now if default_now is not None else iso_time()))[:64]
         updated = str(note.get('updatedAt') or created)[:64]
         try:
             sort_order = float(note.get('order') or 0)
@@ -2221,8 +2221,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('Invalid note list.')
         prepared = []
         seen = set()
+        default_now = iso_time()
         for note in notes:
-            prepared.append(NotkiHandler._prepare_note_for_db(note, user_id, seen))
+            prepared.append(NotkiHandler._prepare_note_for_db(note, user_id, seen, default_now))
         with database() as connection:
             if seen:
                 connection.execute('DELETE FROM notes WHERE user_id = ? AND id NOT IN (SELECT value FROM json_each(?))', (user_id, json.dumps(list(seen))))
