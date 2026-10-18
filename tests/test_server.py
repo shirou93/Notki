@@ -732,8 +732,7 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(session_info.get('announcement'), 'Patching in progress...')
 
         status, notes_info = self.request(self.admin, 'GET', '/api/notes')
-        self.assertEqual(status, 200)
-        self.assertEqual(notes_info.get('announcement'), 'Patching in progress...')
+        self.assertEqual(status, 403)
 
         # Admin POST settings invalid log level
         status, err = self.request(self.admin, 'POST', '/api/admin/settings', {
@@ -747,6 +746,9 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(settings['require2FA'])
         self.assertEqual(settings['logLevel'], 'DEBUG')
+
+        # Reset require2FA so it doesn't break subsequent tests that use this session
+        self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': False, 'logLevel': 'INFO', 'announcement': ''})
 
         # Admin GET logs
         status, logs_resp = self.request(self.admin, 'GET', '/api/admin/logs')
@@ -923,6 +925,33 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(res['passkeys'][0]['id'], passkey_id)
         self.assertEqual(res['passkeys'][0]['name'], 'Laptop A')
 
+    def test_require_2fa_enforcement(self):
+        # Create a user and get a session (while require2FA is false)
+        client = self.register_user('enforce2fa@example.com', 'password1234')
+
+        # Admin enables require2FA
+        self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': True, 'logLevel': 'INFO'})
+
+        # Existing session now gets 403 on normal endpoints
+        status, _ = self.request(client, 'GET', '/api/notes')
+        self.assertEqual(status, 403)
+
+        # But can still access setup endpoints
+        status, totp_res = self.request(client, 'POST', '/api/account/totp', {})
+        self.assertEqual(status, 200)
+
+        secret = totp_res['secret']
+        code = server.compute_totp_code(secret)
+        status, verify_res = self.request(client, 'POST', '/api/account/totp/verify', {'code': code})
+        self.assertEqual(status, 200)
+
+        # After setup, should be able to access normal endpoints again
+        status, _ = self.request(client, 'GET', '/api/notes')
+        self.assertEqual(status, 200)
+
+        # Reset for subsequent tests
+        self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': False, 'logLevel': 'INFO'})
+
     def test_totp_and_passkey_2fa_flow(self):
         user_client = self.register_user('user2fa@example.com', 'user-passphrase-123')
 
@@ -961,9 +990,7 @@ class ServerFlowTests(unittest.TestCase):
         self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': True, 'logLevel': 'INFO'})
         unauth_no2fa = self.new_client()
         status, login_res = self.request(unauth_no2fa, 'POST', '/api/login', {'email': 'no2fa@example.com', 'password': 'user-passphrase-123'})
-        self.assertEqual(status, 200)
-        self.assertFalse(login_res.get('requires2FA', False))
-        self.assertTrue(login_res['user']['mustSetup2FA'])
+        self.assertEqual(status, 403)
         self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': False, 'logLevel': 'INFO'})
 
         # 3. Test 2FA login with TOTP
@@ -1086,6 +1113,9 @@ class ServerFlowTests(unittest.TestCase):
         status, res = self.request(user_client, 'GET', '/api/account/2fa')
         self.assertEqual(res['passkeys'], [])
 
+        # Need to temporarily disable require2FA to allow admin endpoints to work without 2FA
+        self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': False, 'logLevel': 'INFO'})
+
         # 6. Verify Admin Summary and Admin Reset 2FA
         status, summary = self.request(self.admin, 'GET', '/api/admin/summary')
         self.assertEqual(status, 200)
@@ -1103,6 +1133,14 @@ class ServerFlowTests(unittest.TestCase):
         status, res = self.request(user_client, 'GET', '/api/account/2fa')
         self.assertFalse(res['hasTotp'])
         self.assertEqual(res['passkeys'], [])
+
+        # Reset require2FA so it doesn't break subsequent tests that use this admin session
+        self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': False, 'logLevel': 'INFO'})
+
+        # The test expects 200 on password login after all passkeys and TOTP are removed
+        unauth_client = self.new_client()
+        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa@example.com', 'password': 'user-passphrase-123'})
+        self.assertEqual(status, 200)
 
     @unittest.mock.patch('server.webauthn.verify_registration_response')
     def test_totp_passkey_settings_survive_backup_restore(self, mock_verify):
