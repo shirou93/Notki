@@ -847,30 +847,72 @@ class ServerFlowTests(unittest.TestCase):
             status, _ = self.request(self.admin, 'DELETE', f'/api/admin/backups/{filename}')
             self.assertEqual(status, 404)
 
-    def test_add_passkey_account_takeover(self):
+    def test_login_passkey_challenge_endpoint(self):
+        client = self.new_client()
+        status, res = self.request(client, 'GET', '/api/login/passkey/challenge')
+        self.assertEqual(status, 200)
+        self.assertIn('challengeId', res)
+        self.assertIn('challengeBase64', res)
+        self.assertIsInstance(res['allowCredentials'], list)
+
+    @unittest.mock.patch('server.webauthn.verify_authentication_response')
+    def test_passkey_sign_count_regression(self, mock_verify):
+        mock_verify.side_effect = Exception("Sign count regression")
+
+        user_client = self.register_user('signcountuser@example.com', 'user-passphrase-123')
+        # Insert passkey directly
+        with server.database() as conn:
+            user_row = conn.execute("SELECT id FROM users WHERE email = 'signcountuser@example.com'").fetchone()
+            user_id = user_row['id']
+            conn.execute('INSERT INTO passkeys (id, user_id, name, public_key_pem, created_at, sign_count) VALUES (?, ?, ?, ?, ?, ?)', ('pk-signcount', user_id, 'My Key', 'pem', '2026-01-01T00:00:00Z', 10))
+
+        status, chal_res = self.request(self.new_client(), 'GET', '/api/login/passkey/challenge')
+        self.assertEqual(status, 200)
+
+        payload = {
+            'id': 'pk-signcount',
+            'authenticatorData': 'YXV0aERhdGE=',
+            'clientDataJSON': 'Y2xpZW50RGF0YQ==',
+            'signature': 'c2lnbmF0dXJl',
+            'challengeId': chal_res['challengeId']
+        }
+        status, res = self.request(self.new_client(), 'POST', '/api/login/passkey', payload)
+        self.assertEqual(status, 401)
+        self.assertEqual(res['error'], 'Invalid passkey signature.')
+
+    @unittest.mock.patch('server.webauthn.verify_registration_response')
+    def test_add_passkey_account_takeover(self, mock_verify):
+        mock_verify.return_value = unittest.mock.Mock(
+            credential_public_key=b'dummy_pub_key',
+            sign_count=0
+        )
+
         userA = self.register_user('userA@example.com', 'passphrase-A-123')
         userB = self.register_user('userB@example.com', 'passphrase-B-123')
 
-        with tempfile.NamedTemporaryFile('wb', delete=False) as key_file:
-            key_path = key_file.name
-        try:
-            subprocess.run(['openssl', 'ecparam', '-name', 'prime256v1', '-genkey', '-noout', '-out', key_path], check=True)
-            spki_der = subprocess.run(['openssl', 'ec', '-in', key_path, '-pubout', '-outform', 'DER'], capture_output=True, check=True).stdout
-            pub_b64 = base64.b64encode(spki_der).decode('utf-8')
-        finally:
-            os.unlink(key_path)
-
         passkey_id = 'test-passkey-id-at'
+
+        status, chal_res = self.request(userA, 'GET', '/api/login/passkey/challenge')
 
         # userA registers a passkey
         status, res = self.request(userA, 'POST', '/api/account/passkey', {
-            'id': passkey_id, 'name': 'Laptop A', 'publicKey': pub_b64
+            'id': passkey_id, 'name': 'Laptop A', 'publicKey': 'ZHVtbXk=',
+            'authenticatorData': 'YXV0aERhdGE=',
+            'clientDataJSON': 'Y2xpZW50RGF0YQ==',
+            'attestationObject': 'YXR0ZXN0YXRpb24=',
+            'challengeId': chal_res['challengeId']
         })
         self.assertEqual(status, 201)
 
+        status, chal_res2 = self.request(userB, 'GET', '/api/login/passkey/challenge')
+
         # userB tries to register a passkey with the same ID
         status, res = self.request(userB, 'POST', '/api/account/passkey', {
-            'id': passkey_id, 'name': 'Laptop B', 'publicKey': pub_b64
+            'id': passkey_id, 'name': 'Laptop B', 'publicKey': 'ZHVtbXk=',
+            'authenticatorData': 'YXV0aERhdGE=',
+            'clientDataJSON': 'Y2xpZW50RGF0YQ==',
+            'attestationObject': 'YXR0ZXN0YXRpb24=',
+            'challengeId': chal_res2['challengeId']
         })
         self.assertEqual(status, 409)
 
@@ -963,25 +1005,35 @@ class ServerFlowTests(unittest.TestCase):
         # 4. Passkey Registration and Login Flow
         # Test missing public key
         passkey_id = 'test-passkey-id-123'
+
+        status, chal_res = self.request(user_client, 'GET', '/api/login/passkey/challenge')
+
         status, res = self.request(user_client, 'POST', '/api/account/passkey', {
-            'id': passkey_id, 'name': 'My Laptop', 'publicKey': ''
+            'id': passkey_id, 'name': 'My Laptop', 'publicKey': '',
+            'authenticatorData': 'YXV0aERhdGE=',
+            'clientDataJSON': 'Y2xpZW50RGF0YQ==',
+            'attestationObject': 'YXR0ZXN0YXRpb24=',
+            'challengeId': chal_res['challengeId']
         })
         self.assertEqual(status, 400)
 
-        # Generate EC key pair for passkey test
-        with tempfile.NamedTemporaryFile('wb', delete=False) as key_file:
-            key_path = key_file.name
-
-        subprocess.run(['openssl', 'ecparam', '-name', 'prime256v1', '-genkey', '-noout', '-out', key_path], check=True)
-        spki_der = subprocess.run(['openssl', 'ec', '-in', key_path, '-pubout', '-outform', 'DER'], capture_output=True, check=True).stdout
-        pub_b64 = base64.b64encode(spki_der).decode('utf-8')
+        status, chal_res2 = self.request(user_client, 'GET', '/api/login/passkey/challenge')
 
         # Register valid passkey
-        status, res = self.request(user_client, 'POST', '/api/account/passkey', {
-            'id': passkey_id, 'name': 'My Laptop', 'publicKey': pub_b64
-        })
-        self.assertIn(status, (200, 201))
-        self.assertTrue(res.get('added'))
+        with unittest.mock.patch('server.webauthn.verify_registration_response') as mock_reg_verify:
+            mock_reg_verify.return_value = unittest.mock.Mock(
+                credential_public_key=b'dummy_pub_key',
+                sign_count=0
+            )
+            status, res = self.request(user_client, 'POST', '/api/account/passkey', {
+                'id': passkey_id, 'name': 'My Laptop', 'publicKey': 'ZHVtbXk=',
+                'authenticatorData': 'YXV0aERhdGE=',
+                'clientDataJSON': 'Y2xpZW50RGF0YQ==',
+                'attestationObject': 'YXR0ZXN0YXRpb24=',
+                'challengeId': chal_res2['challengeId']
+            })
+            self.assertIn(status, (200, 201))
+            self.assertTrue(res.get('added'))
 
         # Check status
         status, res = self.request(user_client, 'GET', '/api/account/2fa')
@@ -996,37 +1048,36 @@ class ServerFlowTests(unittest.TestCase):
         self.assertTrue(res['hasPasskey'])
         temp_token = res['tempToken']
 
-        auth_data = b'authenticator_data_32bytes_sample_padding_1234567890'
-        client_data = b'{"type":"webauthn.get","challenge":""}'
-        client_hash = hashlib.sha256(client_data).digest()
-        signed_data = auth_data + client_hash
+        status, chal_res3 = self.request(unauth_client, 'GET', '/api/login/passkey/challenge')
 
-        with tempfile.NamedTemporaryFile('wb', delete=False) as data_file:
-            data_file.write(signed_data)
-            data_file_path = data_file.name
-
-        sig_der = subprocess.run(['openssl', 'dgst', '-sha256', '-sign', key_path, data_file_path], capture_output=True, check=True).stdout
-
-        status, res = self.request(unauth_client, 'POST', '/api/login/passkey', {
-            'tempToken': temp_token,
-            'id': passkey_id,
-            'authenticatorData': base64.b64encode(auth_data).decode('utf-8'),
-            'clientDataJSON': base64.b64encode(client_data).decode('utf-8'),
-            'signature': base64.b64encode(sig_der).decode('utf-8')
-        })
-        self.assertEqual(status, 200)
-        self.assertEqual(res['user']['email'], 'user2fa@example.com')
+        with unittest.mock.patch('server.webauthn.verify_authentication_response') as mock_auth_verify:
+            mock_auth_verify.return_value = unittest.mock.Mock(new_sign_count=1)
+            status, login_res = self.request(unauth_client, 'POST', '/api/login/passkey', {
+                'id': passkey_id,
+                'authenticatorData': 'YXV0aERhdGE=',
+                'clientDataJSON': 'Y2xpZW50RGF0YQ==',
+                'signature': 'c2lnbmF0dXJl',
+                'challengeId': chal_res3['challengeId'],
+                'tempToken': temp_token
+            })
+            self.assertEqual(status, 200)
+            self.assertEqual(login_res['user']['email'], 'user2fa@example.com')
 
         # Test passwordless login via passkey without tempToken
         passwordless_client = self.new_client()
-        status, res = self.request(passwordless_client, 'POST', '/api/login/passkey', {
-            'id': passkey_id,
-            'authenticatorData': base64.b64encode(auth_data).decode('utf-8'),
-            'clientDataJSON': base64.b64encode(client_data).decode('utf-8'),
-            'signature': base64.b64encode(sig_der).decode('utf-8')
-        })
-        self.assertEqual(status, 200)
-        self.assertEqual(res['user']['email'], 'user2fa@example.com')
+        status, chal_res4 = self.request(passwordless_client, 'GET', '/api/login/passkey/challenge')
+
+        with unittest.mock.patch('server.webauthn.verify_authentication_response') as mock_auth_verify:
+            mock_auth_verify.return_value = unittest.mock.Mock(new_sign_count=2)
+            status, login_res = self.request(passwordless_client, 'POST', '/api/login/passkey', {
+                'id': passkey_id,
+                'authenticatorData': 'YXV0aERhdGE=',
+                'clientDataJSON': 'Y2xpZW50RGF0YQ==',
+                'signature': 'c2lnbmF0dXJl',
+                'challengeId': chal_res4['challengeId']
+            })
+            self.assertEqual(status, 200)
+            self.assertEqual(login_res['user']['email'], 'user2fa@example.com')
 
         # Delete passkey
         status, res = self.request(user_client, 'DELETE', f'/api/account/passkey/{passkey_id}')
@@ -1053,7 +1104,13 @@ class ServerFlowTests(unittest.TestCase):
         self.assertFalse(res['hasTotp'])
         self.assertEqual(res['passkeys'], [])
 
-    def test_totp_passkey_settings_survive_backup_restore(self):
+    @unittest.mock.patch('server.webauthn.verify_registration_response')
+    def test_totp_passkey_settings_survive_backup_restore(self, mock_verify):
+        mock_verify.return_value = unittest.mock.Mock(
+            credential_public_key=b'dummy_pub_key',
+            sign_count=0
+        )
+
         user_client = self.register_user('user2fa2@example.com', 'user-passphrase-123')
 
         # Setup TOTP
@@ -1064,18 +1121,17 @@ class ServerFlowTests(unittest.TestCase):
 
         # Register Passkey
         passkey_id = 'test-backup-passkey-id'
-        with tempfile.NamedTemporaryFile('wb', delete=False) as key_file:
-            key_path = key_file.name
-        try:
-            subprocess.run(['openssl', 'ecparam', '-name', 'prime256v1', '-genkey', '-noout', '-out', key_path], check=True)
-            spki_der = subprocess.run(['openssl', 'ec', '-in', key_path, '-pubout', '-outform', 'DER'], capture_output=True, check=True).stdout
-            pub_b64 = base64.b64encode(spki_der).decode('utf-8')
-            status, res = self.request(user_client, 'POST', '/api/account/passkey', {
-                'id': passkey_id, 'name': 'My Laptop', 'publicKey': pub_b64
-            })
-            self.assertTrue(res.get('added'))
-        finally:
-            os.unlink(key_path)
+
+        status, chal_res = self.request(user_client, 'GET', '/api/login/passkey/challenge')
+
+        status, res = self.request(user_client, 'POST', '/api/account/passkey', {
+            'id': passkey_id, 'name': 'My Laptop', 'publicKey': 'ZHVtbXk=',
+            'authenticatorData': 'YXV0aERhdGE=',
+            'clientDataJSON': 'Y2xpZW50RGF0YQ==',
+            'attestationObject': 'YXR0ZXN0YXRpb24=',
+            'challengeId': chal_res['challengeId']
+        })
+        self.assertTrue(res.get('added'))
 
         # Change admin settings
         self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': False, 'logLevel': 'DEBUG'})
@@ -1274,7 +1330,7 @@ class ServerFlowTests(unittest.TestCase):
         with server.database() as conn:
             user_row = conn.execute("SELECT id FROM users WHERE email = 'cli2fa@example.com'").fetchone()
             user_id = user_row['id']
-            conn.execute('INSERT INTO passkeys (id, user_id, name, public_key_pem, created_at) VALUES (?, ?, ?, ?, ?)', ('pk-123', user_id, 'My Key', 'pem', '2026-01-01T00:00:00Z'))
+            conn.execute('INSERT INTO passkeys (id, user_id, name, public_key_pem, created_at, sign_count) VALUES (?, ?, ?, ?, ?, ?)', ('pk-123', user_id, 'My Key', 'pem', '2026-01-01T00:00:00Z', 0))
 
         status, twofa_info = self.request(user_client, 'GET', '/api/account/2fa')
         self.assertTrue(twofa_info['hasTotp'])
@@ -1333,8 +1389,8 @@ class ServerFlowTests(unittest.TestCase):
         with server.database() as conn:
             u1_row = conn.execute("SELECT id FROM users WHERE email = 'u1@example.com'").fetchone()
             u2_row = conn.execute("SELECT id FROM users WHERE email = 'u2@example.com'").fetchone()
-            conn.execute('INSERT INTO passkeys (id, user_id, name, public_key_pem, created_at) VALUES (?, ?, ?, ?, ?)', ('pk-u1', u1_row['id'], 'Key 1', 'pem', '2026-01-01T00:00:00Z'))
-            conn.execute('INSERT INTO passkeys (id, user_id, name, public_key_pem, created_at) VALUES (?, ?, ?, ?, ?)', ('pk-u2', u2_row['id'], 'Key 2', 'pem', '2026-01-01T00:00:00Z'))
+            conn.execute('INSERT INTO passkeys (id, user_id, name, public_key_pem, created_at, sign_count) VALUES (?, ?, ?, ?, ?, ?)', ('pk-u1', u1_row['id'], 'Key 1', 'pem', '2026-01-01T00:00:00Z', 0))
+            conn.execute('INSERT INTO passkeys (id, user_id, name, public_key_pem, created_at, sign_count) VALUES (?, ?, ?, ?, ?, ?)', ('pk-u2', u2_row['id'], 'Key 2', 'pem', '2026-01-01T00:00:00Z', 0))
             conn.execute("INSERT INTO settings (key, value) VALUES ('require2FA', 'true') ON CONFLICT(key) DO UPDATE SET value = 'true'")
 
         # Create a temp token
@@ -2034,37 +2090,6 @@ class GetForwardedProtoTests(unittest.TestCase):
         self.assertEqual(self.handler.get_forwarded_proto(), '')
 
 
-
-
-class VerifyPasskeySignatureTests(unittest.TestCase):
-    def setUp(self):
-        self.pub_key_pem = (
-            "-----BEGIN PUBLIC KEY-----\n"
-            "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2M0S6lxn8vigDBEkiT7c+mdUxNbO\n"
-            "3mvhO98ilcgQqX+lqJ0tKjYMDKmk1sfJ7Uso0+GZ1mJ/LmltaJwxClsPSA==\n"
-            "-----END PUBLIC KEY-----\n"
-        )
-        self.sig_bytes = b'0D\x02 \x17\xeaM9x\x12G<\xfe\r\xa7\xf4\xe5Y\x9a$<\x1a\xb6\xd3*\xdd0a\x16\xb6-\xbcg\xbbX\xbb\x02 \x1b\x85\xcc{r+\xf8<O\xc0\xea1BL\xf2\x9c\xbf>Dz)+\xa0\nu$\xc7\xde\x06\xae\x14m'
-        self.data_bytes = b'hello world'
-
-    def test_valid_signature(self):
-        self.assertTrue(server.verify_passkey_signature(self.pub_key_pem, self.sig_bytes, self.data_bytes))
-
-    def test_invalid_signature_wrong_data(self):
-        self.assertFalse(server.verify_passkey_signature(self.pub_key_pem, self.sig_bytes, b'wrong data'))
-
-    def test_invalid_signature_wrong_sig(self):
-        self.assertFalse(server.verify_passkey_signature(self.pub_key_pem, b'not a valid sig', self.data_bytes))
-
-    def test_invalid_signature_corrupted_sig(self):
-        corrupt_sig = self.sig_bytes[:-1] + bytes([(self.sig_bytes[-1] + 1) % 256])
-        self.assertFalse(server.verify_passkey_signature(self.pub_key_pem, corrupt_sig, self.data_bytes))
-
-    def test_malformed_pub_key(self):
-        self.assertFalse(server.verify_passkey_signature("invalid pem key", self.sig_bytes, self.data_bytes))
-
-    def test_exception_handling(self):
-        self.assertFalse(server.verify_passkey_signature(None, None, None))
 
 
 class TranslateMessageTests(unittest.TestCase):

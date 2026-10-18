@@ -383,15 +383,19 @@
 
     const hostname = window.location.hostname;
     const isDomain = Boolean(hostname && !/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) && hostname !== 'localhost');
-    const publicKeyOptions = {
-      challenge: new Uint8Array(32),
-      userVerification: 'preferred'
-    };
-    if (isDomain) {
-      publicKeyOptions.rpId = hostname;
-    }
 
     try {
+      const challengeResponse = await apiRequest('/api/login/passkey/challenge');
+      const challengeBytes = Uint8Array.from(atob(challengeResponse.challengeBase64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+
+      const publicKeyOptions = {
+        challenge: challengeBytes,
+        userVerification: 'preferred'
+      };
+      if (isDomain) {
+        publicKeyOptions.rpId = hostname;
+      }
+
       passkeyConditionalPromise = navigator.credentials.get({
         publicKey: publicKeyOptions,
         mediation: 'conditional',
@@ -405,7 +409,8 @@
         id: assertion.id,
         authenticatorData: bufferToBase64(assertion.response.authenticatorData),
         clientDataJSON: bufferToBase64(assertion.response.clientDataJSON),
-        signature: bufferToBase64(assertion.response.signature)
+        signature: bufferToBase64(assertion.response.signature),
+        challengeId: challengeResponse.challengeId
       };
 
       const { user } = await apiRequest('/api/login/passkey', {
@@ -897,8 +902,12 @@
 
       const hostname = window.location.hostname;
       const isDomain = Boolean(hostname && !/^(\d{1,3}\.){3}\d{1,3}$/.test(hostname) && hostname !== 'localhost');
+
+      const challengeResponse = await apiRequest('/api/login/passkey/challenge');
+      const challengeBytes = Uint8Array.from(atob(challengeResponse.challengeBase64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+
       const publicKeyOptions = {
-        challenge: new Uint8Array(32),
+        challenge: challengeBytes,
         userVerification: "preferred"
       };
       if (isDomain) {
@@ -909,7 +918,8 @@
         id: assertion.id,
         authenticatorData: bufferToBase64(assertion.response.authenticatorData),
         clientDataJSON: bufferToBase64(assertion.response.clientDataJSON),
-        signature: bufferToBase64(assertion.response.signature)
+        signature: bufferToBase64(assertion.response.signature),
+        challengeId: challengeResponse.challengeId
       };
       if (useTempToken && loginTempToken) {
         payload.tempToken = loginTempToken;
@@ -1386,9 +1396,12 @@
         rpConfig.id = hostname;
       }
 
+      const challengeResponse = await apiRequest('/api/login/passkey/challenge');
+      const challengeBytes = Uint8Array.from(atob(challengeResponse.challengeBase64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+
       const credential = await navigator.credentials.create({
         publicKey: {
-          challenge: new Uint8Array(32),
+          challenge: challengeBytes,
           rp: rpConfig,
           user: {
             id: new TextEncoder().encode(currentUser?.email || 'user'),
@@ -1436,6 +1449,10 @@
           id: credential.id,
           name,
           publicKey: pubKeyB64,
+          authenticatorData: bufferToBase64(credential.response.authenticatorData || new Uint8Array()),
+          clientDataJSON: bufferToBase64(credential.response.clientDataJSON),
+          attestationObject: bufferToBase64(credential.response.attestationObject),
+          challengeId: challengeResponse.challengeId
         }),
       });
 

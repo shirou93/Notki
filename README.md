@@ -83,11 +83,12 @@ python3 server.py --host 0.0.0.0 --port 8000
 
 ### 1. Direct Execution (Python 3.9+)
 
-Notki relies strictly on the Python standard library and requires no `pip` packages.
+Notki relies on the standard library but requires the `webauthn` library for Passkey support.
 
 ```bash
 git clone https://github.com/shirou93/Notki.git
 cd Notki
+pip3 install webauthn
 python3 server.py
 ```
 The application will be accessible at `http://localhost:8000`.
