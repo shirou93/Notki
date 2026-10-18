@@ -2389,6 +2389,5 @@ class TestClientIPAndProxyTrust(unittest.TestCase):
         h3 = self._make_handler('172.16.0.1', '203.0.113.30')
         self.assertEqual(h3.get_client_ip(), '172.16.0.1')
 
-
 if __name__ == '__main__':
     unittest.main()
