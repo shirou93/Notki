@@ -620,16 +620,40 @@ def public_user(row, connection=None):
     has_passkey = False
     require_2fa = False
 
+    has_totp_col = False
+    totp_secret = None
+    try:
+        totp_secret = row['totp_secret']
+        has_totp_col = True
+    except (IndexError, KeyError):
+        pass
+
     def check_user_2fa(conn):
         nonlocal has_totp, has_passkey, require_2fa
-        u_row = conn.execute('SELECT totp_secret FROM users WHERE id = ?', (row['id'],)).fetchone()
-        if u_row:
-            totp_secret = u_row['totp_secret']
-            has_totp = bool(totp_secret and not totp_secret.startswith('pending:'))
-        pk_count = conn.execute('SELECT COUNT(*) FROM passkeys WHERE user_id = ?', (row['id'],)).fetchone()[0]
-        has_passkey = pk_count > 0
-        req_row = conn.execute("SELECT value FROM settings WHERE key = 'require2FA'").fetchone()
-        require_2fa = bool(req_row and req_row['value'] == 'true')
+        if has_totp_col:
+            ts = totp_secret
+            has_totp = bool(ts and not ts.startswith('pending:'))
+            res = conn.execute(
+                "SELECT EXISTS(SELECT 1 FROM passkeys WHERE user_id = ?), "
+                "(SELECT value FROM settings WHERE key = 'require2FA')",
+                (row['id'],)
+            ).fetchone()
+            if res:
+                has_passkey = bool(res[0])
+                require_2fa = bool(res[1] and res[1] == 'true')
+        else:
+            res = conn.execute(
+                "SELECT totp_secret, "
+                "EXISTS(SELECT 1 FROM passkeys WHERE user_id = ?), "
+                "(SELECT value FROM settings WHERE key = 'require2FA') "
+                "FROM users WHERE id = ?",
+                (row['id'], row['id'])
+            ).fetchone()
+            if res:
+                ts = res['totp_secret']
+                has_totp = bool(ts and not ts.startswith('pending:'))
+                has_passkey = bool(res[1])
+                require_2fa = bool(res[2] and res[2] == 'true')
 
     try:
         if connection:
