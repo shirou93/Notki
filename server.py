@@ -27,6 +27,7 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlsplit
 import urllib.request
 import qr
+import webauthn
 
 
 ROOT = Path(__file__).resolve().parent
@@ -166,6 +167,8 @@ POLISH_MESSAGES = {
 
 TEMP_2FA_TOKENS = {}
 TEMP_2FA_LOCK = threading.Lock()
+PASSKEY_CHALLENGES = {}
+PASSKEY_CHALLENGES_LOCK = threading.Lock()
 FAILED_AUTH_ATTEMPTS = {}
 FAILED_AUTH_LOCK = threading.Lock()
 
@@ -370,6 +373,22 @@ def parse_multipart_data(rfile, boundary, content_length):
                 fields.setdefault(name, []).append(body)
     return fields
 
+def generate_passkey_challenge():
+    challenge_token = secrets.token_hex(16)
+    challenge_bytes = secrets.token_bytes(32)
+    expires_at = utc_now() + timedelta(minutes=5)
+    with PASSKEY_CHALLENGES_LOCK:
+        now = utc_now()
+        expired = [k for k, v in PASSKEY_CHALLENGES.items() if v['expiresAt'] < now]
+        for k in expired:
+            del PASSKEY_CHALLENGES[k]
+        PASSKEY_CHALLENGES[challenge_token] = {'challenge': challenge_bytes, 'expiresAt': expires_at}
+    return {
+        'challengeId': challenge_token,
+        'challengeBase64': base64.urlsafe_b64encode(challenge_bytes).decode('utf-8').rstrip('='),
+        'allowCredentials': []
+    }
+
 def create_temp_2fa_token(user_id):
     token = secrets.token_urlsafe(32)
     expires_at = utc_now() + timedelta(minutes=5)
@@ -468,98 +487,6 @@ def verify_totp_code(secret_b32, code, time_step=30, window=1):
         except Exception:
             pass
     return False
-
-_P256_P = 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF
-_P256_A = _P256_P - 3
-_P256_B = 0x5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B
-_P256_N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
-_P256_G = (
-    0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296,
-    0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5,
-)
-
-def _ecc_point_add(p1, p2):
-    if p1 is None:
-        return p2
-    if p2 is None:
-        return p1
-    x1, y1 = p1
-    x2, y2 = p2
-    if x1 == x2 and y1 != y2:
-        return None
-    if x1 == x2:
-        s = (3 * x1 * x1 + _P256_A) * pow(2 * y1, -1, _P256_P) % _P256_P
-    else:
-        s = (y2 - y1) * pow(x2 - x1, -1, _P256_P) % _P256_P
-    x3 = (s * s - x1 - x2) % _P256_P
-    y3 = (s * (x1 - x3) - y1) % _P256_P
-    return (x3, y3)
-
-def _ecc_point_mul(k, p):
-    res = None
-    for bit in bin(k)[2:]:
-        if res is not None:
-            res = _ecc_point_add(res, res)
-        if bit == '1':
-            res = _ecc_point_add(res, p) if res is not None else p
-    return res
-
-def _decode_der_sig(sig_bytes):
-    if not isinstance(sig_bytes, (bytes, bytearray)) or len(sig_bytes) < 8 or sig_bytes[0] != 0x30:
-        return None, None
-    try:
-        seq_len = sig_bytes[1]
-        idx = 2
-        if seq_len & 0x80:
-            len_bytes_count = seq_len & 0x7f
-            idx += len_bytes_count
-        if sig_bytes[idx] != 0x02:
-            return None, None
-        r_len = sig_bytes[idx + 1]
-        r_bytes = sig_bytes[idx + 2 : idx + 2 + r_len]
-        idx += 2 + r_len
-        if idx >= len(sig_bytes) or sig_bytes[idx] != 0x02:
-            return None, None
-        s_len = sig_bytes[idx + 1]
-        s_bytes = sig_bytes[idx + 2 : idx + 2 + s_len]
-        r = int.from_bytes(r_bytes, 'big')
-        s = int.from_bytes(s_bytes, 'big')
-        return r, s
-    except Exception:
-        return None, None
-
-def _decode_pub_pem(pem_str):
-    try:
-        lines = [l.strip() for l in str(pem_str or '').strip().splitlines() if l.strip() and not l.startswith('---')]
-        der = base64.b64decode(''.join(lines))
-        if len(der) >= 65:
-            idx = der.find(b'\x04')
-            if idx != -1 and len(der[idx:]) == 65:
-                qx = int.from_bytes(der[idx + 1 : idx + 33], 'big')
-                qy = int.from_bytes(der[idx + 33 : idx + 65], 'big')
-                return qx, qy
-        return None, None
-    except Exception:
-        return None, None
-
-def verify_passkey_signature(public_key_pem, sig_bytes, signed_data):
-    try:
-        qx, qy = _decode_pub_pem(public_key_pem)
-        r, s = _decode_der_sig(sig_bytes)
-        if qx is None or r is None or not (1 <= r < _P256_N) or not (1 <= s < _P256_N):
-            return False
-        if (qy * qy - (qx * qx * qx + _P256_A * qx + _P256_B)) % _P256_P != 0:
-            return False
-        e = int.from_bytes(hashlib.sha256(signed_data).digest(), 'big')
-        w = pow(s, -1, _P256_N)
-        u1 = (e * w) % _P256_N
-        u2 = (r * w) % _P256_N
-        pt = _ecc_point_add(_ecc_point_mul(u1, _P256_G), _ecc_point_mul(u2, (qx, qy)))
-        if pt is None:
-            return False
-        return (pt[0] % _P256_N) == r
-    except Exception:
-        return False
 
 
 def parse_version(version_str):
@@ -692,7 +619,8 @@ def initialize_database():
                 user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 public_key_pem TEXT NOT NULL,
                 name TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                sign_count INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS passkeys_user_idx ON passkeys(user_id);
             CREATE TABLE IF NOT EXISTS fail2ban_attempts (
@@ -715,6 +643,13 @@ def initialize_database():
         note_columns = {row['name'] for row in connection.execute('PRAGMA table_info(notes)')}
         if 'due_date' not in note_columns:
             connection.execute('ALTER TABLE notes ADD COLUMN due_date TEXT')
+
+        passkey_columns = {row['name'] for row in connection.execute('PRAGMA table_info(passkeys)')}
+        if 'sign_count' not in passkey_columns:
+            try:
+                connection.execute('ALTER TABLE passkeys ADD COLUMN sign_count INTEGER NOT NULL DEFAULT 0')
+            except sqlite3.OperationalError:
+                pass
 
 
 def verify_password(password, encoded):
@@ -1250,6 +1185,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
         path = unquote(urlsplit(self.path).path)
         try:
             handled = False
+            if path == '/api/login/passkey/challenge':
+                self.send_json(generate_passkey_challenge())
+                return
             if path == '/api/setup/status' or path in ('/setup', '/setup.html'):
                 handled = self.handle_setup_get(path)
             elif path.startswith('/api/admin/'):
@@ -2153,8 +2091,15 @@ class NotkiHandler(BaseHTTPRequestHandler):
         auth_data_b64 = payload.get('authenticatorData')
         client_data_b64 = payload.get('clientDataJSON')
         sig_b64 = payload.get('signature')
-        if not key_id or not auth_data_b64 or not client_data_b64 or not sig_b64:
+        challenge_id = payload.get('challengeId')
+        if not key_id or not auth_data_b64 or not client_data_b64 or not sig_b64 or not challenge_id:
             raise APIError('Invalid key data.', 400)
+
+        with PASSKEY_CHALLENGES_LOCK:
+            challenge_data = PASSKEY_CHALLENGES.pop(challenge_id, None)
+            if not challenge_data or challenge_data['expiresAt'] < utc_now():
+                raise APIError('Passkey challenge expired or invalid.', 401)
+            expected_challenge = challenge_data['challenge']
 
         temp_token = payload.get('tempToken')
         with database() as connection:
@@ -2163,9 +2108,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 if not user_id:
                     raise APIError('2FA session expired or invalid.', 401)
                 row = connection.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-                pk_row = connection.execute('SELECT public_key_pem FROM passkeys WHERE id = ? AND user_id = ?', (key_id, user_id)).fetchone()
+                pk_row = connection.execute('SELECT public_key_pem, sign_count FROM passkeys WHERE id = ? AND user_id = ?', (key_id, user_id)).fetchone()
             else:
-                pk_row = connection.execute('SELECT user_id, public_key_pem FROM passkeys WHERE id = ?', (key_id,)).fetchone()
+                pk_row = connection.execute('SELECT user_id, public_key_pem, sign_count FROM passkeys WHERE id = ?', (key_id,)).fetchone()
                 if not pk_row:
                     raise APIError('Passkey not found.', 401)
                 user_id = pk_row['user_id']
@@ -2173,22 +2118,48 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
             if not pk_row or not row:
                 raise APIError('Passkey not found.', 401)
-        try:
-            auth_bytes = safe_b64decode(auth_data_b64)
-            client_bytes = safe_b64decode(client_data_b64)
-            sig_bytes = safe_b64decode(sig_b64)
-            client_hash = hashlib.sha256(client_bytes).digest()
-            signed_data = auth_bytes + client_hash
-        except Exception as err:
-            raise APIError('Invalid key data.', 400) from err
 
-        if not verify_passkey_signature(pk_row['public_key_pem'], sig_bytes, signed_data):
+        origin = f"{self.get_forwarded_proto() or 'http'}://{self.get_forwarded_host() or self.headers.get('Host')}"
+        expected_rp_id = (self.get_forwarded_host() or self.headers.get('Host') or '').split(':')[0]
+
+        pk_str = pk_row['public_key_pem']
+        if pk_str.startswith('-----BEGIN PUBLIC KEY-----'):
+            pub_key_bytes = pk_str.encode('utf-8')
+        else:
+            try:
+                pub_key_bytes = base64.b64decode(pk_str)
+            except Exception:
+                pub_key_bytes = b''
+
+        try:
+            credential = {
+                'id': key_id,
+                'rawId': key_id,
+                'response': {
+                    'authenticatorData': auth_data_b64,
+                    'clientDataJSON': client_data_b64,
+                    'signature': sig_b64,
+                },
+                'type': 'public-key'
+            }
+
+            verification = webauthn.verify_authentication_response(
+                credential=credential,
+                expected_challenge=expected_challenge,
+                expected_origin=origin,
+                expected_rp_id=expected_rp_id,
+                credential_public_key=pub_key_bytes,
+                credential_current_sign_count=pk_row['sign_count']
+            )
+            new_sign_count = verification.new_sign_count
+        except Exception as err:
             client_ip = self.get_client_ip()
             record_failed_auth(client_ip)
-            raise APIError('Invalid passkey signature.', 401)
+            raise APIError('Invalid passkey signature.', 401) from err
 
         token = self.new_session(user_id)
         with database() as connection:
+            connection.execute('UPDATE passkeys SET sign_count = ? WHERE id = ?', (new_sign_count, key_id))
             user_data = public_user(row, connection)
         self.send_json({'user': user_data}, extra_headers=self.session_headers(token))
 
@@ -2232,26 +2203,56 @@ class NotkiHandler(BaseHTTPRequestHandler):
         key_id = payload.get('id')
         name = str(payload.get('name') or 'Passkey')[:80]
         pub_b64 = payload.get('publicKey')
-        if not key_id or not pub_b64:
+        auth_data_b64 = payload.get('authenticatorData')
+        client_data_b64 = payload.get('clientDataJSON')
+        att_obj_b64 = payload.get('attestationObject')
+        challenge_id = payload.get('challengeId')
+
+        if not key_id or not pub_b64 or not client_data_b64 or not att_obj_b64 or not challenge_id:
             raise APIError('Invalid key data.', 400)
+
+        with PASSKEY_CHALLENGES_LOCK:
+            challenge_data = PASSKEY_CHALLENGES.pop(challenge_id, None)
+            if not challenge_data or challenge_data['expiresAt'] < utc_now():
+                raise APIError('Passkey challenge expired or invalid.', 401)
+            expected_challenge = challenge_data['challenge']
+
+        origin = f"{self.get_forwarded_proto() or 'http'}://{self.get_forwarded_host() or self.headers.get('Host')}"
+        expected_rp_id = (self.get_forwarded_host() or self.headers.get('Host') or '').split(':')[0]
+
         try:
-            raw_bytes = safe_b64decode(pub_b64)
-            spki_bytes = extract_spki_der(raw_bytes)
-            if not spki_bytes:
-                raise ValueError("Could not parse public key")
-            pem = f"-----BEGIN PUBLIC KEY-----\n{base64.b64encode(spki_bytes).decode('utf-8')}\n-----END PUBLIC KEY-----\n"
+            credential = {
+                'id': key_id,
+                'rawId': key_id,
+                'response': {
+                    'attestationObject': att_obj_b64,
+                    'clientDataJSON': client_data_b64,
+                },
+                'type': 'public-key'
+            }
+
+            verification = webauthn.verify_registration_response(
+                credential=credential,
+                expected_challenge=expected_challenge,
+                expected_origin=origin,
+                expected_rp_id=expected_rp_id
+            )
+
+            pem = base64.b64encode(verification.credential_public_key).decode('utf-8')
+            sign_count = verification.sign_count
         except Exception as err:
             raise APIError('Invalid key data.', 400) from err
+
         with database() as connection:
             existing = connection.execute('SELECT user_id FROM passkeys WHERE id = ?', (key_id,)).fetchone()
             if existing and existing['user_id'] != user['id']:
                 raise APIError('Conflict: Passkey ID already exists and belongs to another user.', 409)
 
             connection.execute(
-                'INSERT INTO passkeys (id, user_id, public_key_pem, name, created_at) VALUES (?, ?, ?, ?, ?) '
-                'ON CONFLICT(id) DO UPDATE SET public_key_pem = excluded.public_key_pem, name = excluded.name '
+                'INSERT INTO passkeys (id, user_id, public_key_pem, name, created_at, sign_count) VALUES (?, ?, ?, ?, ?, ?) '
+                'ON CONFLICT(id) DO UPDATE SET public_key_pem = excluded.public_key_pem, name = excluded.name, sign_count = excluded.sign_count '
                 'WHERE passkeys.user_id = excluded.user_id',
-                (key_id, user['id'], pem, name, iso_time())
+                (key_id, user['id'], pem, name, iso_time(), sign_count)
             )
         self.send_json({'added': True}, 201)
 

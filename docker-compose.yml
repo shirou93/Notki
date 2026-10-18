@@ -22,7 +22,8 @@ services:
             curl -sL "$$LATEST_TARBALL" | tar -xz -C /notki/app --strip-components=1
           fi
         fi
-        apk add --no-cache python3 openssl
+        apk add --no-cache python3 py3-pip openssl
+        pip install webauthn --break-system-packages
         exec python3 server.py
     ports:
       - "${NOTKI_HTTP_PORT:-8000}:8000"

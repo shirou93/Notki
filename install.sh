@@ -29,6 +29,10 @@ else
     git clone https://github.com/shirou93/Notki /opt/notki
 fi
 
+# 2.5 Install dependencies
+echo "Installing pip dependencies..."
+python3 -m pip install webauthn || echo "Failed to install webauthn via pip. Please install it manually."
+
 # 3. Create dedicated notki system user
 if ! id "notki" &>/dev/null; then
     echo "Creating 'notki' system user..."
