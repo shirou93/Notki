@@ -548,7 +548,8 @@ describe('Note dragging and sorting across tabs', () => {
     expect(tagsElem).not.toBeNull();
     const dueBadge = dueElem.querySelector('.card-due-badge');
     expect(dueBadge).not.toBeNull();
-    expect(dueBadge.textContent).toContain('📅');
+    expect(dueBadge.querySelector('svg')).not.toBeNull();
+    expect(dueBadge.textContent).not.toContain('📅');
     expect(tagsElem.querySelector('.card-tag').textContent).toBe('work');
   });
 
