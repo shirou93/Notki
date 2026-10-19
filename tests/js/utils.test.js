@@ -789,3 +789,35 @@ describe('openShare modal owner avatar', () => {
     expect(shareEmpty.textContent).toContain('Shared by bob@example.com');
   });
 });
+
+describe('buildTaskDragPreview', () => {
+  it('escapes XSS payloads in task text content without executing onerror', () => {
+    // We attach an element to body so we can see if innerHTML evaluation triggers XSS
+    const item = document.createElement('li');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'task-checkbox';
+
+    const textSpan = document.createElement('span');
+    textSpan.className = 'task-text';
+    textSpan.textContent = '<img src=x onerror="window.__xss=true">';
+
+    item.appendChild(checkbox);
+    item.appendChild(textSpan);
+    document.body.appendChild(item);
+
+    // Check that we didn't start with true
+    window.__xss = false;
+
+    const { buildTaskDragPreview } = require('../../app.js');
+    const preview = buildTaskDragPreview(item, 'task-drag-preview');
+    document.body.appendChild(preview);
+
+    // Assert no image element was created from the XSS payload
+    expect(preview.querySelector('img')).toBeNull();
+    // Assert that the text content of the element still literally matches the payload
+    expect(preview.querySelector('.task-text').textContent).toBe('<img src=x onerror="window.__xss=true">');
+    // Assert that the handler didn't execute
+    expect(window.__xss).toBe(false);
+  });
+});

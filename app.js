@@ -2960,12 +2960,7 @@
 
       item.classList.add('is-dragging-task');
       document.body.classList.add('is-dragging-task-active');
-      cardTaskDragPreview = document.createElement('div');
-      cardTaskDragPreview.className = 'task-drag-preview';
-      cardTaskDragPreview.style.width = `${itemRect.width}px`;
-      const isChecked = item.querySelector('.task-checkbox')?.checked;
-      const cDownContent = item.querySelector('.task-text')?.textContent || '';
-      cardTaskDragPreview.innerHTML = `<span class="task-drag-handle">${TASK_DRAG_SVG}</span><input type="checkbox" class="task-checkbox"${isChecked ? ' checked' : ''} disabled><span class="task-text">${cDownContent}</span>`;
+      cardTaskDragPreview = buildTaskDragPreview(item, 'task-drag-preview');
       cardTaskDragPreview.style.transform = `translate3d(${event.clientX - cardTaskOffsetX}px, ${event.clientY - cardTaskOffsetY}px, 0)`;
       document.body.append(cardTaskDragPreview);
 
@@ -3696,6 +3691,32 @@
   let taskOffsetX = 0;
   let taskOffsetY = 0;
 
+
+  function buildTaskDragPreview(item, className) {
+    const preview = document.createElement('div');
+    preview.className = className;
+    const itemRect = item.getBoundingClientRect();
+    preview.style.width = `${itemRect.width}px`;
+
+    const handle = document.createElement('span');
+    handle.className = 'task-drag-handle';
+    handle.innerHTML = TASK_DRAG_SVG;
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'task-checkbox';
+    checkbox.disabled = true;
+    if (item.querySelector('.task-checkbox')?.checked) checkbox.checked = true;
+
+    const textSpan = document.createElement('span');
+    textSpan.className = 'task-text';
+    textSpan.textContent = item.querySelector('.task-text')?.textContent || '';
+
+    preview.append(handle, checkbox, textSpan);
+    return preview;
+  }
+
+
   elements.noteBody.addEventListener('dragstart', event => {
     const item = event.target.closest?.('li');
     if (!item || !item.closest('ul.task-list')) return;
@@ -3707,12 +3728,7 @@
     event.dataTransfer.effectAllowed = 'move';
     item.classList.add('is-dragging-task');
     document.body.classList.add('is-dragging-task-active');
-    taskDragPreview = document.createElement('div');
-    taskDragPreview.className = 'task-drag-preview';
-    taskDragPreview.style.width = `${itemRect.width}px`;
-    const isChecked = item.querySelector('.task-checkbox')?.checked;
-    const dragStartTextContent = item.querySelector('.task-text')?.textContent || '';
-    taskDragPreview.innerHTML = `<span class="task-drag-handle">${TASK_DRAG_SVG}</span><input type="checkbox" class="task-checkbox"${isChecked ? ' checked' : ''} disabled><span class="task-text">${dragStartTextContent}</span>`;
+    taskDragPreview = buildTaskDragPreview(item, 'task-drag-preview');
     taskDragPreview.style.transform = `translate3d(${event.clientX - taskOffsetX}px, ${event.clientY - taskOffsetY}px, 0)`;
     document.body.append(taskDragPreview);
     const emptyImage = new Image();
@@ -3770,12 +3786,7 @@
 
     item.classList.add('is-dragging-task');
     document.body.classList.add('is-dragging-task-active');
-    taskDragPreview = document.createElement('div');
-    taskDragPreview.className = 'task-drag-preview';
-    taskDragPreview.style.width = `${itemRect.width}px`;
-    const isChecked = item.querySelector('.task-checkbox')?.checked;
-    const pDownContent = item.querySelector('.task-text')?.textContent || '';
-    taskDragPreview.innerHTML = `<span class="task-drag-handle">${TASK_DRAG_SVG}</span><input type="checkbox" class="task-checkbox"${isChecked ? ' checked' : ''} disabled><span class="task-text">${pDownContent}</span>`;
+    taskDragPreview = buildTaskDragPreview(item, 'task-drag-preview');
     taskDragPreview.style.transform = `translate3d(${event.clientX - taskOffsetX}px, ${event.clientY - taskOffsetY}px, 0)`;
     document.body.append(taskDragPreview);
 
@@ -4381,7 +4392,8 @@
       getCurrentSort: () => currentSort,
       setCurrentSort: (s) => { currentSort = s; },
       getQuery: () => query,
-      setQuery: (q) => { query = q; }
+      setQuery: (q) => { query = q; },
+      buildTaskDragPreview
     };
   }
 })();
