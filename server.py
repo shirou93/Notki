@@ -31,7 +31,7 @@ import webauthn
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.93'
+VERSION = '0.1.5.94'
 GENERATED_SETUP_TOKEN = None
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 # Canonical public host used when generating links (e.g. invitations). When set, it
@@ -515,14 +515,23 @@ def _prune_and_store(store, key, value, max_entries):
         del store[oldest]
     store[key] = value
 
-def generate_passkey_challenge():
+def generate_passkey_challenge(ip=None):
     challenge_token = secrets.token_hex(16)
     challenge_bytes = secrets.token_bytes(32)
     expires_at = utc_now() + timedelta(minutes=5)
     with PASSKEY_CHALLENGES_LOCK:
+        if ip:
+            now = utc_now()
+            expired_ip = [k for k, v in PASSKEY_CHALLENGES.items() if v.get('ip') == ip and v['expiresAt'] < now]
+            for k in expired_ip:
+                del PASSKEY_CHALLENGES[k]
+            ip_challenges = [k for k, v in PASSKEY_CHALLENGES.items() if v.get('ip') == ip]
+            if len(ip_challenges) >= 10:
+                oldest_ip_key = ip_challenges[0]
+                del PASSKEY_CHALLENGES[oldest_ip_key]
         _prune_and_store(
             PASSKEY_CHALLENGES, challenge_token,
-            {'challenge': challenge_bytes, 'expiresAt': expires_at},
+            {'challenge': challenge_bytes, 'expiresAt': expires_at, 'ip': ip},
             MAX_PASSKEY_CHALLENGES,
         )
     return {
@@ -1446,7 +1455,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         try:
             handled = False
             if path == '/api/login/passkey/challenge':
-                self.send_json(generate_passkey_challenge())
+                self.send_json(generate_passkey_challenge(ip=self.get_client_ip()))
                 return
             if path == '/api/setup/status' or path in ('/setup', '/setup.html'):
                 handled = self.handle_setup_get(path)
