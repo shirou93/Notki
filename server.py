@@ -54,6 +54,9 @@ BACKUP_FILENAME_PATTERN = re.compile(r'^notki-[A-Za-z0-9_-]+\.json$')
 NOTE_COLORS = {'default', 'mint', 'lemon', 'peach', 'lilac', 'sky', 'rose', 'sand', 'sage', 'plum'}
 AVATAR_PATTERN = re.compile(r'^data:image/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$')
 MAX_AVATAR_CHARS = 2_900_000
+# Upper bounds for unauthenticated, in-memory state so a remote attacker cannot exhaust memory.
+MAX_PASSKEY_CHALLENGES = 5_000
+MAX_TEMP_2FA_TOKENS = 10_000
 STATIC_FILES = {
     'manifest.json', 'index.html', 'app.js', 'i18n.js', 'theme.js', 'setup.html', 'setup.js', 'styles.css',
     'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon.svg'}
@@ -263,6 +266,27 @@ def unban_ip(ip):
 
     return mem_found or db_found
 
+def clear_failed_auth(ip):
+    """Reset the failed authentication counter for an IP after a successful login.
+
+    Without this, a legitimate user who mistypes a password a few times stays one
+    failure away from a lockout until the whole window expires (fail2ban false
+    positives), and transient failures keep consuming the ban budget.
+    """
+    ip = str(ip or '').strip()
+    if not ip:
+        return
+
+    with FAILED_AUTH_LOCK:
+        FAILED_AUTH_ATTEMPTS.pop(ip, None)
+    AUTH_FAILURES.pop(ip, None)
+
+    try:
+        with database() as connection:
+            connection.execute('DELETE FROM fail2ban_attempts WHERE ip = ?', (ip,))
+    except Exception:
+        pass
+
 def unban_all():
     with FAILED_AUTH_LOCK:
         mem_count = len(FAILED_AUTH_ATTEMPTS)
@@ -374,16 +398,35 @@ def parse_multipart_data(rfile, boundary, content_length):
                 fields.setdefault(name, []).append(body)
     return fields
 
+def _prune_and_store(store, key, value, max_entries):
+    """Store an expiring item in an in-memory map, evicting stale and oldest entries.
+
+    The maps backing passkey challenges and temporary 2FA tokens are populated by
+    unauthenticated requests, so they must stay bounded to avoid a memory-exhaustion
+    denial of service.
+    """
+    now = utc_now()
+    expired = [k for k, v in store.items() if v['expiresAt'] < now]
+    for k in expired:
+        del store[k]
+    # Evict the oldest entries (dict preserves insertion order) once the cap is reached.
+    while len(store) >= max_entries:
+        oldest = next(iter(store), None)
+        if oldest is None:
+            break
+        del store[oldest]
+    store[key] = value
+
 def generate_passkey_challenge():
     challenge_token = secrets.token_hex(16)
     challenge_bytes = secrets.token_bytes(32)
     expires_at = utc_now() + timedelta(minutes=5)
     with PASSKEY_CHALLENGES_LOCK:
-        now = utc_now()
-        expired = [k for k, v in PASSKEY_CHALLENGES.items() if v['expiresAt'] < now]
-        for k in expired:
-            del PASSKEY_CHALLENGES[k]
-        PASSKEY_CHALLENGES[challenge_token] = {'challenge': challenge_bytes, 'expiresAt': expires_at}
+        _prune_and_store(
+            PASSKEY_CHALLENGES, challenge_token,
+            {'challenge': challenge_bytes, 'expiresAt': expires_at},
+            MAX_PASSKEY_CHALLENGES,
+        )
     return {
         'challengeId': challenge_token,
         'challengeBase64': base64.urlsafe_b64encode(challenge_bytes).decode('utf-8').rstrip('='),
@@ -394,11 +437,11 @@ def create_temp_2fa_token(user_id):
     token = secrets.token_urlsafe(32)
     expires_at = utc_now() + timedelta(minutes=5)
     with TEMP_2FA_LOCK:
-        now = utc_now()
-        expired = [k for k, v in TEMP_2FA_TOKENS.items() if v['expiresAt'] < now]
-        for k in expired:
-            del TEMP_2FA_TOKENS[k]
-        TEMP_2FA_TOKENS[token] = {'userId': user_id, 'expiresAt': expires_at}
+        _prune_and_store(
+            TEMP_2FA_TOKENS, token,
+            {'userId': user_id, 'expiresAt': expires_at},
+            MAX_TEMP_2FA_TOKENS,
+        )
     return token
 
 def consume_temp_2fa_token(token):
@@ -840,7 +883,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         self.send_header('X-Frame-Options', 'DENY')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'strict-origin-when-cross-origin')
-        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none';")
+        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none';")
         super().end_headers()
 
     @property
@@ -977,13 +1020,45 @@ class NotkiHandler(BaseHTTPRequestHandler):
             return True
         return False
 
+    def is_forwarded_client_local(self):
+        """Return True when proxy headers do not reveal a non-local client.
+
+        First-run setup is authorized for loopback peers, but a reverse proxy on the
+        same host also connects over loopback. In that case the real client address is
+        carried in X-Forwarded-For / X-Real-IP, so those headers must not resolve to a
+        remote address before setup is treated as local.
+        """
+        forwarded_values = []
+        forwarded_for = self.headers.get('X-Forwarded-For')
+        if forwarded_for:
+            forwarded_values.append(forwarded_for.split(',')[0].strip())
+        real_ip = self.headers.get('X-Real-IP')
+        if real_ip:
+            forwarded_values.append(real_ip.strip())
+        forwarded_host = self.headers.get('X-Forwarded-Host')
+        if forwarded_host:
+            forwarded_hostname = (urlsplit(f"//{forwarded_host.split(',')[0].strip()}").hostname or '').lower()
+            if forwarded_hostname and forwarded_hostname not in {'localhost', '127.0.0.1', '::1'}:
+                return False
+
+        for value in forwarded_values:
+            if not value:
+                continue
+            try:
+                if not ipaddress.ip_address(value.split('%', 1)[0]).is_loopback:
+                    return False
+            except ValueError:
+                return False
+        return True
+
     def is_local_setup_request(self):
         try:
             remote_ip = ipaddress.ip_address(self.client_address[0].split('%', 1)[0])
         except ValueError:
             return False
         host = urlsplit(f"//{self.headers.get('Host') or ''}").hostname or ''
-        if remote_ip.is_loopback and host.lower() in {'localhost', '127.0.0.1', '::1'}:
+        if (remote_ip.is_loopback and host.lower() in {'localhost', '127.0.0.1', '::1'}
+                and self.is_forwarded_client_local()):
             return True
 
         expected_token = os.environ.get('NOTKI_SETUP_TOKEN') or GENERATED_SETUP_TOKEN
@@ -2081,6 +2156,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             self.send_json({'requires2FA': True, 'tempToken': temp_token, 'hasTotp': has_totp, 'hasPasskey': has_passkey})
             return
 
+        clear_failed_auth(self.get_client_ip())
         token = self.new_session(row['id'])
         self.send_json({'user': public_user(row, connection)}, extra_headers=self.session_headers(token))
 
@@ -2110,6 +2186,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 client_ip = self.get_client_ip()
                 record_failed_auth(client_ip)
                 raise APIError('Invalid two-factor code.', 401)
+        clear_failed_auth(self.get_client_ip())
         token = self.new_session(user_id)
         with database() as connection:
             user_data = public_user(row, connection)
@@ -2186,6 +2263,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             record_failed_auth(client_ip)
             raise APIError('Invalid passkey signature.', 401) from err
 
+        clear_failed_auth(self.get_client_ip())
         token = self.new_session(user_id)
         with database() as connection:
             connection.execute('UPDATE passkeys SET sign_count = ? WHERE id = ?', (new_sign_count, key_id))
@@ -2378,8 +2456,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
         payload = payload or {}
         try:
             days = int(payload.get('days', INVITE_DAYS))
-        except ValueError:
+        except (TypeError, ValueError):
             days = INVITE_DAYS
+        days = max(1, min(3650, days))
         expires = created + timedelta(days=days)
         with database() as connection:
             connection.execute(

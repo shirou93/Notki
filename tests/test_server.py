@@ -566,7 +566,10 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(response.headers.get('X-Frame-Options'), 'DENY')
             self.assertEqual(response.headers.get('X-Content-Type-Options'), 'nosniff')
             self.assertEqual(response.headers.get('Referrer-Policy'), 'strict-origin-when-cross-origin')
-            self.assertIn("frame-ancestors 'none'", response.headers.get('Content-Security-Policy', ''))
+            csp = response.headers.get('Content-Security-Policy', '')
+            self.assertIn("frame-ancestors 'none'", csp)
+            self.assertIn("script-src 'self';", csp)
+            self.assertNotIn("script-src 'self' 'unsafe-inline'", csp)
 
     def test_api_errors_follow_accept_language(self):
         status, error = self.request(
@@ -1460,6 +1463,81 @@ class ServerFlowTests(unittest.TestCase):
         with unittest.mock.patch('sys.argv', ['server.py', '--disable-all-2fa']):
             server.main()
 
+    def test_passkey_challenges_are_bounded(self):
+        original_limit = server.MAX_PASSKEY_CHALLENGES
+        server.MAX_PASSKEY_CHALLENGES = 3
+        try:
+            with server.PASSKEY_CHALLENGES_LOCK:
+                server.PASSKEY_CHALLENGES.clear()
+            challenge_ids = []
+            for _ in range(10):
+                challenge_ids.append(server.generate_passkey_challenge()['challengeId'])
+            with server.PASSKEY_CHALLENGES_LOCK:
+                self.assertLessEqual(len(server.PASSKEY_CHALLENGES), 3)
+                self.assertIn(challenge_ids[-1], server.PASSKEY_CHALLENGES)
+                self.assertNotIn(challenge_ids[0], server.PASSKEY_CHALLENGES)
+        finally:
+            server.MAX_PASSKEY_CHALLENGES = original_limit
+            with server.PASSKEY_CHALLENGES_LOCK:
+                server.PASSKEY_CHALLENGES.clear()
+
+    def test_temp_2fa_tokens_are_bounded(self):
+        original_limit = server.MAX_TEMP_2FA_TOKENS
+        server.MAX_TEMP_2FA_TOKENS = 3
+        try:
+            with server.TEMP_2FA_LOCK:
+                server.TEMP_2FA_TOKENS.clear()
+            tokens = [server.create_temp_2fa_token(1) for _ in range(10)]
+            with server.TEMP_2FA_LOCK:
+                self.assertLessEqual(len(server.TEMP_2FA_TOKENS), 3)
+                self.assertIn(tokens[-1], server.TEMP_2FA_TOKENS)
+                self.assertNotIn(tokens[0], server.TEMP_2FA_TOKENS)
+        finally:
+            server.MAX_TEMP_2FA_TOKENS = original_limit
+            with server.TEMP_2FA_LOCK:
+                server.TEMP_2FA_TOKENS.clear()
+
+    def test_clear_failed_auth_resets_counter(self):
+        ip = '203.0.113.77'
+        server.unban_ip(ip)
+        for _ in range(15):
+            server.record_failed_auth(ip)
+        self.assertTrue(server.is_rate_limited(ip))
+        server.clear_failed_auth(ip)
+        self.assertFalse(server.is_rate_limited(ip))
+        self.assertEqual([item for item in server.get_banned_ips() if item['ip'] == ip], [])
+
+    def test_successful_login_clears_failed_attempts(self):
+        ip = '127.0.0.1'
+        client = self.new_client()
+        for _ in range(2):
+            status, _ = self.request(client, 'POST', '/api/login', {
+                'email': 'admin@example.com', 'password': 'wrong-password',
+            })
+            self.assertEqual(status, 401)
+        self.assertEqual(len(server.FAILED_AUTH_ATTEMPTS.get(ip, [])), 2)
+
+        status, _ = self.request(client, 'POST', '/api/login', {
+            'email': 'admin@example.com', 'password': 'secure-passphrase-1',
+        })
+        self.assertEqual(status, 200)
+        self.assertFalse(server.is_rate_limited(ip))
+        self.assertEqual(server.FAILED_AUTH_ATTEMPTS.get(ip, []), [])
+        self.assertEqual([item for item in server.get_banned_ips() if item['ip'] == ip], [])
+
+    def test_invite_validity_days_are_bounded(self):
+        from datetime import datetime
+
+        status, invite = self.request(self.admin, 'POST', '/api/admin/invites', {'days': 10 ** 9})
+        self.assertEqual(status, 201)
+        expires = datetime.fromisoformat(invite['expiresAt'])
+        self.assertLessEqual((expires - server.utc_now()).days, 3650)
+
+        for value in ('abc', None, -5):
+            status, invite = self.request(self.admin, 'POST', '/api/admin/invites', {'days': value})
+            self.assertEqual(status, 201)
+            self.assertIn('url', invite)
+
 
 class FirstRunSetupTests(unittest.TestCase):
     def setUp(self):
@@ -1544,6 +1622,22 @@ class FirstRunSetupTests(unittest.TestCase):
             'email': 'second-admin@example.com', 'password': 'secure-second-admin-password',
         })
         self.assertEqual(status, 409)
+
+    def test_setup_rejects_forwarded_remote_client(self):
+        payload = {'email': 'proxy-admin@example.com', 'password': 'proxy-admin-password'}
+        for headers, label in (
+            ({'Host': 'localhost', 'X-Forwarded-For': '203.0.113.5'}, 'X-Forwarded-For'),
+            ({'Host': 'localhost', 'X-Real-IP': '203.0.113.6'}, 'X-Real-IP'),
+            ({'Host': 'localhost', 'X-Forwarded-Host': 'notki.example.com'}, 'X-Forwarded-Host'),
+        ):
+            with self.subTest(header=label):
+                status, _ = self.request('POST', '/api/setup/admin', payload, headers)
+                self.assertEqual(status, 403)
+
+        # A direct loopback request is still allowed to create the first administrator.
+        status, result = self.request('POST', '/api/setup/admin', payload, {'Host': 'localhost'})
+        self.assertEqual(status, 201)
+        self.assertTrue(result['user']['isAdmin'])
 
     def test_server_snapshot_import_restores_accounts_notes_and_invites(self):
         created_at = server.iso_time()
