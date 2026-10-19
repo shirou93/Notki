@@ -99,6 +99,24 @@ class ServerFlowTests(unittest.TestCase):
             error.close()
             return status, payload
 
+    def request_with_response_headers(self, client, method, path, payload=None, headers=None):
+        data = json.dumps(payload).encode('utf-8') if payload is not None else None
+        request = Request(
+            self.base_url + path,
+            data=data,
+            headers={'Content-Type': 'application/json', **(headers or {})},
+            method=method,
+        )
+        try:
+            with client.open(request) as response:
+                return response.status, json.loads(response.read().decode('utf-8')), response.headers
+        except HTTPError as error:
+            status = error.code
+            payload = json.loads(error.read().decode('utf-8'))
+            headers = error.headers
+            error.close()
+            return status, payload, headers
+
     def request(self, client, method, path, payload=None, headers=None):
         data = json.dumps(payload).encode('utf-8') if payload is not None else None
         request = Request(
@@ -578,13 +596,19 @@ class ServerFlowTests(unittest.TestCase):
             self.assertIn("frame-ancestors 'none'", csp)
             self.assertIn("script-src 'self';", csp)
             self.assertNotIn("script-src 'self' 'unsafe-inline'", csp)
-            self.assertEqual(response.headers.get('Strict-Transport-Security'), 'max-age=31536000; includeSubDomains')
+            self.assertIn("object-src 'none'", csp)
+            self.assertIn("base-uri 'none'", csp)
+            self.assertIsNone(response.headers.get('Strict-Transport-Security'))
             self.assertEqual(response.headers.get('Permissions-Policy'), 'camera=(), microphone=(), geolocation=()')
             self.assertEqual(response.headers.get('Cross-Origin-Opener-Policy'), 'same-origin')
             self.assertEqual(response.headers.get('Cross-Origin-Resource-Policy'), 'same-origin')
             self.assertEqual(response.headers.get('Cache-Control'), 'no-store')
             server_header = response.headers.get('Server', '')
             self.assertNotIn('Python', server_header)
+
+        req_https = Request(f'{self.base_url}/', headers={'X-Forwarded-Proto': 'https'})
+        with urlopen(req_https) as response:
+            self.assertEqual(response.headers.get('Strict-Transport-Security'), 'max-age=31536000; includeSubDomains')
             self.assertNotIn('0.1.5.94', server_header)
 
     def test_user_directory_requires_exact_email(self):
@@ -2852,6 +2876,88 @@ class Fail2banAPITests(unittest.TestCase):
         self.assertTrue(server.is_rate_limited(test_ip))
 
         server.unban_ip(test_ip)
+
+
+class TestSecurityAndBackupFixes(ServerFlowTests):
+    def test_backup_code_hashing_and_encrypted_backup(self):
+        # Create user with 2FA
+        status, invite = self.request(self.admin, 'POST', '/api/admin/invites', {})
+        invite_token = parse_qs(urlsplit(invite['url']).query)['invite'][0]
+        user_client = self.new_client()
+        status, _ = self.request(user_client, 'POST', '/api/register', {
+            'email': 'encbackupuser@example.com', 'password': 'user-passphrase-123', 'invite': invite_token
+        })
+        self.assertEqual(status, 201)
+
+        # Enable TOTP and verify backup codes are hashed in DB
+        status, res = self.request(user_client, 'POST', '/api/account/totp', {})
+        secret = res['secret']
+        totp_code = server.compute_totp_code(secret)
+        status, res = self.request(user_client, 'POST', '/api/account/totp/verify', {'code': totp_code})
+        backup_codes = res.get('backupCodes', [])
+        self.assertTrue(len(backup_codes) > 0)
+
+        with server.database() as conn:
+            row = conn.execute("SELECT backup_codes_json FROM users WHERE email = 'encbackupuser@example.com'").fetchone()
+            stored = json.loads(row['backup_codes_json'])
+            # Verify stored backup codes are hashed (start with pbkdf2_sha256$)
+            self.assertTrue(stored[0].startswith('pbkdf2_sha256$'))
+
+        # Create encrypted server backup
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {'encryptionPassword': 'secret-backup-pass'})
+        self.assertEqual(status, 201)
+        self.assertTrue(backup['filename'].endswith('.enc'))
+
+        # Restoring encrypted backup with wrong password should fail with 400
+        status, err = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {'encryptionPassword': 'wrong-password'})
+        self.assertEqual(status, 400)
+
+        # Restoring encrypted backup with correct password should succeed
+        status, restored = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {'encryptionPassword': 'secret-backup-pass'})
+        self.assertEqual(status, 200)
+
+    def test_passkey_and_announcement_limits(self):
+        # Passkey key_id too long (> 512 chars)
+        long_key_id = 'a' * 513
+        status, res = self.request(self.admin, 'POST', '/api/account/passkey', {'id': long_key_id, 'publicKey': 'abc'})
+        self.assertEqual(status, 400)
+
+        # Passkey key_id invalid type
+        status, res = self.request(self.admin, 'POST', '/api/account/passkey', {'id': 12345, 'publicKey': 'abc'})
+        self.assertEqual(status, 400)
+
+        # Announcement over 2000 chars should fail
+        long_ann = 'x' * 2001
+        status, res = self.request(self.admin, 'POST', '/api/admin/settings', {'announcement': long_ann})
+        self.assertEqual(status, 400)
+
+        # Valid announcement under 2000 chars
+        valid_ann = 'x' * 2000
+        status, res = self.request(self.admin, 'POST', '/api/admin/settings', {'announcement': valid_ann})
+        self.assertEqual(status, 200)
+
+    def test_remote_setup_requires_token(self):
+        with unittest.mock.patch.dict('os.environ', {'NOTKI_ALLOW_REMOTE_SETUP': '1'}, clear=False):
+            class DummyHandler(server.NotkiHandler):
+                def __init__(self):
+                    self.client_address = ('192.168.1.100', 12345)
+                    self.headers = {'Host': 'example.com'}
+            handler = DummyHandler()
+            self.assertFalse(handler.check_setup_permission())
+
+    def test_public_host_invite_link(self):
+        with unittest.mock.patch('server.PUBLIC_HOST', 'https://notki.example.com'):
+            status, res = self.request(self.admin, 'POST', '/api/admin/invites', {})
+            self.assertEqual(status, 201)
+            self.assertTrue(res['url'].startswith('https://notki.example.com/?invite='))
+
+    def test_csp_and_hsts_headers(self):
+        status, res, headers = self.request_with_response_headers(self.admin, 'GET', '/api/admin/settings')
+        self.assertEqual(status, 200)
+        csp = headers.get('Content-Security-Policy', '')
+        self.assertIn("object-src 'none'", csp)
+        self.assertIn("base-uri 'none'", csp)
+        self.assertNotIn('Strict-Transport-Security', headers)
 
 
 if __name__ == '__main__':
