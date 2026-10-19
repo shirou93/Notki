@@ -24,7 +24,7 @@ from datetime import datetime, timedelta, timezone
 from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 import urllib.request
 import qr
 import webauthn
@@ -34,6 +34,18 @@ ROOT = Path(__file__).resolve().parent
 VERSION = '0.1.5.93'
 GENERATED_SETUP_TOKEN = None
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
+# Canonical public host used when generating links (e.g. invitations). When set, it
+# takes precedence over request headers so a client cannot poison generated URLs.
+PUBLIC_HOST = os.environ.get('NOTKI_PUBLIC_HOST', '').strip()
+# Optional allowlist of hostnames that forwarded/host headers may resolve to.
+ALLOWED_HOSTS = {
+    value.strip().lower()
+    for value in os.environ.get('NOTKI_ALLOWED_HOSTS', '').split(',')
+    if value.strip()
+}
+# Reverse proxies on the loopback interface are trusted by default (typical for a
+# local Nginx/Caddy sidecar); other deployments must opt in via NOTKI_TRUST_PROXY.
+DEFAULT_TRUSTED_PROXY_NETWORKS = ('127.0.0.0/8', '::1/128')
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
 INVITE_DAYS = 7
@@ -174,9 +186,64 @@ TEMP_2FA_LOCK = threading.Lock()
 PASSKEY_CHALLENGES = {}
 PASSKEY_CHALLENGES_LOCK = threading.Lock()
 FAILED_AUTH_ATTEMPTS = {}
+# Failed attempts attributed to a specific (ip, account) pair. This lets a successful
+# login clear only the failures recorded for that account instead of wiping the whole
+# per-IP budget (which allowed brute-force protection to be reset with a second account).
+FAILED_AUTH_ACCOUNTS = {}
 FAILED_AUTH_LOCK = threading.Lock()
 
 AUTH_FAILURES = {}
+
+
+def account_key(account):
+    return str(account or '').strip().casefold()
+
+
+def parse_forwarded_elements(value):
+    """Parse an RFC 7239 ``Forwarded`` header into a list of parameter dicts.
+
+    Malformed elements are ignored. Quoted values have surrounding quotes removed.
+    """
+    elements = []
+    for element in str(value or '').split(','):
+        params = {}
+        for pair in element.split(';'):
+            key, sep, raw = pair.partition('=')
+            if not sep:
+                continue
+            params[key.strip().lower()] = raw.strip().strip('"')
+        if params:
+            elements.append(params)
+    return elements
+
+
+def parse_forwarded_for(value):
+    """Return the client node identifiers from the RFC 7239 ``Forwarded`` header."""
+    nodes = []
+    for params in parse_forwarded_elements(value):
+        node = params.get('for')
+        if not node:
+            continue
+        node = node.strip().strip('"')
+        if not node:
+            continue
+        node = node.lower()
+        if node.startswith('['):
+            end = node.find(']')
+            node = node[1:end] if end != -1 else node[1:]
+        elif node.count(':') == 1:
+            node = node.rsplit(':', 1)[0]
+        nodes.append(node)
+    return nodes
+
+
+def parse_forwarded_host(value):
+    """Return the first host from the RFC 7239 ``Forwarded`` header, if any."""
+    for params in parse_forwarded_elements(value):
+        host = params.get('host')
+        if host:
+            return host.split(',')[0].strip()
+    return None
 
 def get_fail2ban_config():
     enabled = True
@@ -196,21 +263,29 @@ def get_fail2ban_config():
         pass
     return {'enabled': enabled, 'max_attempts': max_attempts, 'ban_time': ban_time}
 
-def record_failed_auth(ip):
+def record_failed_auth(ip, account=None):
     now = time.time()
     if ip not in AUTH_FAILURES:
         AUTH_FAILURES[ip] = []
     AUTH_FAILURES[ip].append(now)
     AUTH_FAILURES[ip] = [t for t in AUTH_FAILURES[ip] if now - t < 3600]
 
+    key = account_key(account)
     with FAILED_AUTH_LOCK:
         attempts = [t for t in FAILED_AUTH_ATTEMPTS.get(ip, []) if now - t < 60]
         attempts.append(now)
         FAILED_AUTH_ATTEMPTS[ip] = attempts
+        if key:
+            account_attempts = [t for t in FAILED_AUTH_ACCOUNTS.get((ip, key), []) if now - t < 3600]
+            account_attempts.append(now)
+            FAILED_AUTH_ACCOUNTS[(ip, key)] = account_attempts
 
     try:
         with database() as connection:
-            connection.execute('INSERT INTO fail2ban_attempts (ip, created_at) VALUES (?, ?)', (ip, now))
+            connection.execute(
+                'INSERT INTO fail2ban_attempts (ip, account, created_at) VALUES (?, ?, ?)',
+                (ip, key or None, now),
+            )
     except Exception:
         pass
 
@@ -266,19 +341,42 @@ def unban_ip(ip):
 
     return mem_found or db_found
 
-def clear_failed_auth(ip):
-    """Reset the failed authentication counter for an IP after a successful login.
+def clear_failed_auth(ip, account=None):
+    """Reset the failed authentication counter after a successful login.
 
-    Without this, a legitimate user who mistypes a password a few times stays one
-    failure away from a lockout until the whole window expires (fail2ban false
-    positives), and transient failures keep consuming the ban budget.
+    When ``account`` is provided, only the failures recorded for that account are
+    removed, so an attacker cannot reset the per-IP budget by logging into an
+    unrelated account of their own. When ``account`` is omitted the whole IP counter
+    is cleared (used by the admin "unban" tooling and by existing callers).
     """
     ip = str(ip or '').strip()
     if not ip:
         return
 
+    key = account_key(account)
+    if key:
+        with FAILED_AUTH_LOCK:
+            removed = len(FAILED_AUTH_ACCOUNTS.pop((ip, key), []))
+            remaining = sorted(t for t in FAILED_AUTH_ATTEMPTS.get(ip, []))
+            if removed:
+                del remaining[:removed]
+            if remaining:
+                FAILED_AUTH_ATTEMPTS[ip] = remaining
+            else:
+                FAILED_AUTH_ATTEMPTS.pop(ip, None)
+        try:
+            with database() as connection:
+                connection.execute(
+                    'DELETE FROM fail2ban_attempts WHERE ip = ? AND account = ?', (ip, key)
+                )
+        except Exception:
+            pass
+        return
+
     with FAILED_AUTH_LOCK:
         FAILED_AUTH_ATTEMPTS.pop(ip, None)
+        for account_key_value in [k for k in FAILED_AUTH_ACCOUNTS if k[0] == ip]:
+            FAILED_AUTH_ACCOUNTS.pop(account_key_value, None)
     AUTH_FAILURES.pop(ip, None)
 
     try:
@@ -670,10 +768,17 @@ def initialize_database():
             CREATE TABLE IF NOT EXISTS fail2ban_attempts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 ip TEXT NOT NULL,
+                account TEXT,
                 created_at REAL NOT NULL
             );
             CREATE INDEX IF NOT EXISTS fail2ban_ip_idx ON fail2ban_attempts(ip);
         ''')
+        fail2ban_columns = {row['name'] for row in connection.execute('PRAGMA table_info(fail2ban_attempts)')}
+        if 'account' not in fail2ban_columns:
+            try:
+                connection.execute('ALTER TABLE fail2ban_attempts ADD COLUMN account TEXT')
+            except sqlite3.OperationalError:
+                pass
         columns = {row['name'] for row in connection.execute('PRAGMA table_info(users)')}
         if 'avatar' not in columns:
             connection.execute('ALTER TABLE users ADD COLUMN avatar TEXT')
@@ -876,14 +981,23 @@ class APIError(Exception):
 
 
 class NotkiHandler(BaseHTTPRequestHandler):
-    server_version = f'NotkiServer/{VERSION}'
+    server_version = 'NotkiServer'
+    sys_version = ''
+
+    def version_string(self):
+        # Do not disclose the exact Notki or Python version in the Server header.
+        return self.server_version
 
     def end_headers(self):
-        # Security headers to mitigate Clickjacking, MIME-sniffing, and cross-origin referrer leaks
+        # Security headers to mitigate Clickjacking, MIME-sniffing, and cross-origin leaks
         self.send_header('X-Frame-Options', 'DENY')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'strict-origin-when-cross-origin')
         self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none';")
+        self.send_header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+        self.send_header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+        self.send_header('Cross-Origin-Opener-Policy', 'same-origin')
+        self.send_header('Cross-Origin-Resource-Policy', 'same-origin')
         super().end_headers()
 
     @property
@@ -930,58 +1044,88 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('Invalid request data.')
         return value
 
-    def get_client_ip(self):
-        """Return client IP address.
+    def is_trusted_proxy(self):
+        """Return True when the peer may set client-identifying proxy headers.
 
-        By default, returns self.client_address[0] to prevent IP spoofing attacks
-        via X-Forwarded-For headers. If NOTKI_TRUST_PROXY is set, X-Forwarded-For
-        is used if NOTKI_TRUST_PROXY is boolean true ('1', 'true', 'yes', 'all', '*')
-        or if self.client_address[0] matches a configured trusted proxy IP or subnet.
+        ``NOTKI_TRUST_PROXY`` accepts boolean values ('1', 'true', 'yes', 'all', '*'),
+        explicit disable values ('0', 'false', 'no'), or a comma-separated list of
+        proxy IPs/subnets. When unset, only loopback peers are trusted.
         """
         trust_proxy = os.environ.get('NOTKI_TRUST_PROXY', '').strip().lower()
-        if not trust_proxy or trust_proxy in ('0', 'false', 'no'):
+        if trust_proxy in ('0', 'false', 'no'):
+            return False
+        if trust_proxy in ('1', 'true', 'yes', 'all', '*'):
+            return True
+        specs = [value.strip() for value in trust_proxy.split(',') if value.strip()]
+        if not specs:
+            specs = list(DEFAULT_TRUSTED_PROXY_NETWORKS)
+        try:
+            peer = ipaddress.ip_address(self.client_address[0].split('%', 1)[0])
+        except ValueError:
+            return False
+        for spec in specs:
+            try:
+                if peer in ipaddress.ip_network(spec, strict=False):
+                    return True
+            except ValueError:
+                continue
+        return False
+
+    def get_client_ip(self):
+        """Return the client IP address.
+
+        By default only loopback peers are trusted, so X-Forwarded-For / RFC 7239
+        ``Forwarded`` values are ignored for direct connections. Trusted proxies may
+        supply the client address through either header.
+        """
+        if not self.is_trusted_proxy():
             return self.client_address[0]
 
-        if trust_proxy in ('1', 'true', 'yes', 'all', '*'):
-            forwarded = self.headers.get('X-Forwarded-For', '').split(',')[0].strip()
-            return forwarded or self.client_address[0]
+        forwarded = self.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+        if forwarded:
+            return forwarded
 
-        try:
-            client_ip_obj = ipaddress.ip_address(self.client_address[0].split('%', 1)[0])
-            for proxy_str in trust_proxy.split(','):
-                proxy_str = proxy_str.strip()
-                if not proxy_str:
-                    continue
-                try:
-                    if '/' in proxy_str:
-                        if client_ip_obj in ipaddress.ip_network(proxy_str, strict=False):
-                            forwarded = self.headers.get('X-Forwarded-For', '').split(',')[0].strip()
-                            return forwarded or self.client_address[0]
-                    else:
-                        if client_ip_obj == ipaddress.ip_address(proxy_str):
-                            forwarded = self.headers.get('X-Forwarded-For', '').split(',')[0].strip()
-                            return forwarded or self.client_address[0]
-                except ValueError:
-                    continue
-        except ValueError:
-            pass
+        for node in parse_forwarded_for(self.headers.get('Forwarded')):
+            return node
 
         return self.client_address[0]
 
     def get_forwarded_host(self):
-        forwarded = self.headers.get('X-Forwarded-Host')
-        if forwarded:
-            return forwarded.split(',')[0].strip()
-        return self.headers.get('Host')
+        """Return the host to use when building links.
+
+        A configured ``NOTKI_PUBLIC_HOST`` always wins. Otherwise proxy headers are
+        honoured only from trusted peers and only when the resulting hostname passes
+        the optional ``NOTKI_ALLOWED_HOSTS`` allowlist.
+        """
+        if PUBLIC_HOST:
+            return PUBLIC_HOST
+
+        candidate = None
+        if self.is_trusted_proxy():
+            candidate = self.headers.get('X-Forwarded-Host')
+            if not candidate:
+                candidate = parse_forwarded_host(self.headers.get('Forwarded'))
+        if candidate:
+            candidate = candidate.split(',')[0].strip()
+        else:
+            candidate = self.headers.get('Host')
+
+        if candidate and ALLOWED_HOSTS:
+            hostname = (urlsplit(f"//{candidate}").hostname or '').lower()
+            if hostname not in ALLOWED_HOSTS:
+                return self.headers.get('Host')
+        return candidate
 
     def get_forwarded_proto(self):
-        proto = self.headers.get('X-Forwarded-Proto')
-        if not proto:
-            proto = self.headers.get('X-Forwarded-Scheme') or self.headers.get('X-Url-Scheme')
-        if not proto:
-            front_end = self.headers.get('Front-End-Https') or self.headers.get('X-Forwarded-Ssl')
-            if front_end and front_end.lower() in ('on', '1', 'true'):
-                return 'https'
+        proto = None
+        if self.is_trusted_proxy():
+            proto = self.headers.get('X-Forwarded-Proto')
+            if not proto:
+                proto = self.headers.get('X-Forwarded-Scheme') or self.headers.get('X-Url-Scheme')
+            if not proto:
+                front_end = self.headers.get('Front-End-Https') or self.headers.get('X-Forwarded-Ssl')
+                if front_end and front_end.lower() in ('on', '1', 'true'):
+                    return 'https'
         if proto:
             first_proto = proto.split(',')[0].strip().lower()
             if first_proto in ('https', 'http'):
@@ -1025,8 +1169,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
         First-run setup is authorized for loopback peers, but a reverse proxy on the
         same host also connects over loopback. In that case the real client address is
-        carried in X-Forwarded-For / X-Real-IP, so those headers must not resolve to a
-        remote address before setup is treated as local.
+        carried in X-Forwarded-For / X-Real-IP / RFC 7239 Forwarded, so those headers
+        must not resolve to a remote address before setup is treated as local.
         """
         forwarded_values = []
         forwarded_for = self.headers.get('X-Forwarded-For')
@@ -1035,9 +1179,17 @@ class NotkiHandler(BaseHTTPRequestHandler):
         real_ip = self.headers.get('X-Real-IP')
         if real_ip:
             forwarded_values.append(real_ip.strip())
+        forwarded_values.extend(parse_forwarded_for(self.headers.get('Forwarded')))
+
+        forwarded_hosts = []
         forwarded_host = self.headers.get('X-Forwarded-Host')
         if forwarded_host:
-            forwarded_hostname = (urlsplit(f"//{forwarded_host.split(',')[0].strip()}").hostname or '').lower()
+            forwarded_hosts.append(forwarded_host.split(',')[0].strip())
+        rfc7239_host = parse_forwarded_host(self.headers.get('Forwarded'))
+        if rfc7239_host:
+            forwarded_hosts.append(rfc7239_host)
+        for host_value in forwarded_hosts:
+            forwarded_hostname = (urlsplit(f"//{host_value}").hostname or '').lower()
             if forwarded_hostname and forwarded_hostname not in {'localhost', '127.0.0.1', '::1'}:
                 return False
 
@@ -1096,16 +1248,22 @@ class NotkiHandler(BaseHTTPRequestHandler):
         if admin and not user['isAdmin']:
             raise APIError('This section is available only to the administrator.', 403)
 
-        if not admin and user.get('mustSetup2FA'):
+        # Enforce the global two-factor requirement for every role, including
+        # administrators. Only the endpoints needed to complete 2FA setup (and to
+        # inspect/log out the current session) stay reachable until setup is done.
+        if user.get('mustSetup2FA'):
             with database() as connection:
                 req_row = connection.execute("SELECT value FROM settings WHERE key = 'require2FA'").fetchone()
                 require_2fa_enabled = req_row and req_row['value'] == 'true'
 
             if require_2fa_enabled:
                 path = urlsplit(self.path).path
-                allowed_paths = ('/api/session', '/api/logout', '/api/account/totp', '/api/account/totp/verify', '/api/account/passkey')
+                allowed_paths = (
+                    '/api/session', '/api/logout', '/api/account/2fa',
+                    '/api/account/totp', '/api/account/totp/verify', '/api/account/passkey',
+                )
                 if path not in allowed_paths:
-                    raise APIError('Administrator requires two-factor authentication. Please configure it.', 403)
+                    raise APIError('Two-factor authentication is required. Please configure it.', 403)
 
         return user
 
@@ -1182,7 +1340,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             return True
         elif path == '/api/users':
             user = self.require_user()
-            self.send_json({'users': self.directory(user['id'])})
+            query = parse_qs(urlsplit(self.path).query).get('email', [''])[0]
+            self.send_json({'users': self.directory(user['id'], query)})
             return True
         return False
 
@@ -2138,7 +2297,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             valid_password = verify_password(password, password_hash)
             if not row or not valid_password:
                 client_ip = self.get_client_ip()
-                record_failed_auth(client_ip)
+                record_failed_auth(client_ip, email)
                 self.send_error_json('Invalid e-mail or password.', 401)
                 return
             totp_secret = row['totp_secret']
@@ -2156,7 +2315,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             self.send_json({'requires2FA': True, 'tempToken': temp_token, 'hasTotp': has_totp, 'hasPasskey': has_passkey})
             return
 
-        clear_failed_auth(self.get_client_ip())
+        clear_failed_auth(self.get_client_ip(), email)
         token = self.new_session(row['id'])
         self.send_json({'user': public_user(row, connection)}, extra_headers=self.session_headers(token))
 
@@ -2184,9 +2343,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
             if not totp_valid and not backup_valid:
                 client_ip = self.get_client_ip()
-                record_failed_auth(client_ip)
+                record_failed_auth(client_ip, row['email'])
                 raise APIError('Invalid two-factor code.', 401)
-        clear_failed_auth(self.get_client_ip())
+        clear_failed_auth(self.get_client_ip(), row['email'])
         token = self.new_session(user_id)
         with database() as connection:
             user_data = public_user(row, connection)
@@ -2260,10 +2419,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
             new_sign_count = verification.new_sign_count
         except Exception as err:
             client_ip = self.get_client_ip()
-            record_failed_auth(client_ip)
+            record_failed_auth(client_ip, row['email'])
             raise APIError('Invalid passkey signature.', 401) from err
 
-        clear_failed_auth(self.get_client_ip())
+        clear_failed_auth(self.get_client_ip(), row['email'])
         token = self.new_session(user_id)
         with database() as connection:
             connection.execute('UPDATE passkeys SET sign_count = ? WHERE id = ?', (new_sign_count, key_id))
@@ -2290,7 +2449,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             secret = totp_secret.removeprefix('pending:') if totp_secret.startswith('pending:') else totp_secret
             if not verify_totp_code(secret, code):
                 client_ip = self.get_client_ip()
-                record_failed_auth(client_ip)
+                record_failed_auth(client_ip, user['email'])
                 raise APIError('Invalid two-factor code.', 400)
 
             backup_codes_display = [f"{secrets.token_hex(2).upper()}-{secrets.token_hex(2).upper()}" for _ in range(8)]
@@ -2405,7 +2564,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             row = connection.execute('SELECT password_hash FROM users WHERE id = ?', (user['id'],)).fetchone()
             if not row or not verify_password(current, row['password_hash']):
                 client_ip = self.get_client_ip()
-                record_failed_auth(client_ip)
+                record_failed_auth(client_ip, user['email'])
                 raise APIError('The current password is incorrect.', 403)
             connection.execute('UPDATE users SET password_hash = ? WHERE id = ?', (hash_password(password), user['id']))
             connection.execute('DELETE FROM sessions WHERE user_id = ?', (user['id'],))
@@ -2557,13 +2716,23 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('Note not found.', 404)
         return row
 
-    def directory(self, user_id):
-        """Other accounts a note can be shared with, without exposing anything beyond the address."""
+    def directory(self, user_id, query=None):
+        """Look up a share recipient by exact e-mail address.
+
+        Enumerating every account is no longer possible: callers must provide an
+        exact address and only the id/e-mail are returned (never avatar payloads).
+        """
+        if not query:
+            return []
+        try:
+            email = normalize_email(query)
+        except ValueError:
+            return []
         with database() as connection:
-            rows = connection.execute(
-                'SELECT id, email, avatar FROM users WHERE id != ? ORDER BY email COLLATE NOCASE', (user_id,)
-            ).fetchall()
-        return [{'id': row['id'], 'email': row['email'], 'avatar': row['avatar']} for row in rows]
+            row = connection.execute(
+                'SELECT id, email FROM users WHERE id != ? AND email = ?', (user_id, email)
+            ).fetchone()
+        return [{'id': row['id'], 'email': row['email']}] if row else []
 
     def list_shares(self, user, note_id):
         with database() as connection:
@@ -2667,6 +2836,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-Type', content_type)
         self.send_header('Content-Length', str(len(data)))
+        if filename.endswith('.html'):
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('X-Robots-Tag', 'noindex, nofollow')
         self.end_headers()
         self.wfile.write(data)
 
@@ -2694,8 +2866,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
         })
 
     def save_settings(self, payload):
-        self.require_user(admin=True)
+        user = self.require_user(admin=True)
         require_2fa = 'true' if payload.get('require2FA') else 'false'
+        if require_2fa == 'true' and not user.get('has2FA'):
+            raise APIError('Configure two-factor authentication before enabling the global requirement.')
         log_level = str(payload.get('logLevel') or 'INFO').upper()
         if log_level not in ('INFO', 'WARNING', 'ERROR', 'DEBUG'):
             raise APIError('Invalid log level.')

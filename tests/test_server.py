@@ -125,6 +125,14 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 201)
         return client
 
+    def enable_admin_2fa(self):
+        """Configure TOTP for the default admin so require2FA can be enabled safely."""
+        status, res = self.request(self.admin, 'POST', '/api/account/totp')
+        self.assertEqual(status, 200)
+        code = server.compute_totp_code(res['secret'])
+        status, _ = self.request(self.admin, 'POST', '/api/account/totp/verify', {'code': code})
+        self.assertEqual(status, 200)
+
     @staticmethod
     def note_payload(note_id, title, body='Treść', due_date=None):
         payload = {
@@ -570,6 +578,58 @@ class ServerFlowTests(unittest.TestCase):
             self.assertIn("frame-ancestors 'none'", csp)
             self.assertIn("script-src 'self';", csp)
             self.assertNotIn("script-src 'self' 'unsafe-inline'", csp)
+            self.assertEqual(response.headers.get('Strict-Transport-Security'), 'max-age=31536000; includeSubDomains')
+            self.assertEqual(response.headers.get('Permissions-Policy'), 'camera=(), microphone=(), geolocation=()')
+            self.assertEqual(response.headers.get('Cross-Origin-Opener-Policy'), 'same-origin')
+            self.assertEqual(response.headers.get('Cross-Origin-Resource-Policy'), 'same-origin')
+            self.assertEqual(response.headers.get('Cache-Control'), 'no-store')
+            server_header = response.headers.get('Server', '')
+            self.assertNotIn('Python', server_header)
+            self.assertNotIn('0.1.5.93', server_header)
+
+    def test_user_directory_requires_exact_email(self):
+        self.register_user('target@example.com')
+        status, res = self.request(self.admin, 'GET', '/api/users')
+        self.assertEqual(status, 200)
+        self.assertEqual(res['users'], [])
+
+        status, res = self.request(self.admin, 'GET', '/api/users?email=target@example.com')
+        self.assertEqual(status, 200)
+        self.assertEqual(len(res['users']), 1)
+        self.assertEqual(res['users'][0]['email'], 'target@example.com')
+        self.assertNotIn('avatar', res['users'][0])
+
+        status, res = self.request(self.admin, 'GET', '/api/users?email=missing@example.com')
+        self.assertEqual(res['users'], [])
+
+    def test_enabling_require2fa_without_admin_2fa_is_rejected(self):
+        status, error = self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': True})
+        self.assertEqual(status, 400)
+        self.assertIn('two-factor', error['error'].lower())
+
+    def test_admin_without_2fa_is_blocked_when_require2fa_enabled(self):
+        # Simulate a legacy instance where require2FA is already on while the admin
+        # has no second factor configured.
+        with server.database() as connection:
+            connection.execute("INSERT INTO settings (key, value) VALUES ('require2FA', 'true') ON CONFLICT(key) DO UPDATE SET value = 'true'")
+
+        status, _ = self.request(self.admin, 'GET', '/api/admin/summary')
+        self.assertEqual(status, 403)
+        status, _ = self.request(self.admin, 'GET', '/api/notes')
+        self.assertEqual(status, 403)
+
+        # The account endpoints needed to configure 2FA stay reachable.
+        status, _ = self.request(self.admin, 'POST', '/api/account/totp')
+        self.assertEqual(status, 200)
+
+    def test_public_host_takes_precedence_over_forwarded_host(self):
+        with unittest.mock.patch.object(server, 'PUBLIC_HOST', 'notes.example.com'):
+            status, invite = self.request(
+                self.admin, 'POST', '/api/admin/invites', {},
+                headers={'X-Forwarded-Host': 'evil.attacker.example', 'X-Forwarded-Proto': 'https'},
+            )
+        self.assertEqual(status, 201)
+        self.assertTrue(invite['url'].startswith('https://notes.example.com/?invite='))
 
     def test_api_errors_follow_accept_language(self):
         status, error = self.request(
@@ -719,7 +779,8 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(settings['logLevel'], 'INFO')
         self.assertEqual(settings['announcement'], '')
 
-        # Admin POST settings
+        # Admin POST settings (2FA must be configured before it can be required)
+        self.enable_admin_2fa()
         status, updated = self.request(self.admin, 'POST', '/api/admin/settings', {
             'require2FA': True, 'logLevel': 'DEBUG', 'announcement': 'Patching in progress...'
         })
@@ -735,7 +796,7 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(session_info.get('announcement'), 'Patching in progress...')
 
         status, notes_info = self.request(self.admin, 'GET', '/api/notes')
-        self.assertEqual(status, 403)
+        self.assertEqual(status, 200)
 
         # Admin POST settings invalid log level
         status, err = self.request(self.admin, 'POST', '/api/admin/settings', {
@@ -933,7 +994,9 @@ class ServerFlowTests(unittest.TestCase):
         client = self.register_user('enforce2fa@example.com', 'password1234')
 
         # Admin enables require2FA
-        self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': True, 'logLevel': 'INFO'})
+        self.enable_admin_2fa()
+        status, _ = self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': True, 'logLevel': 'INFO'})
+        self.assertEqual(status, 200)
 
         # Existing session now gets 403 on normal endpoints
         status, _ = self.request(client, 'GET', '/api/notes')
@@ -990,6 +1053,7 @@ class ServerFlowTests(unittest.TestCase):
 
         # Test required 2FA when user does not have 2FA configured
         self.register_user('no2fa@example.com', 'user-passphrase-123')
+        self.enable_admin_2fa()
         self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': True, 'logLevel': 'INFO'})
         unauth_no2fa = self.new_client()
         status, login_res = self.request(unauth_no2fa, 'POST', '/api/login', {'email': 'no2fa@example.com', 'password': 'user-passphrase-123'})
@@ -1629,6 +1693,8 @@ class FirstRunSetupTests(unittest.TestCase):
             ({'Host': 'localhost', 'X-Forwarded-For': '203.0.113.5'}, 'X-Forwarded-For'),
             ({'Host': 'localhost', 'X-Real-IP': '203.0.113.6'}, 'X-Real-IP'),
             ({'Host': 'localhost', 'X-Forwarded-Host': 'notki.example.com'}, 'X-Forwarded-Host'),
+            ({'Host': 'localhost', 'Forwarded': 'for=203.0.113.7;proto=http'}, 'Forwarded for'),
+            ({'Host': 'localhost', 'Forwarded': 'host=notki.example.com;proto=http'}, 'Forwarded host'),
         ):
             with self.subTest(header=label):
                 status, _ = self.request('POST', '/api/setup/admin', payload, headers)
@@ -2171,6 +2237,7 @@ class GetForwardedProtoTests(unittest.TestCase):
             def __init__(self):
                 pass
         self.handler = DummyHandler()
+        self.handler.client_address = ('127.0.0.1', 12345)
         self.handler.headers = {}
 
     def test_x_forwarded_proto_single(self):
@@ -2599,6 +2666,23 @@ class Fail2banUnitTests(unittest.TestCase):
             server.record_failed_auth(ip)
         banned = server.get_banned_ips()
         self.assertTrue(any(item['ip'] == ip for item in banned))
+
+    def test_clear_failed_auth_only_clears_matching_account(self):
+        ip = '10.20.30.41'
+        for _ in range(5):
+            server.record_failed_auth(ip, 'victim@example.com')
+        for _ in range(5):
+            server.record_failed_auth(ip, 'attacker@example.com')
+
+        # A successful login for the attacker's own account must not erase the
+        # failures recorded against the victim account.
+        server.clear_failed_auth(ip, 'attacker@example.com')
+        self.assertEqual(len(server.FAILED_AUTH_ATTEMPTS.get(ip, [])), 5)
+        self.assertFalse(server.is_rate_limited(ip, max_failed=6))
+
+        server.clear_failed_auth(ip, 'victim@example.com')
+        self.assertEqual(server.FAILED_AUTH_ATTEMPTS.get(ip, []), [])
+        self.assertFalse(server.is_rate_limited(ip))
 
     def test_unban_single_and_all(self):
         ip1 = '10.0.0.1'

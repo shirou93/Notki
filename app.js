@@ -101,6 +101,16 @@
     }
   }
 
+  function clearLocalCache() {
+    try {
+      Object.keys(localStorage)
+        .filter(key => key.startsWith('notki.cache.') || key.startsWith('notki.sync.pending.'))
+        .forEach(key => localStorage.removeItem(key));
+    } catch (e) {
+      // Ignore storage failures (private mode, quota, etc.).
+    }
+  }
+
   function saveCachedUser(user) {
     try {
       if (user) localStorage.setItem('notki.cache.user', JSON.stringify(user));
@@ -1023,6 +1033,7 @@
   $('#logout-button').addEventListener('click', async () => {
     try {
       await apiRequest('/api/logout', { method: 'POST', body: '{}' });
+      clearLocalCache();
       window.location.assign('/');
     } catch (error) {
       showToast(error.message);
@@ -1116,21 +1127,6 @@
     }
   }
 
-  async function loadDirectory() {
-    try {
-      const { users } = await apiRequest('/api/users');
-      const filtered = users.filter(user => user.email !== currentUser?.email);
-      elements.shareEmail.replaceChildren(...filtered.map(user => {
-        const option = document.createElement('option');
-        option.value = user.email;
-        option.textContent = user.email;
-        return option;
-      }));
-    } catch {
-      // Failed to load directory
-    }
-  }
-
   async function openShare(noteId) {
     const note = notes.find(item => item.id === noteId) || sharedNotes.find(item => item.id === noteId);
     if (!note) return;
@@ -1167,7 +1163,7 @@
       elements.shareForm.hidden = false;
       elements.shareEmpty.textContent = t('share.empty');
       window.setTimeout(() => elements.shareEmail.focus(), 180);
-      await Promise.all([loadShares(), loadDirectory()]);
+      await loadShares();
     }
   }
 
@@ -1260,6 +1256,7 @@
   $('#sidebar-logout-button')?.addEventListener('click', async () => {
     try {
       await apiRequest('/api/logout', { method: 'POST', body: '{}' });
+      clearLocalCache();
       window.location.assign('/');
     } catch (error) {
       showToast(error.message);

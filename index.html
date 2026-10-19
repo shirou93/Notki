@@ -418,7 +418,7 @@
       <p class="profile-description" data-i18n="share.description">Give another account access to this note. Read-only recipients can open it but not change it.</p>
       <form class="profile-form" id="share-form">
         <label class="field-label" for="share-email" data-i18n="share.emailLabel">E-MAIL OF THE RECIPIENT</label>
-        <select class="auth-input profile-select" id="share-email" required></select>
+        <input class="auth-input" id="share-email" type="email" required autocomplete="off" placeholder="name@example.com" maxlength="254">
         <label class="field-label" for="share-permission" data-i18n="share.permissionLabel">PERMISSION</label>
         <select class="auth-input profile-select" id="share-permission">
           <option value="read" data-i18n="share.permission.read">Read only</option>
