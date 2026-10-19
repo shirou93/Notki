@@ -62,7 +62,7 @@ DUMMY_PASSWORD_HASH = hash_password('')
 
 MAX_REQUEST_BYTES = 3 * 1024 * 1024
 MAX_SNAPSHOT_BYTES = 100 * 1024 * 1024
-BACKUP_FILENAME_PATTERN = re.compile(r'^notki-[A-Za-z0-9_-]+\.json$')
+BACKUP_FILENAME_PATTERN = re.compile(r'^notki-[A-Za-z0-9_-]+\.(?:json|enc)$')
 NOTE_COLORS = {'default', 'mint', 'lemon', 'peach', 'lilac', 'sky', 'rose', 'sand', 'sage', 'plum'}
 AVATAR_PATTERN = re.compile(r'^data:image/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$')
 MAX_AVATAR_CHARS = 2_900_000
@@ -1002,8 +1002,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
         self.send_header('X-Frame-Options', 'DENY')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'strict-origin-when-cross-origin')
-        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none';")
-        self.send_header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none';")
+        if self.get_forwarded_proto() == 'https' or os.environ.get('NOTKI_COOKIE_SECURE') == '1':
+            self.send_header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
         self.send_header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
         self.send_header('Cross-Origin-Opener-Policy', 'same-origin')
         self.send_header('Cross-Origin-Resource-Policy', 'same-origin')
@@ -1021,14 +1022,17 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def send_json(self, payload, status=200, extra_headers=()):
         data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
-        self.send_response(status)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Content-Length', str(len(data)))
-        self.send_header('Cache-Control', 'no-store')
-        for name, value in extra_headers:
-            self.send_header(name, value)
-        self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.send_response(status)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Cache-Control', 'no-store')
+            for name, value in extra_headers:
+                self.send_header(name, value)
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def read_body(self, max_bytes=MAX_REQUEST_BYTES):
         try:
@@ -1107,6 +1111,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
         the optional ``NOTKI_ALLOWED_HOSTS`` allowlist.
         """
         if PUBLIC_HOST:
+            if PUBLIC_HOST.startswith(('http://', 'https://')):
+                return urlsplit(PUBLIC_HOST).netloc or PUBLIC_HOST
             return PUBLIC_HOST
 
         candidate = None
@@ -1167,11 +1173,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             return connection.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").fetchone() is not None
 
     def check_setup_permission(self):
-        if self.is_local_setup_request():
-            return True
-        if not os.environ.get('NOTKI_SETUP_TOKEN') and os.environ.get('NOTKI_ALLOW_REMOTE_SETUP') == '1':
-            return True
-        return False
+        return self.is_local_setup_request()
 
     def is_forwarded_client_local(self):
         """Return True when proxy headers do not reveal a non-local client.
@@ -1230,10 +1232,13 @@ class NotkiHandler(BaseHTTPRequestHandler):
         return False
 
     def send_redirect(self, path):
-        self.send_response(302)
-        self.send_header('Location', path)
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
+        try:
+            self.send_response(302)
+            self.send_header('Location', path)
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def current_user(self):
         cookie = cookies.SimpleCookie()
@@ -1712,9 +1717,39 @@ class NotkiHandler(BaseHTTPRequestHandler):
         if len(backup_bytes) > MAX_SNAPSHOT_BYTES:
             raise APIError('The snapshot exceeds the 100 MB limit.', 413)
 
+        payload = payload or {}
+        enc_password = payload.get('encryptionPassword') or payload.get('password')
+        if enc_password:
+            from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+            from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+            from cryptography.hazmat.primitives import hashes
+
+            salt = secrets.token_bytes(16)
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=salt,
+                iterations=100_000,
+            )
+            key = kdf.derive(str(enc_password).encode('utf-8'))
+            aesgcm = AESGCM(key)
+            nonce = secrets.token_bytes(12)
+            ciphertext = aesgcm.encrypt(nonce, backup_bytes, None)
+            encrypted_data = {
+                'format': 'notki-encrypted-snapshot',
+                'version': 1,
+                'createdAt': iso_time(created_at),
+                'salt': salt.hex(),
+                'nonce': nonce.hex(),
+                'ciphertext': base64.b64encode(ciphertext).decode('utf-8'),
+            }
+            backup_bytes = json.dumps(encrypted_data, ensure_ascii=False, indent=2).encode('utf-8')
+            filename = f"notki-backup-{created_at.strftime('%Y%m%d-%H%M%SZ')}-{secrets.token_hex(4)}.enc"
+        else:
+            filename = f"notki-backup-{created_at.strftime('%Y%m%d-%H%M%SZ')}-{secrets.token_hex(4)}.json"
+
         backup_dir = backup_directory()
         backup_dir.mkdir(parents=True, exist_ok=True)
-        filename = f"notki-backup-{created_at.strftime('%Y%m%d-%H%M%SZ')}-{secrets.token_hex(4)}.json"
         backup_path = backup_dir / filename
         temporary_file = tempfile.NamedTemporaryFile(dir=backup_dir, delete=False, prefix='.tmp-', suffix='.tmp')
         temporary_path = Path(temporary_file.name)
@@ -1768,13 +1803,16 @@ class NotkiHandler(BaseHTTPRequestHandler):
             data = path.read_bytes()
         except OSError as error:
             raise APIError('The backup archive cannot be read.', 500) from error
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Content-Length', str(len(data)))
-        self.send_header('Content-Disposition', f'attachment; filename="{path.name}"')
-        self.send_header('Cache-Control', 'no-store')
-        self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Content-Disposition', f'attachment; filename="{path.name}"')
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def delete_server_backup(self, filename):
         self.require_user(admin=True)
@@ -1821,10 +1859,13 @@ class NotkiHandler(BaseHTTPRequestHandler):
         content_type = self.headers.get('Content-Type', '')
         if 'application/json' in content_type:
             payload = self.read_json(MAX_SNAPSHOT_BYTES)
+            password = payload.get('password') or payload.get('encryptionPassword') if isinstance(payload, dict) else None
             snapshot = payload.get('snapshot') if isinstance(payload, dict) and 'snapshot' in payload else payload
+            snapshot = self.decrypt_snapshot_data(snapshot, password)
         else:
+            password = self.headers.get('X-Backup-Password')
             raw_bytes = self.read_archive_from_request()
-            snapshot = self.snapshot_from_bytes(raw_bytes)
+            snapshot = self.snapshot_from_bytes(raw_bytes, password=password)
         self.restore_snapshot(snapshot, replace_existing=True)
 
     def restore_server_backup(self, filename, payload=None):
@@ -1832,9 +1873,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
         path = self.find_server_backup(filename)
         if path.stat().st_size > MAX_SNAPSHOT_BYTES:
             raise APIError('The backup file exceeds the size limit.', 413)
+        password = payload.get('password') or payload.get('encryptionPassword') if isinstance(payload, dict) else None
         try:
             raw_bytes = path.read_bytes()
-            snapshot = self.snapshot_from_bytes(raw_bytes)
+            snapshot = self.snapshot_from_bytes(raw_bytes, password=password)
         except OSError as error:
             raise APIError('The backup archive cannot be read.') from error
         self.restore_snapshot(snapshot, replace_existing=True)
@@ -1980,11 +2022,43 @@ class NotkiHandler(BaseHTTPRequestHandler):
         self.restore_snapshot(self.snapshot_from_bytes(archive_bytes), replace_existing=False)
 
     @staticmethod
-    def snapshot_from_bytes(raw_bytes):
+    def decrypt_snapshot_data(data, password=None):
+        if not isinstance(data, dict) or data.get('format') != 'notki-encrypted-snapshot':
+            return data
+        if not password:
+            raise APIError('Backup is encrypted. Encryption password is required.', 400)
+        try:
+            from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+            from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+            from cryptography.hazmat.primitives import hashes
+
+            salt = bytes.fromhex(data['salt'])
+            nonce = bytes.fromhex(data['nonce'])
+            ciphertext = base64.b64decode(data['ciphertext'])
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=salt,
+                iterations=100_000,
+            )
+            key = kdf.derive(str(password).encode('utf-8'))
+            aesgcm = AESGCM(key)
+            decrypted_bytes = aesgcm.decrypt(nonce, ciphertext, None)
+            return json.loads(decrypted_bytes.decode('utf-8-sig'))
+        except APIError:
+            raise
+        except Exception as err:
+            raise APIError('Invalid backup password or corrupt backup.', 400) from err
+
+    @staticmethod
+    def snapshot_from_bytes(raw_bytes, password=None):
         if len(raw_bytes) > MAX_SNAPSHOT_BYTES:
             raise APIError('The snapshot exceeds the 100 MB limit.', 413)
         try:
-            return json.loads(raw_bytes.decode('utf-8-sig'))
+            data = json.loads(raw_bytes.decode('utf-8-sig'))
+            return NotkiHandler.decrypt_snapshot_data(data, password)
+        except APIError:
+            raise
         except (json.JSONDecodeError, UnicodeDecodeError):
             try:
                 with tarfile.open(fileobj=io.BytesIO(raw_bytes), mode='r:*') as archive:
@@ -1997,7 +2071,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
                         snapshot_member = valid_members[0]
                         snapshot_file = archive.extractfile(snapshot_member)
                         if snapshot_file:
-                            return json.loads(snapshot_file.read(MAX_SNAPSHOT_BYTES + 1).decode('utf-8-sig'))
+                            data = json.loads(snapshot_file.read(MAX_SNAPSHOT_BYTES + 1).decode('utf-8-sig'))
+                            return NotkiHandler.decrypt_snapshot_data(data, password)
+            except APIError:
+                raise
             except Exception as e:
                 add_log('ERROR', f'Failed to extract backup archive: {e}')
             raise APIError('The backup archive cannot be read.')
@@ -2345,10 +2422,13 @@ class NotkiHandler(BaseHTTPRequestHandler):
             totp_valid = secret and not secret.startswith('pending:') and verify_totp_code(secret, totp_code)
             backup_valid = False
 
-            if not totp_valid and clean_code and clean_code in backup_codes:
-                backup_valid = True
-                backup_codes.remove(clean_code)
-                connection.execute('UPDATE users SET backup_codes_json = ? WHERE id = ?', (json.dumps(backup_codes), user_id))
+            if not totp_valid and clean_code:
+                for stored_code in backup_codes:
+                    if verify_password(clean_code, stored_code) or stored_code == clean_code:
+                        backup_valid = True
+                        backup_codes.remove(stored_code)
+                        connection.execute('UPDATE users SET backup_codes_json = ? WHERE id = ?', (json.dumps(backup_codes), user_id))
+                        break
 
             if not totp_valid and not backup_valid:
                 client_ip = self.get_client_ip()
@@ -2462,7 +2542,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 raise APIError('Invalid two-factor code.', 400)
 
             backup_codes_display = [f"{secrets.token_hex(2).upper()}-{secrets.token_hex(2).upper()}" for _ in range(8)]
-            backup_codes_store = [c.replace('-', '') for c in backup_codes_display]
+            backup_codes_store = [hash_password(c.replace('-', '')) for c in backup_codes_display]
 
             connection.execute('UPDATE users SET totp_secret = ?, backup_codes_json = ? WHERE id = ?', (secret, json.dumps(backup_codes_store), user['id']))
         self.send_json({'verified': True, 'backupCodes': backup_codes_display})
@@ -2476,14 +2556,19 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def add_passkey(self, payload):
         user = self.require_user()
         key_id = payload.get('id')
-        name = str(payload.get('name') or 'Passkey')[:80]
+        if not isinstance(key_id, str) or not (1 <= len(key_id) <= 512):
+            raise APIError('Invalid key data.', 400)
+        raw_name = payload.get('name')
+        if raw_name is not None and not isinstance(raw_name, str):
+            raise APIError('Invalid key data.', 400)
+        name = str(raw_name or 'Passkey').strip()[:80] or 'Passkey'
         pub_b64 = payload.get('publicKey')
         auth_data_b64 = payload.get('authenticatorData')
         client_data_b64 = payload.get('clientDataJSON')
         att_obj_b64 = payload.get('attestationObject')
         challenge_id = payload.get('challengeId')
 
-        if not key_id or not pub_b64 or not client_data_b64 or not att_obj_b64 or not challenge_id:
+        if not pub_b64 or not client_data_b64 or not att_obj_b64 or not challenge_id:
             raise APIError('Invalid key data.', 400)
 
         with PASSKEY_CHALLENGES_LOCK:
@@ -2633,10 +2718,19 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 'INSERT INTO invites (token_hash, created_by, created_at, expires_at) VALUES (?, ?, ?, ?)',
                 (token_hash(token), user['id'], iso_time(created), iso_time(expires)),
             )
-        host = self.get_forwarded_host() or 'localhost:8000'
-        proto = self.get_forwarded_proto()
-        scheme = 'https' if (proto == 'https' or os.environ.get('NOTKI_PUBLIC_HTTPS') == '1') else 'http'
-        self.send_json({'url': f'{scheme}://{host}/?invite={token}', 'expiresAt': iso_time(expires)}, 201)
+        if PUBLIC_HOST:
+            if PUBLIC_HOST.startswith(('http://', 'https://')):
+                invite_url = f"{PUBLIC_HOST.rstrip('/')}/?invite={token}"
+            else:
+                proto = self.get_forwarded_proto()
+                scheme = 'https' if (proto == 'https' or os.environ.get('NOTKI_PUBLIC_HTTPS') == '1') else 'http'
+                invite_url = f"{scheme}://{PUBLIC_HOST}/?invite={token}"
+        else:
+            host = self.get_forwarded_host() or 'localhost:8000'
+            proto = self.get_forwarded_proto()
+            scheme = 'https' if (proto == 'https' or os.environ.get('NOTKI_PUBLIC_HTTPS') == '1') else 'http'
+            invite_url = f"{scheme}://{host}/?invite={token}"
+        self.send_json({'url': invite_url, 'expiresAt': iso_time(expires)}, 201)
 
     @staticmethod
     def _prepare_note_for_db(note, user_id, seen, default_now=None):
@@ -2842,14 +2936,17 @@ class NotkiHandler(BaseHTTPRequestHandler):
         content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
         if content_type.startswith('text/') or content_type in ('application/javascript',):
             content_type += '; charset=utf-8'
-        self.send_response(200)
-        self.send_header('Content-Type', content_type)
-        self.send_header('Content-Length', str(len(data)))
-        if filename.endswith('.html'):
-            self.send_header('Cache-Control', 'no-store')
-            self.send_header('X-Robots-Tag', 'noindex, nofollow')
-        self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.send_response(200)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Content-Length', str(len(data)))
+            if filename.endswith('.html'):
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('X-Robots-Tag', 'noindex, nofollow')
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def get_settings(self):
         self.require_user(admin=True)
@@ -2883,6 +2980,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
         if log_level not in ('INFO', 'WARNING', 'ERROR', 'DEBUG'):
             raise APIError('Invalid log level.')
         announcement = str(payload.get('announcement', '') if payload.get('announcement') is not None else '')
+        if len(announcement) > 2000:
+            raise APIError('The announcement exceeds the maximum length of 2000 characters.')
         try:
             session_days = max(1, min(3650, int(payload.get('sessionDays', SESSION_DAYS))))
         except (ValueError, TypeError):
