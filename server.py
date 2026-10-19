@@ -32,6 +32,7 @@ import webauthn
 
 ROOT = Path(__file__).resolve().parent
 VERSION = '0.1.5.93'
+GENERATED_SETUP_TOKEN = None
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 SESSION_COOKIE = 'notki_session'
 SESSION_DAYS = 30
@@ -969,15 +970,28 @@ class NotkiHandler(BaseHTTPRequestHandler):
         with database() as connection:
             return connection.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").fetchone() is not None
 
-    def is_local_setup_request(self):
-        if os.environ.get('NOTKI_ALLOW_REMOTE_SETUP') == '1':
+    def check_setup_permission(self):
+        if self.is_local_setup_request():
             return True
+        if not os.environ.get('NOTKI_SETUP_TOKEN') and os.environ.get('NOTKI_ALLOW_REMOTE_SETUP') == '1':
+            return True
+        return False
+
+    def is_local_setup_request(self):
         try:
             remote_ip = ipaddress.ip_address(self.client_address[0].split('%', 1)[0])
         except ValueError:
             return False
-        host = urlsplit(f"//{self.get_forwarded_host() or ''}").hostname or ''
-        return remote_ip.is_loopback and host.lower() in {'localhost', '127.0.0.1', '::1'}
+        host = urlsplit(f"//{self.headers.get('Host') or ''}").hostname or ''
+        if remote_ip.is_loopback and host.lower() in {'localhost', '127.0.0.1', '::1'}:
+            return True
+
+        expected_token = os.environ.get('NOTKI_SETUP_TOKEN') or GENERATED_SETUP_TOKEN
+        provided_token = self.headers.get('X-Setup-Token')
+        if expected_token and provided_token and hmac.compare_digest(provided_token, expected_token):
+            return True
+
+        return False
 
     def send_redirect(self, path):
         self.send_response(302)
@@ -1070,8 +1084,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
         elif path in ('/setup', '/setup.html'):
             if self.has_admin():
                 self.send_redirect('/')
-            elif not self.is_local_setup_request():
-                self.send_error_json('The first-time setup can only be completed locally.', 403)
+            elif not self.check_setup_permission():
+                self.send_error_json('The first-time setup can only be completed locally or with a valid setup token.', 403)
             else:
                 self.serve_static('setup.html')
 
@@ -1184,8 +1198,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def handle_static_get(self, path):
         if path in ('/', '/index.html') and not self.has_admin():
-            if not self.is_local_setup_request():
-                self.send_error_json('Creating the first administrator requires local access.', 403)
+            if not self.check_setup_permission():
+                self.send_error_json('Creating the first administrator requires local access or a valid setup token.', 403)
                 return True
             self.send_redirect('/setup')
             return True
@@ -1374,8 +1388,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             self.send_error_json(str(error), error.status)
 
     def create_first_admin(self, payload):
-        if not self.is_local_setup_request():
-            raise APIError('The first-time setup can only be completed locally.', 403)
+        if not self.check_setup_permission():
+            raise APIError('The first-time setup can only be completed locally or with a valid setup token.', 403)
         email = normalize_email(payload.get('email'))
         password = str(payload.get('password') or '')
         if len(password) < 12:
@@ -1718,8 +1732,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
         self.send_json({'success': True})
 
     def import_snapshot_archive(self, archive_bytes):
-        if not self.is_local_setup_request():
-            raise APIError('Snapshot import is available only locally.', 403)
+        if not self.check_setup_permission():
+            raise APIError('Snapshot import is available only locally or with a valid setup token.', 403)
         self.restore_snapshot(self.snapshot_from_bytes(archive_bytes), replace_existing=False)
 
     @staticmethod
@@ -1746,8 +1760,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('The backup archive cannot be read.')
 
     def import_snapshot(self, payload):
-        if not self.is_local_setup_request():
-            raise APIError('Snapshot import is available only locally.', 403)
+        if not self.check_setup_permission():
+            raise APIError('Snapshot import is available only locally or with a valid setup token.', 403)
         self.restore_snapshot(payload.get('snapshot'), replace_existing=False)
 
     def _prepare_snapshot_users(self, users):
@@ -2688,6 +2702,10 @@ def main():
     with database() as connection:
         needs_setup = connection.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").fetchone() is None
     if needs_setup:
+        if not os.environ.get('NOTKI_SETUP_TOKEN'):
+            global GENERATED_SETUP_TOKEN
+            GENERATED_SETUP_TOKEN = secrets.token_hex(16)
+            print(f'SETUP TOKEN: {GENERATED_SETUP_TOKEN}')
         print(f'Initial admin setup: http://127.0.0.1:{args.port}/setup')
     try:
         server.serve_forever()

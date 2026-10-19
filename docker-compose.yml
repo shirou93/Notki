@@ -37,8 +37,8 @@ services:
       NOTKI_BACKUP_DIR: /notki/data/backups
       # Keeps the bind-mounted source tree free of root-owned __pycache__ files.
       PYTHONDONTWRITEBYTECODE: "1"
-      # Allow remote setup by default in Docker Compose since it's likely not accessed via localhost
-      NOTKI_ALLOW_REMOTE_SETUP: "${NOTKI_ALLOW_REMOTE_SETUP:-1}"
+      # Remote setup is disabled by default for security, but can be enabled if needed
+      NOTKI_ALLOW_REMOTE_SETUP: "${NOTKI_ALLOW_REMOTE_SETUP:-0}"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8000/api/setup/status"]
       interval: 30s

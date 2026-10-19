@@ -51,6 +51,13 @@ The easiest and recommended way to deploy Notki is using **Docker Compose**.
 
 3. Open your browser at `http://localhost:8000/setup` and complete the initial administrator setup.
 
+> **Security Warning (Remote Setup):**
+> For security, remote first-time setup is disabled by default. If you are accessing Notki remotely, you must either:
+> - Use an SSH tunnel to port-forward the service to your local machine (e.g. `ssh -L 8000:localhost:8000 user@server`).
+> - Pass the auto-generated setup token printed in the server console via the `X-Setup-Token` HTTP header when using the API.
+> - Temporarily set `NOTKI_ALLOW_REMOTE_SETUP=1` to allow public web access to the setup page (not recommended).
+> Alternatively, you can pre-define a custom token by setting the `NOTKI_SETUP_TOKEN` environment variable.
+
 ---
 
 ## 💻 Command-Line Interface (CLI Options)
@@ -121,7 +128,8 @@ From the **Admin Panel** under **Server Backups**, you can easily manage server 
 | `NOTKI_PORT` / `NOTKI_HTTP_PORT` | HTTP server port | `8000` |
 | `NOTKI_DB_PATH` | Path to the SQLite3 database file | `./data/notki.sqlite3` |
 | `NOTKI_BACKUP_DIR` | Directory path for storing JSON backups | `./data/backups` |
-| `NOTKI_ALLOW_REMOTE_SETUP` | Allow first-time setup from remote IP addresses | `0` (`1` in Docker) |
+| `NOTKI_ALLOW_REMOTE_SETUP` | Allow first-time setup from remote IP addresses | `0` |
+| `NOTKI_SETUP_TOKEN` | A token required to perform setup remotely | Auto-generated |
 | `NOTKI_TRUST_PROXY` | Trust `X-Forwarded-For` header for rate limiting (`1`/`true` or IP/CIDR list) | `0` |
 
 > **Reverse Proxies & HTTPS (Cloudflare Tunnel, Nginx, Caddy, Traefik, NPM):**
