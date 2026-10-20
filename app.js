@@ -4387,6 +4387,7 @@
     module.exports = {
       bufferToBase64,
       encodeBase64Url,
+      updateEditorProgress,
       getTaskStatsFromHtml,
       tableCell,
       createIconSvg,

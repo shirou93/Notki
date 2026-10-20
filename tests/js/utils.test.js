@@ -37,6 +37,7 @@ window.i18n = {
 
 // require the module
 const {
+  updateEditorProgress,
   bufferToBase64,
   encodeBase64Url,
   getTaskStatsFromHtml,
@@ -879,5 +880,107 @@ describe('cleanupAllTaskDrags', () => {
   it('handles empty states gracefully', () => {
     // Should not throw when nothing to clean up
     expect(() => cleanupAllTaskDrags()).not.toThrow();
+  });
+});
+
+describe('updateEditorProgress', () => {
+  beforeAll(() => {
+    // The previous test block cleanupAllTaskDrags completely removes body content.
+    // We MUST restore it so document.getElementById doesn't return null.
+    document.body.innerHTML = indexHtmlContent;
+  });
+
+  it('hides the progress container if total tasks is 0', () => {
+    let container, textEl, fillEl, noteBody, localUpdateProgress;
+    jest.isolateModules(() => {
+      document.body.innerHTML = indexHtmlContent;
+      const app = require('../../app.js');
+
+      localUpdateProgress = app.updateEditorProgress;
+      container = document.getElementById('editor-progress');
+      noteBody = document.getElementById('note-body');
+      textEl = document.getElementById('editor-progress-text');
+      fillEl = document.getElementById('editor-progress-fill');
+    });
+
+    noteBody.innerHTML = '<div>No tasks here</div>';
+    container.hidden = false;
+
+    localUpdateProgress();
+
+    expect(container.hidden).toBe(true);
+  });
+
+  it('shows the progress container and updates text/fill if total tasks > 0', () => {
+    let container, textEl, fillEl, noteBody, localUpdateProgress;
+    jest.isolateModules(() => {
+      document.body.innerHTML = indexHtmlContent;
+      const app = require('../../app.js');
+
+      localUpdateProgress = app.updateEditorProgress;
+      container = document.getElementById('editor-progress');
+      noteBody = document.getElementById('note-body');
+      textEl = document.getElementById('editor-progress-text');
+      fillEl = document.getElementById('editor-progress-fill');
+    });
+
+    noteBody.innerHTML = `
+      <ul class="task-list">
+        <li><input type="checkbox" class="task-checkbox"> Task 1</li>
+        <li><input type="checkbox" class="task-checkbox" checked> Task 2</li>
+      </ul>
+    `;
+
+    container.hidden = true;
+    localUpdateProgress();
+
+    expect(container.hidden).toBe(false);
+    expect(textEl.textContent).toBe('1/2 (50%)');
+    expect(fillEl.style.width).toBe('50%');
+    expect(fillEl.classList.contains('is-complete')).toBe(false);
+  });
+
+  it('adds is-complete class when progress is 100%', () => {
+    let container, textEl, fillEl, noteBody, localUpdateProgress;
+    jest.isolateModules(() => {
+      document.body.innerHTML = indexHtmlContent;
+      const app = require('../../app.js');
+
+      localUpdateProgress = app.updateEditorProgress;
+      container = document.getElementById('editor-progress');
+      noteBody = document.getElementById('note-body');
+      textEl = document.getElementById('editor-progress-text');
+      fillEl = document.getElementById('editor-progress-fill');
+    });
+
+    noteBody.innerHTML = `
+      <ul class="task-list">
+        <li><input type="checkbox" class="task-checkbox" checked> Task 1</li>
+        <li><input type="checkbox" class="task-checkbox" checked> Task 2</li>
+      </ul>
+    `;
+
+    localUpdateProgress();
+
+    expect(fillEl.classList.contains('is-complete')).toBe(true);
+    expect(fillEl.style.width).toBe('100%');
+  });
+
+  it('does nothing if container does not exist', () => {
+    let container, textEl, fillEl, noteBody, localUpdateProgress;
+    jest.isolateModules(() => {
+      document.body.innerHTML = indexHtmlContent;
+      const app = require('../../app.js');
+
+      localUpdateProgress = app.updateEditorProgress;
+      container = document.getElementById('editor-progress');
+      noteBody = document.getElementById('note-body');
+      textEl = document.getElementById('editor-progress-text');
+      fillEl = document.getElementById('editor-progress-fill');
+    });
+
+    container.remove();
+
+    expect(() => localUpdateProgress()).not.toThrow();
   });
 });
