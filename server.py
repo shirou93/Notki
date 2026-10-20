@@ -1522,62 +1522,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
         provided_token = self.headers.get('X-Setup-Token', '')
         return bool(expected_token and provided_token and hmac.compare_digest(provided_token, expected_token))
 
-    def is_forwarded_client_local(self):
-        """Return True when proxy headers do not reveal a non-local client.
-
-        First-run setup is authorized for loopback peers, but a reverse proxy on the
-        same host also connects over loopback. In that case the real client address is
-        carried in X-Forwarded-For / X-Real-IP / RFC 7239 Forwarded, so those headers
-        must not resolve to a remote address before setup is treated as local.
-        """
-        forwarded_values = []
-        forwarded_for = self.headers.get('X-Forwarded-For')
-        if forwarded_for:
-            forwarded_values.append(forwarded_for.split(',')[0].strip())
-        real_ip = self.headers.get('X-Real-IP')
-        if real_ip:
-            forwarded_values.append(real_ip.strip())
-        forwarded_values.extend(parse_forwarded_for(self.headers.get('Forwarded')))
-
-        forwarded_hosts = []
-        forwarded_host = self.headers.get('X-Forwarded-Host')
-        if forwarded_host:
-            forwarded_hosts.append(forwarded_host.split(',')[0].strip())
-        rfc7239_host = parse_forwarded_host(self.headers.get('Forwarded'))
-        if rfc7239_host:
-            forwarded_hosts.append(rfc7239_host)
-        for host_value in forwarded_hosts:
-            forwarded_hostname = (urlsplit(f"//{host_value}").hostname or '').lower()
-            if forwarded_hostname and forwarded_hostname not in {'localhost', '127.0.0.1', '::1'}:
-                return False
-
-        for value in forwarded_values:
-            if not value:
-                continue
-            try:
-                if not ipaddress.ip_address(value.split('%', 1)[0]).is_loopback:
-                    return False
-            except ValueError:
-                return False
-        return True
-
-    def is_local_setup_request(self):
-        try:
-            remote_ip = ipaddress.ip_address(self.client_address[0].split('%', 1)[0])
-        except ValueError:
-            return False
-        host = urlsplit(f"//{self.headers.get('Host') or ''}").hostname or ''
-        if (remote_ip.is_loopback and host.lower() in {'localhost', '127.0.0.1', '::1'}
-                and self.is_forwarded_client_local()):
-            return True
-
-        expected_token = os.environ.get('NOTKI_SETUP_TOKEN') or GENERATED_SETUP_TOKEN
-        provided_token = self.headers.get('X-Setup-Token')
-        if expected_token and provided_token and hmac.compare_digest(provided_token, expected_token):
-            return True
-
-        return False
-
     def send_redirect(self, path):
         try:
             self.send_response(302)
