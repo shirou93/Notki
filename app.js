@@ -179,9 +179,9 @@
 
   function getTaskStatsFromHtml(html) {
     if (!html) return { total: 0, completed: 0, percent: 0 };
-    const temp = document.createElement('div');
+    const temp = document.createElement('template');
     temp.innerHTML = html;
-    return getTaskStatsFromElement(temp);
+    return getTaskStatsFromElement(temp.content);
   }
 
   // Cache to memoize expensive DOM parsing for task stats during list rendering/search.
