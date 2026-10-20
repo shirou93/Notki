@@ -39,6 +39,7 @@ window.i18n = {
 const {
   bufferToBase64,
   encodeBase64Url,
+  getTaskStatsFromElement,
   getTaskStatsFromHtml,
   tableCell,
   createIconSvg,
@@ -125,6 +126,50 @@ describe('tableCell', () => {
     // Since textContent is used, the literal string is stored, not parsed as HTML.
     expect(cell.textContent).toBe(htmlContent);
     expect(cell.innerHTML).toBe('&lt;script&gt;alert("xss")&lt;/script&gt;');
+  });
+});
+
+describe('getTaskStatsFromElement', () => {
+  it('handles null element', () => {
+    expect(getTaskStatsFromElement(null)).toEqual({ total: 0, completed: 0, percent: 0 });
+  });
+
+  it('handles element with no checkboxes', () => {
+    const el = document.createElement('div');
+    el.innerHTML = '<p>No tasks here</p>';
+    expect(getTaskStatsFromElement(el)).toEqual({ total: 0, completed: 0, percent: 0 });
+  });
+
+  it('calculates correct stats for partially completed tasks', () => {
+    const el = document.createElement('div');
+    el.innerHTML = `
+      <input type="checkbox" checked />
+      <input type="checkbox" />
+      <input type="checkbox" checked />
+      <input type="checkbox" />
+    `;
+    expect(getTaskStatsFromElement(el)).toEqual({ total: 4, completed: 2, percent: 50 });
+  });
+
+  it('calculates correct stats with some nested and unchecked boxes', () => {
+    const el = document.createElement('div');
+    el.innerHTML = `
+      <ul>
+        <li><input type="checkbox" checked> Task 1</li>
+        <li><input type="checkbox"> Task 2</li>
+        <li><input type="checkbox"> Task 3</li>
+      </ul>
+    `;
+    expect(getTaskStatsFromElement(el)).toEqual({ total: 3, completed: 1, percent: 33 });
+  });
+
+  it('calculates correct stats for 100% completion', () => {
+    const el = document.createElement('div');
+    el.innerHTML = `
+      <input type="checkbox" checked />
+      <input type="checkbox" checked />
+    `;
+    expect(getTaskStatsFromElement(el)).toEqual({ total: 2, completed: 2, percent: 100 });
   });
 });
 
