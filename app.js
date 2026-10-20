@@ -4413,7 +4413,8 @@
       setCurrentSort: (s) => { currentSort = s; },
       getQuery: () => query,
       setQuery: (q) => { query = q; },
-      buildTaskDragPreview
+      buildTaskDragPreview,
+      settleCards
     };
   }
 })();

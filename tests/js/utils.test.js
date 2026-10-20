@@ -881,3 +881,62 @@ describe('cleanupAllTaskDrags', () => {
     expect(() => cleanupAllTaskDrags()).not.toThrow();
   });
 });
+
+describe('settleCards', () => {
+  let settleCards;
+  let originalGetAnimations;
+
+  beforeEach(() => {
+    settleCards = require('../../app.js').settleCards;
+    originalGetAnimations = document.getAnimations;
+  });
+
+  afterEach(() => {
+    document.getAnimations = originalGetAnimations;
+  });
+
+  it('cancels animations targeting note-card elements', () => {
+    const cancelMock1 = jest.fn();
+    const cancelMock2 = jest.fn();
+    const cancelMock3 = jest.fn();
+
+    document.getAnimations = jest.fn().mockReturnValue([
+      {
+        effect: {
+          target: {
+            classList: {
+              contains: (cls) => cls === 'note-card'
+            }
+          }
+        },
+        cancel: cancelMock1
+      },
+      {
+        effect: {
+          target: {
+            classList: {
+              contains: (cls) => cls === 'other-class'
+            }
+          }
+        },
+        cancel: cancelMock2
+      },
+      {
+        // Missing effect or target
+        cancel: cancelMock3
+      }
+    ]);
+
+    settleCards();
+
+    expect(cancelMock1).toHaveBeenCalled();
+    expect(cancelMock2).not.toHaveBeenCalled();
+    expect(cancelMock3).not.toHaveBeenCalled();
+  });
+
+  it('handles empty animations gracefully', () => {
+    document.getAnimations = jest.fn().mockReturnValue([]);
+    expect(() => settleCards()).not.toThrow();
+  });
+
+});
