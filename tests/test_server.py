@@ -2433,6 +2433,34 @@ class RecordFailedAuthTests(unittest.TestCase):
         self.assertEqual(len(server.FAILED_AUTH_ATTEMPTS['192.168.1.4']), server.MAX_ATTEMPTS_PER_KEY)
         self.assertEqual(len(server.ACCOUNT_FAILURES['victim@example.com']), server.MAX_ATTEMPTS_PER_KEY)
 
+    @unittest.mock.patch('server.database')
+    @unittest.mock.patch('server._prune_fail2ban_database')
+    @unittest.mock.patch('server.time.time')
+    def test_record_failed_auth_database_insertion(self, mock_time, mock_prune, mock_database):
+        mock_time.return_value = 1000.0
+        mock_conn = unittest.mock.MagicMock()
+        mock_database.return_value.__enter__.return_value = mock_conn
+
+        server.record_failed_auth('192.168.1.5', 'user@example.com')
+
+        mock_conn.execute.assert_called_once_with(
+            'INSERT INTO fail2ban_attempts (ip, account, created_at) VALUES (?, ?, ?)',
+            ('192.168.1.5', 'user@example.com', 1000.0),
+        )
+        mock_prune.assert_called_once_with(1000.0)
+
+    @unittest.mock.patch('server.database')
+    @unittest.mock.patch('server._prune_fail2ban_database')
+    @unittest.mock.patch('server.time.time')
+    def test_record_failed_auth_database_exception_suppressed(self, mock_time, mock_prune, mock_database):
+        mock_time.return_value = 1000.0
+        mock_database.side_effect = Exception('Database error')
+
+        # Should not raise an exception
+        server.record_failed_auth('192.168.1.6', 'user2@example.com')
+
+        mock_prune.assert_called_once_with(1000.0)
+
 
 class IsRateLimitedTests(unittest.TestCase):
     def setUp(self):
