@@ -62,6 +62,7 @@ const {
   openShare,
   getQuery,
   setQuery,
+  tweenCards,
 } = require('../../app.js');
 
 describe('createIconSvg', () => {
@@ -879,5 +880,88 @@ describe('cleanupAllTaskDrags', () => {
   it('handles empty states gracefully', () => {
     // Should not throw when nothing to clean up
     expect(() => cleanupAllTaskDrags()).not.toThrow();
+  });
+});
+describe('tweenCards', () => {
+  beforeEach(() => {
+    document.getAnimations = jest.fn(() => []);
+    window.matchMedia.mockImplementation(query => ({
+      matches: false,
+    }));
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('does nothing if prefers-reduced-motion is true', () => {
+    window.matchMedia.mockImplementation(query => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+    }));
+    const node = { getBoundingClientRect: jest.fn(), animate: jest.fn() };
+    const previousRects = new Map([[node, { left: 0, top: 0 }]]);
+
+    tweenCards(previousRects, [node]);
+
+    expect(document.getAnimations).not.toHaveBeenCalled();
+    expect(node.animate).not.toHaveBeenCalled();
+  });
+
+  it('cancels existing note-card animations', () => {
+    const cancelMock = jest.fn();
+    document.getAnimations.mockReturnValue([
+      { effect: { target: { classList: { contains: (cls) => cls === 'note-card' } } }, cancel: cancelMock },
+      { effect: { target: { classList: { contains: (cls) => cls === 'other-class' } } }, cancel: jest.fn() },
+      { effect: null, cancel: jest.fn() }
+    ]);
+
+    const node = {
+      getBoundingClientRect: jest.fn(() => ({ left: 10, top: 10 })),
+      animate: jest.fn()
+    };
+    const previousRects = new Map([[node, { left: 0, top: 0 }]]);
+
+    tweenCards(previousRects, [node]);
+
+    expect(cancelMock).toHaveBeenCalled();
+  });
+
+  it('skips nodes without a previous rect', () => {
+    const node = {
+      getBoundingClientRect: jest.fn(() => ({ left: 10, top: 10 })),
+      animate: jest.fn()
+    };
+    const previousRects = new Map(); // node not in map
+
+    tweenCards(previousRects, [node]);
+
+    expect(node.animate).not.toHaveBeenCalled();
+  });
+
+  it('skips animation if delta is smaller than 0.5px', () => {
+    const node = {
+      getBoundingClientRect: jest.fn(() => ({ left: 10.4, top: 10.4 })),
+      animate: jest.fn()
+    };
+    const previousRects = new Map([[node, { left: 10, top: 10 }]]);
+
+    tweenCards(previousRects, [node]);
+
+    expect(node.animate).not.toHaveBeenCalled();
+  });
+
+  it('animates nodes with valid delta', () => {
+    const node = {
+      getBoundingClientRect: jest.fn(() => ({ left: 20, top: 30 })),
+      animate: jest.fn()
+    };
+    const previousRects = new Map([[node, { left: 10, top: 10 }]]);
+
+    tweenCards(previousRects, [node]);
+
+    expect(node.animate).toHaveBeenCalledWith(
+      [{ transform: `translate(-10px, -20px)` }, { transform: 'none' }],
+      { duration: 220, easing: 'cubic-bezier(.2,.8,.3,1)' }
+    );
   });
 });
