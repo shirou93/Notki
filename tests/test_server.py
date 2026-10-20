@@ -46,6 +46,17 @@ class ServerUnitTests(unittest.TestCase):
         self.assertEqual(server.normalize_email('USER@EXAMPLE.COM'), 'user@example.com')
         self.assertEqual(server.normalize_email('u.ser+tag@sub.example.co.uk'), 'u.ser+tag@sub.example.co.uk')
 
+    def test_account_key(self):
+        self.assertEqual(server.account_key('USER@EXAMPLE.COM'), 'user@example.com')
+        self.assertEqual(server.account_key('  User@Example.Com  '), 'user@example.com')
+        self.assertEqual(server.account_key('user@example.com'), 'user@example.com')
+        self.assertEqual(server.account_key(''), '')
+        self.assertEqual(server.account_key(None), '')
+        self.assertEqual(server.account_key('   '), '')
+        self.assertEqual(server.account_key(123), '123')
+        # Test casefolding vs lowercasing
+        self.assertEqual(server.account_key('ß'), 'ss')
+
     def test_normalize_email_invalid(self):
         invalid_emails = [
             None,
