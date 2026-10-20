@@ -172,10 +172,16 @@ class ServerFlowTests(unittest.TestCase):
 
     def enable_admin_2fa(self):
         """Configure TOTP for the default admin so require2FA can be enabled safely."""
-        status, res = self.request(self.admin, 'POST', '/api/account/totp')
+        status, res = self.request(
+            self.admin, 'POST', '/api/account/totp',
+            headers={'X-Step-Up-Password': 'secure-passphrase-1'},
+        )
         self.assertEqual(status, 200)
         code = server.compute_totp_code(res['secret'])
-        status, _ = self.request(self.admin, 'POST', '/api/account/totp/verify', {'code': code})
+        status, _ = self.request(
+            self.admin, 'POST', '/api/account/totp/verify', {'code': code},
+            headers={'X-Step-Up-Password': 'secure-passphrase-1'},
+        )
         self.assertEqual(status, 200)
 
     @staticmethod
@@ -454,20 +460,25 @@ class ServerFlowTests(unittest.TestCase):
 
     def test_verify_totp_rate_limiting(self):
         # Trigger TOTP setup so we have a secret to fail against
-        status, _ = self.request(self.admin, 'POST', '/api/account/totp')
+        status, _ = self.request(
+            self.admin, 'POST', '/api/account/totp',
+            headers={'X-Step-Up-Password': 'secure-passphrase-1'},
+        )
         self.assertEqual(status, 200)
 
         # 15 failed attempts should return 400
         for _ in range(15):
-            status, _ = self.request(self.admin, 'POST', '/api/account/totp/verify', {
-                'code': '000000'
-            })
+            status, _ = self.request(
+                self.admin, 'POST', '/api/account/totp/verify', {'code': '000000'},
+                headers={'X-Step-Up-Password': 'secure-passphrase-1'},
+            )
             self.assertEqual(status, 400)
 
         # The 16th attempt should be rate limited and return 429
-        status, _ = self.request(self.admin, 'POST', '/api/account/totp/verify', {
-            'code': '000000'
-        })
+        status, _ = self.request(
+            self.admin, 'POST', '/api/account/totp/verify', {'code': '000000'},
+            headers={'X-Step-Up-Password': 'secure-passphrase-1'},
+        )
         self.assertEqual(status, 429)
 
     def test_password_change_requires_current_password_and_keeps_session(self):
@@ -3024,6 +3035,41 @@ class TestSecurityAndBackupFixes(ServerFlowTests):
         status, res = self.request(self.new_client(), 'GET', '/api/setup/status')
         self.assertEqual(status, 200)
         self.assertEqual(res, {'needsSetup': False})
+
+    def test_totp_step_up_requirements(self):
+        user = self.register_user('totpstepup@example.com', 'user-passphrase-123')
+        with server.database() as connection:
+            user_id = connection.execute(
+                "SELECT id FROM users WHERE email = 'totpstepup@example.com'"
+            ).fetchone()['id']
+            connection.execute(
+                'UPDATE sessions SET authenticated_at = ? WHERE user_id = ?',
+                (server.iso_time(server.utc_now() - timedelta(minutes=30)), user_id),
+            )
+
+        status, _ = self.request(user, 'POST', '/api/account/totp')
+        self.assertEqual(status, 403)
+
+        status, _ = self.request(user, 'POST', '/api/account/totp/verify', {'code': '000000'})
+        self.assertEqual(status, 403)
+
+        status, res = self.request(
+            user, 'POST', '/api/account/totp',
+            headers={'X-Step-Up-Password': 'user-passphrase-123'},
+        )
+        self.assertEqual(status, 200)
+        self.assertIn('secret', res)
+
+        secret = res['secret']
+        code = server.compute_totp_code(secret)
+
+        status, verify_res = self.request(
+            user, 'POST', '/api/account/totp/verify',
+            {'code': code},
+            headers={'X-Step-Up-Password': 'user-passphrase-123'},
+        )
+        self.assertEqual(status, 200)
+        self.assertIn('backupCodes', verify_res)
 
     def test_step_up_requires_recent_authentication(self):
         user = self.register_user('stepup@example.com', 'user-passphrase-123')

@@ -3107,10 +3107,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def setup_totp(self):
         user = self.require_user()
-        with database() as connection:
-            row = connection.execute('SELECT totp_secret FROM users WHERE id = ?', (user['id'],)).fetchone()
-        if row and totp_is_active(row['totp_secret']):
-            self.require_step_up(user)
+        self.require_step_up(user)
         secret = generate_totp_secret()
         with database() as connection:
             connection.execute(
@@ -3123,6 +3120,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def verify_totp(self, payload):
         user = self.require_user()
+        self.require_step_up(user)
         code = payload.get('code')
         with database() as connection:
             row = connection.execute(
