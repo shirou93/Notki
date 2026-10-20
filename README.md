@@ -40,7 +40,7 @@ The easiest and recommended way to deploy Notki is using **Docker Compose**.
 
 1. Download the source (or clone the pinned release) and start the locally built image:
    ```bash
-   git clone --branch v0.1.6.0 --depth 1 https://github.com/shirou93/Notki.git notki
+   git clone --branch v0.1.6.1 --depth 1 https://github.com/shirou93/Notki.git notki
    cd notki
    docker compose up -d --build
    ```
@@ -90,7 +90,7 @@ python3 server.py --host 0.0.0.0 --port 8000
 Notki requires the pinned packages in `requirements.txt`.
 
 ```bash
-git clone --branch v0.1.6.0 --depth 1 https://github.com/shirou93/Notki.git
+git clone --branch v0.1.6.1 --depth 1 https://github.com/shirou93/Notki.git
 cd Notki
 python3 -m pip install --only-binary=:all: -r requirements.txt
 python3 server.py
@@ -144,7 +144,7 @@ From the **Admin Panel** under **Server Backups**, you can manage server data:
 > **Reverse Proxies & HTTPS (Cloudflare Tunnel, Nginx, Caddy, Traefik, NPM):**
 > Notki validates `Origin`/`Referer` scheme, host, and port for every mutating request, and only accepts `X-Forwarded-*` headers from peers allowed by `NOTKI_TRUST_PROXY`. Configure your proxy to overwrite (not append untrusted) forwarding headers and set `NOTKI_PUBLIC_HOST`.
 >
-> **Security notes:** see [SECURITY.md](SECURITY.md) for the 0.1.6.0 hardening changelog and deployment checklist.
+> **Security notes:** see [SECURITY.md](SECURITY.md) for the 0.1.6.1 hardening changelog and deployment checklist.
 
 ---
 

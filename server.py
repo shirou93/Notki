@@ -31,7 +31,7 @@ import webauthn
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.6.0'
+VERSION = '0.1.6.1'
 GENERATED_SETUP_TOKEN = None
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 # Canonical public host used when generating links (e.g. invitations). When set, it
@@ -280,7 +280,7 @@ def get_fail2ban_config():
 def _prune_auth_state_locked(now):
     """Bound in-memory authentication state and drop stale entries."""
     global LAST_FAIL2BAN_PRUNE
-    for ip in list(FAILED_AUTH_ATTEMPTS):
+    for ip in tuple(FAILED_AUTH_ATTEMPTS):
         attempts = [t for t in FAILED_AUTH_ATTEMPTS[ip] if now - t < 3600]
         if len(attempts) > MAX_ATTEMPTS_PER_KEY:
             attempts = attempts[-MAX_ATTEMPTS_PER_KEY:]
@@ -288,7 +288,7 @@ def _prune_auth_state_locked(now):
             FAILED_AUTH_ATTEMPTS[ip] = attempts
         else:
             FAILED_AUTH_ATTEMPTS.pop(ip, None)
-    for key in list(FAILED_AUTH_ACCOUNTS):
+    for key in tuple(FAILED_AUTH_ACCOUNTS):
         attempts = [t for t in FAILED_AUTH_ACCOUNTS[key] if now - t < 3600]
         if len(attempts) > MAX_ATTEMPTS_PER_KEY:
             attempts = attempts[-MAX_ATTEMPTS_PER_KEY:]
@@ -296,7 +296,7 @@ def _prune_auth_state_locked(now):
             FAILED_AUTH_ACCOUNTS[key] = attempts
         else:
             FAILED_AUTH_ACCOUNTS.pop(key, None)
-    for key in list(ACCOUNT_FAILURES):
+    for key in tuple(ACCOUNT_FAILURES):
         attempts = [t for t in ACCOUNT_FAILURES[key] if now - t < 3600]
         if len(attempts) > MAX_ATTEMPTS_PER_KEY:
             attempts = attempts[-MAX_ATTEMPTS_PER_KEY:]
@@ -587,7 +587,7 @@ def _prune_and_store(store, key, value, max_entries):
     denial of service.
     """
     now = utc_now()
-    expired = [k for k, v in store.items() if v['expiresAt'] < now]
+    expired = tuple(k for k, v in store.items() if v['expiresAt'] < now)
     for k in expired:
         del store[k]
     # Evict the oldest entries (dict preserves insertion order) once the cap is reached.
@@ -605,10 +605,10 @@ def generate_passkey_challenge(ip=None):
     with PASSKEY_CHALLENGES_LOCK:
         if ip:
             now = utc_now()
-            expired_ip = [k for k, v in PASSKEY_CHALLENGES.items() if v.get('ip') == ip and v['expiresAt'] < now]
+            expired_ip = tuple(k for k, v in PASSKEY_CHALLENGES.items() if v.get('ip') == ip and v['expiresAt'] < now)
             for k in expired_ip:
                 del PASSKEY_CHALLENGES[k]
-            ip_challenges = [k for k, v in PASSKEY_CHALLENGES.items() if v.get('ip') == ip]
+            ip_challenges = tuple(k for k, v in PASSKEY_CHALLENGES.items() if v.get('ip') == ip)
             if len(ip_challenges) >= 10:
                 oldest_ip_key = ip_challenges[0]
                 del PASSKEY_CHALLENGES[oldest_ip_key]
