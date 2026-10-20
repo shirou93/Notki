@@ -45,6 +45,7 @@ const {
   tableCell,
   createIconSvg,
   saveLocalCache,
+  clearLocalCache,
   getLocalCache,
   saveCachedUser,
   getCachedUser,
@@ -441,6 +442,97 @@ describe('getLocalCache', () => {
     const result = getLocalCache('user_123');
 
     expect(result).toEqual({ notes: null, sharedNotes: null, labels: null });
+  });
+});
+
+
+describe('clearLocalCache', () => {
+  let localStorageMock;
+
+  beforeEach(() => {
+    localStorageMock = (() => {
+      let store = {};
+      return {
+        getItem: jest.fn(key => store[key] || null),
+        setItem: jest.fn((key, value) => {
+          store[key] = value.toString();
+        }),
+        removeItem: jest.fn(key => {
+          delete store[key];
+        }),
+        clear: jest.fn(() => {
+          store = {};
+        }),
+        get _store() {
+          return store;
+        }
+      };
+    })();
+
+    // Object.defineProperty allows us to replace window.localStorage for tests
+    Object.defineProperty(window, 'localStorage', {
+      value: localStorageMock,
+      writable: true,
+      configurable: true
+    });
+
+    // Just mock Object.keys globally but correctly check against localStorageMock
+    const originalKeys = Object.keys;
+    jest.spyOn(Object, 'keys').mockImplementation((obj) => {
+      if (obj === window.localStorage) {
+        return originalKeys(localStorageMock._store);
+      }
+      return originalKeys(obj);
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should remove keys starting with notki.cache.', () => {
+    localStorage.setItem('notki.cache.notes.123', 'data');
+    localStorage.setItem('notki.cache.labels.123', 'data');
+
+    clearLocalCache();
+
+    expect(localStorage.removeItem).toHaveBeenCalledTimes(2);
+    expect(localStorage.removeItem).toHaveBeenCalledWith('notki.cache.notes.123');
+    expect(localStorage.removeItem).toHaveBeenCalledWith('notki.cache.labels.123');
+  });
+
+  it('should remove keys starting with notki.sync.pending.', () => {
+    localStorage.setItem('notki.sync.pending.task1', 'data');
+    localStorage.setItem('notki.sync.pending.task2', 'data');
+
+    clearLocalCache();
+
+    expect(localStorage.removeItem).toHaveBeenCalledTimes(2);
+    expect(localStorage.removeItem).toHaveBeenCalledWith('notki.sync.pending.task1');
+    expect(localStorage.removeItem).toHaveBeenCalledWith('notki.sync.pending.task2');
+  });
+
+  it('should not remove other keys', () => {
+    localStorage.setItem('notki.cache.notes', 'data');
+    localStorage.setItem('other.key', 'data');
+    localStorage.setItem('notki.sync.pending.task', 'data');
+    localStorage.setItem('some.other.key', 'data');
+
+    clearLocalCache();
+
+    expect(localStorage.removeItem).toHaveBeenCalledTimes(2);
+    expect(localStorage.removeItem).not.toHaveBeenCalledWith('other.key');
+    expect(localStorage.removeItem).not.toHaveBeenCalledWith('some.other.key');
+  });
+
+  it('should gracefully handle localStorage exceptions', () => {
+    localStorage.setItem('notki.cache.notes', 'data');
+
+    localStorage.removeItem.mockImplementation(() => {
+      throw new Error('Storage Error');
+    });
+
+    expect(() => clearLocalCache()).not.toThrow();
   });
 });
 

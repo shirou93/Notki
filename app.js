@@ -4393,6 +4393,7 @@
       tableCell,
       createIconSvg,
       saveLocalCache,
+  clearLocalCache,
       getLocalCache,
       saveCachedUser,
       getCachedUser,
