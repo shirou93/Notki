@@ -62,6 +62,13 @@ const {
   openShare,
   getQuery,
   setQuery,
+  setOnlineStatus,
+  getIsOffline,
+  setIsOffline,
+  getCurrentUser,
+  setCurrentUser,
+  setPendingSync,
+  syncPendingChanges
 } = require('../../app.js');
 
 describe('createIconSvg', () => {
@@ -879,5 +886,147 @@ describe('cleanupAllTaskDrags', () => {
   it('handles empty states gracefully', () => {
     // Should not throw when nothing to clean up
     expect(() => cleanupAllTaskDrags()).not.toThrow();
+  });
+});
+
+describe('setOnlineStatus', () => {
+  let originalFetch;
+
+  beforeEach(() => {
+    document.body.innerHTML = `
+      <div class="storage-note">
+        <span class="storage-dot"></span>
+        <span>Storage</span>
+      </div>
+      <button id="topbar-sync-button"></button>
+    `;
+    originalFetch = global.fetch;
+    global.fetch = jest.fn(() => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ notes: [] })
+    }));
+
+    // Reset state before each test
+    setIsOffline(true);
+    setCurrentUser(null);
+    setPendingSync(false);
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    document.body.innerHTML = '';
+  });
+
+  it('should set isOffline to false when called with true', () => {
+    setOnlineStatus(true);
+    expect(getIsOffline()).toBe(false);
+  });
+
+  it('should set isOffline to true when called with false', () => {
+    setIsOffline(false);
+    setOnlineStatus(false);
+    expect(getIsOffline()).toBe(true);
+  });
+
+  it('should update storage indicator when offline', () => {
+    setIsOffline(false); // start online
+    setCurrentUser({ id: 'test', labels: [] });
+
+    setOnlineStatus(false);
+
+    const dot = document.querySelector('.storage-dot');
+    const label = document.querySelector('.storage-note span:not(.storage-dot)');
+    const syncBtn = document.querySelector('#topbar-sync-button');
+
+    expect(dot.style.background).toBe('rgb(229, 115, 115)'); // #e57373
+    expect(label.textContent).toBe('nav.storageOffline');
+    if (syncBtn) {
+      expect(syncBtn.hidden).toBe(false);
+    }
+  });
+
+  it('should update storage indicator when online and syncing', () => {
+    setIsOffline(true);
+    setCurrentUser({ id: 'test', labels: [] });
+    setPendingSync(true);
+
+    setOnlineStatus(true);
+
+    const dot = document.querySelector('.storage-dot');
+    const label = document.querySelector('.storage-note span:not(.storage-dot)');
+
+    expect(dot.style.background).toBe('rgb(230, 200, 117)'); // #e6c875
+    expect(label.textContent).toBe('nav.storageSyncing');
+  });
+
+  it('should update storage indicator when online and not syncing', () => {
+    setIsOffline(true);
+    setCurrentUser({ id: 'test', labels: [] });
+    setPendingSync(false);
+    // Mock local cache to have no pending sync
+    // No quota exceeded error setup here to not conflict with saveLocalCache
+    jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});
+
+    setOnlineStatus(true);
+
+    const dot = document.querySelector('.storage-dot');
+    const label = document.querySelector('.storage-note span:not(.storage-dot)');
+
+    expect(dot.style.background).toBe('rgb(169, 211, 119)'); // #a9d377
+    expect(label.textContent).toBe('nav.storage');
+  });
+
+  it('should call syncPendingChanges when transitioning to online with currentUser', async () => {
+    setIsOffline(true);
+    setCurrentUser({ id: 'test', labels: [] });
+    setPendingSync(true);
+
+    // Mock saveLocalCache and render to avoid unhandled promise rejection in syncPendingChanges
+    // We spy on console to hide render errors caused by lack of full mock setup in app.js
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    setOnlineStatus(true);
+
+    // syncPendingChanges calls apiRequest which calls fetch
+    // We wait a tick to allow the async function to start
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(global.fetch).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it('should not call syncPendingChanges when transitioning to offline', async () => {
+    setIsOffline(false);
+    setCurrentUser({ id: 'test', labels: [] });
+    setPendingSync(true);
+
+    setOnlineStatus(false);
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('should not call syncPendingChanges when status does not change', async () => {
+    setIsOffline(false);
+    setCurrentUser({ id: 'test', labels: [] });
+    setPendingSync(true);
+
+    setOnlineStatus(true);
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('should not call syncPendingChanges when there is no currentUser', async () => {
+    setIsOffline(true);
+    setCurrentUser(null);
+    setPendingSync(true);
+
+    setOnlineStatus(true);
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });
