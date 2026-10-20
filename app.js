@@ -4391,6 +4391,7 @@
       downloadIcsFile,
       openShare,
       getView: () => view,
+      cleanupAllTaskDrags,
       setView: (v) => { view = v; },
       getNotes: () => notes,
       setNotes: (n) => { notes = n; },
