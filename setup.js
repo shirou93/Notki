@@ -3,10 +3,13 @@
   const form = document.querySelector('#setup-form');
   const message = document.querySelector('#setup-message');
 
+  const setupToken = () => (document.querySelector('#setup-token')?.value || '').trim();
+
   async function api(path, options = {}) {
     const headers = new Headers(options.headers || {});
     if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
     headers.set('Accept-Language', window.i18n.getLanguage());
+    if (setupToken()) headers.set('X-Setup-Token', setupToken());
     const response = await fetch(path, { ...options, headers, credentials: 'same-origin' });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || t('setup.connectionFailed'));
@@ -27,6 +30,11 @@
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const password = document.querySelector('#setup-password').value;
+    if (!setupToken()) {
+      message.textContent = t('setup.tokenRequired');
+      message.hidden = false;
+      return;
+    }
     if (password !== document.querySelector('#setup-confirm').value) {
       message.textContent = t('setup.passwordMismatch');
       message.hidden = false;
@@ -67,12 +75,19 @@
     importButton.disabled = true;
     snapshotMessage.hidden = true;
     try {
-      if (file.name.toLowerCase().endsWith('.tgz')) {
+      if (!setupToken()) throw new Error(t('setup.tokenRequired'));
+      if (file.name.toLowerCase().endsWith('.tgz') || file.name.toLowerCase().endsWith('.enc')) {
         const formData = new FormData();
         formData.append('archive', file);
+        const headers = {
+          'Accept-Language': window.i18n.getLanguage(),
+          'X-Setup-Token': setupToken(),
+        };
+        const backupPassword = (document.querySelector('#setup-backup-password')?.value || '').trim();
+        if (backupPassword) headers['X-Backup-Password'] = backupPassword;
         const response = await fetch('/api/setup/import-backup', {
           method: 'POST',
-          headers: { 'Accept-Language': window.i18n.getLanguage() },
+          headers,
           body: formData,
           credentials: 'same-origin',
         });

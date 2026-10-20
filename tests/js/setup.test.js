@@ -70,6 +70,7 @@ describe('setup.js', () => {
     it('prevents submission when passwords mismatch', async () => {
       await loadModule();
 
+      document.querySelector('#setup-token').value = 'test-setup-token';
       document.querySelector('#setup-email').value = 'admin@example.com';
       document.querySelector('#setup-password').value = 'password123';
       document.querySelector('#setup-confirm').value = 'password456';
@@ -85,9 +86,25 @@ describe('setup.js', () => {
       expect(global.fetch).toHaveBeenCalledTimes(1); // Only checkSetup was called
     });
 
+    it('requires the setup token before submitting', async () => {
+      await loadModule();
+
+      document.querySelector('#setup-email').value = 'admin@example.com';
+      document.querySelector('#setup-password').value = 'password123';
+      document.querySelector('#setup-confirm').value = 'password123';
+
+      const form = document.querySelector('#setup-form');
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+
+      const message = document.querySelector('#setup-message');
+      expect(message.textContent).toBe('setup.tokenRequired');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
     it('successfully creates an admin and redirects', async () => {
       await loadModule();
 
+      document.querySelector('#setup-token').value = 'test-setup-token';
       document.querySelector('#setup-email').value = 'admin@example.com';
       document.querySelector('#setup-password').value = 'password123';
       document.querySelector('#setup-confirm').value = 'password123';
@@ -113,6 +130,7 @@ describe('setup.js', () => {
     it('handles server errors during admin creation', async () => {
       await loadModule();
 
+      document.querySelector('#setup-token').value = 'test-setup-token';
       document.querySelector('#setup-email').value = 'admin@example.com';
       document.querySelector('#setup-password').value = 'password123';
       document.querySelector('#setup-confirm').value = 'password123';
@@ -185,6 +203,7 @@ describe('setup.js', () => {
 
     it('successfully imports a .tgz file', async () => {
       await loadModule();
+      document.querySelector('#setup-token').value = 'test-setup-token';
 
       const fileInput = document.querySelector('#snapshot-file');
       const importButton = document.querySelector('#import-snapshot');
@@ -209,6 +228,7 @@ describe('setup.js', () => {
 
     it('successfully imports a .json file', async () => {
       await loadModule();
+      document.querySelector('#setup-token').value = 'test-setup-token';
 
       const fileInput = document.querySelector('#snapshot-file');
       const importButton = document.querySelector('#import-snapshot');
@@ -239,6 +259,7 @@ describe('setup.js', () => {
 
     it('handles JSON parsing errors for .json files', async () => {
       await loadModule();
+      document.querySelector('#setup-token').value = 'test-setup-token';
 
       const fileInput = document.querySelector('#snapshot-file');
       const importButton = document.querySelector('#import-snapshot');

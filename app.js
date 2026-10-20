@@ -311,14 +311,26 @@
     window.notkiTheme.sync();
   }
 
-  async function apiRequest(path, options = {}) {
+  async function apiRequest(path, options = {}, allowStepUp = true) {
     const headers = new Headers(options.headers || {});
     if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
     headers.set('Accept-Language', window.i18n.getLanguage());
     try {
       const response = await fetch(path, { cache: 'no-store', ...options, headers, credentials: 'same-origin' });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || t('error.server'));
+      if (!response.ok) {
+        const message = payload.error || t('error.server');
+        if (allowStepUp && response.status === 403 && /re-authentication required/i.test(message)) {
+          const password = window.prompt(t('stepUp.password'));
+          if (password) {
+            const code = window.prompt(t('stepUp.code')) || '';
+            headers.set('X-Step-Up-Password', password);
+            if (code.trim()) headers.set('X-Step-Up-Code', code.trim());
+            return apiRequest(path, { ...options, headers }, false);
+          }
+        }
+        throw new Error(message);
+      }
       setOnlineStatus(true);
       return payload;
     } catch (err) {
@@ -848,11 +860,12 @@
     const confirmed = window.confirm(t('admin.backups.confirmRestore', { filename }));
     if (!confirmed) return;
 
+    const password = window.prompt(t('admin.backups.passwordPrompt'), '') || '';
     setBackupMessage(t('admin.backups.restoring'));
     try {
       await apiRequest(`/api/admin/backups/${encodeURIComponent(filename)}/restore`, {
         method: 'POST',
-        body: '{}'
+        body: JSON.stringify(password ? { encryptionPassword: password } : {})
       });
       setBackupMessage(t('admin.backups.restored'));
       setTimeout(() => window.location.reload(), 1000);
@@ -4278,20 +4291,15 @@
           body: JSON.stringify({ snapshot })
         });
       } else {
+        const password = window.prompt(t('admin.backups.passwordPrompt'), '') || '';
         const buffer = await file.arrayBuffer();
-        const response = await fetch('/api/admin/backups/upload-restore', {
+        const headers = { 'Content-Type': 'application/octet-stream' };
+        if (password) headers['X-Backup-Password'] = password;
+        await apiRequest('/api/admin/backups/upload-restore', {
           method: 'POST',
           body: buffer,
-          credentials: 'same-origin',
-          headers: {
-            'Content-Type': 'application/octet-stream',
-            'Accept-Language': window.i18n.getLanguage(),
-          },
+          headers,
         });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(data.error || t('admin.backups.restoreFailed'));
-        }
       }
       setBackupMessage(t('admin.backups.restored'));
       fileInput.value = '';

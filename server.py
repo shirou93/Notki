@@ -11,6 +11,7 @@ import mimetypes
 import os
 import re
 import secrets
+import socket
 import sqlite3
 import struct
 import subprocess
@@ -31,7 +32,7 @@ import webauthn
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.5.94'
+VERSION = '0.1.6.0'
 GENERATED_SETUP_TOKEN = None
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 # Canonical public host used when generating links (e.g. invitations). When set, it
@@ -47,9 +48,20 @@ ALLOWED_HOSTS = {
 # local Nginx/Caddy sidecar); other deployments must opt in via NOTKI_TRUST_PROXY.
 DEFAULT_TRUSTED_PROXY_NETWORKS = ('127.0.0.0/8', '::1/128')
 SESSION_COOKIE = 'notki_session'
+HOST_SESSION_COOKIE = '__Host-notki_session'
 SESSION_DAYS = 30
+SESSION_IDLE_HOURS = 24
+STEP_UP_WINDOW_MINUTES = 5
 INVITE_DAYS = 7
 PASSWORD_ITERATIONS = 310_000
+BACKUP_PASSWORD_ITERATIONS = 200_000
+MAX_CONCURRENT_REQUESTS = 32
+REQUEST_TIMEOUT_SECONDS = 15
+MAX_AUTH_TRACKED_IPS = 10_000
+MAX_AUTH_ACCOUNTS = 10_000
+MAX_ATTEMPTS_PER_KEY = 1_000
+FAIL2BAN_RETENTION_SECONDS = 7 * 24 * 60 * 60
+FAIL2BAN_PRUNE_INTERVAL = 300
 
 def hash_password(password):
     salt = secrets.token_bytes(16)
@@ -191,8 +203,11 @@ FAILED_AUTH_ATTEMPTS = {}
 # per-IP budget (which allowed brute-force protection to be reset with a second account).
 FAILED_AUTH_ACCOUNTS = {}
 FAILED_AUTH_LOCK = threading.Lock()
-
-AUTH_FAILURES = {}
+# Per-account failures aggregated across source addresses. This prevents a
+# distributed password-spraying campaign from staying under the per-IP limit.
+ACCOUNT_FAILURES = {}
+FAIL2BAN_PRUNE_LOCK = threading.Lock()
+LAST_FAIL2BAN_PRUNE = 0.0
 
 
 def account_key(account):
@@ -263,22 +278,77 @@ def get_fail2ban_config():
         pass
     return {'enabled': enabled, 'max_attempts': max_attempts, 'ban_time': ban_time}
 
+def _prune_auth_state_locked(now):
+    """Bound in-memory authentication state and drop stale entries."""
+    global LAST_FAIL2BAN_PRUNE
+    for ip in list(FAILED_AUTH_ATTEMPTS):
+        attempts = [t for t in FAILED_AUTH_ATTEMPTS[ip] if now - t < 3600]
+        if len(attempts) > MAX_ATTEMPTS_PER_KEY:
+            attempts = attempts[-MAX_ATTEMPTS_PER_KEY:]
+        if attempts:
+            FAILED_AUTH_ATTEMPTS[ip] = attempts
+        else:
+            FAILED_AUTH_ATTEMPTS.pop(ip, None)
+    for key in list(FAILED_AUTH_ACCOUNTS):
+        attempts = [t for t in FAILED_AUTH_ACCOUNTS[key] if now - t < 3600]
+        if len(attempts) > MAX_ATTEMPTS_PER_KEY:
+            attempts = attempts[-MAX_ATTEMPTS_PER_KEY:]
+        if attempts:
+            FAILED_AUTH_ACCOUNTS[key] = attempts
+        else:
+            FAILED_AUTH_ACCOUNTS.pop(key, None)
+    for key in list(ACCOUNT_FAILURES):
+        attempts = [t for t in ACCOUNT_FAILURES[key] if now - t < 3600]
+        if len(attempts) > MAX_ATTEMPTS_PER_KEY:
+            attempts = attempts[-MAX_ATTEMPTS_PER_KEY:]
+        if attempts:
+            ACCOUNT_FAILURES[key] = attempts
+        else:
+            ACCOUNT_FAILURES.pop(key, None)
+
+    while len(FAILED_AUTH_ATTEMPTS) > MAX_AUTH_TRACKED_IPS:
+        oldest_ip = min(FAILED_AUTH_ATTEMPTS, key=lambda item: max(FAILED_AUTH_ATTEMPTS[item]))
+        FAILED_AUTH_ATTEMPTS.pop(oldest_ip, None)
+    while len(FAILED_AUTH_ACCOUNTS) > MAX_AUTH_TRACKED_IPS:
+        oldest_key = min(FAILED_AUTH_ACCOUNTS, key=lambda item: max(FAILED_AUTH_ACCOUNTS[item]))
+        FAILED_AUTH_ACCOUNTS.pop(oldest_key, None)
+    while len(ACCOUNT_FAILURES) > MAX_AUTH_ACCOUNTS:
+        oldest_account = min(ACCOUNT_FAILURES, key=lambda item: max(ACCOUNT_FAILURES[item]))
+        ACCOUNT_FAILURES.pop(oldest_account, None)
+
+
+def _prune_fail2ban_database(now):
+    """Delete old fail2ban rows occasionally so the table cannot grow forever."""
+    global LAST_FAIL2BAN_PRUNE
+    with FAIL2BAN_PRUNE_LOCK:
+        if now - LAST_FAIL2BAN_PRUNE < FAIL2BAN_PRUNE_INTERVAL:
+            return
+        LAST_FAIL2BAN_PRUNE = now
+    try:
+        with database() as connection:
+            connection.execute(
+                'DELETE FROM fail2ban_attempts WHERE created_at < ?',
+                (now - FAIL2BAN_RETENTION_SECONDS,),
+            )
+    except Exception:
+        pass
+
+
 def record_failed_auth(ip, account=None):
     now = time.time()
-    if ip not in AUTH_FAILURES:
-        AUTH_FAILURES[ip] = []
-    AUTH_FAILURES[ip].append(now)
-    AUTH_FAILURES[ip] = [t for t in AUTH_FAILURES[ip] if now - t < 3600]
-
     key = account_key(account)
     with FAILED_AUTH_LOCK:
-        attempts = [t for t in FAILED_AUTH_ATTEMPTS.get(ip, []) if now - t < 60]
+        attempts = [t for t in FAILED_AUTH_ATTEMPTS.get(ip, []) if now - t < 3600]
         attempts.append(now)
-        FAILED_AUTH_ATTEMPTS[ip] = attempts
+        FAILED_AUTH_ATTEMPTS[ip] = attempts[-MAX_ATTEMPTS_PER_KEY:]
         if key:
             account_attempts = [t for t in FAILED_AUTH_ACCOUNTS.get((ip, key), []) if now - t < 3600]
             account_attempts.append(now)
-            FAILED_AUTH_ACCOUNTS[(ip, key)] = account_attempts
+            FAILED_AUTH_ACCOUNTS[(ip, key)] = account_attempts[-MAX_ATTEMPTS_PER_KEY:]
+            global_attempts = [t for t in ACCOUNT_FAILURES.get(key, []) if now - t < 3600]
+            global_attempts.append(now)
+            ACCOUNT_FAILURES[key] = global_attempts[-MAX_ATTEMPTS_PER_KEY:]
+        _prune_auth_state_locked(now)
 
     try:
         with database() as connection:
@@ -288,6 +358,8 @@ def record_failed_auth(ip, account=None):
             )
     except Exception:
         pass
+    _prune_fail2ban_database(now)
+
 
 def is_rate_limited(ip, max_failed=None, window_seconds=None):
     config = get_fail2ban_config()
@@ -320,6 +392,23 @@ def is_rate_limited(ip, max_failed=None, window_seconds=None):
 
     return False
 
+
+def is_account_rate_limited(account, max_failed=None, window_seconds=3600):
+    """Limit failures for one account across all source addresses."""
+    key = account_key(account)
+    if not key:
+        return False
+    config = get_fail2ban_config()
+    if max_failed is None:
+        max_failed = max(50, config['max_attempts'] * 5)
+    now = time.time()
+    cutoff = now - window_seconds
+    with FAILED_AUTH_LOCK:
+        attempts = [t for t in ACCOUNT_FAILURES.get(key, []) if t > cutoff]
+        ACCOUNT_FAILURES[key] = attempts
+        return len(attempts) >= max_failed
+
+
 def unban_ip(ip):
     ip = str(ip or '').strip()
     if not ip:
@@ -328,8 +417,8 @@ def unban_ip(ip):
     with FAILED_AUTH_LOCK:
         mem_found = ip in FAILED_AUTH_ATTEMPTS
         FAILED_AUTH_ATTEMPTS.pop(ip, None)
-    if ip in AUTH_FAILURES:
-        AUTH_FAILURES.pop(ip, None)
+        for account_key_value in [k for k in FAILED_AUTH_ACCOUNTS if k[0] == ip]:
+            FAILED_AUTH_ACCOUNTS.pop(account_key_value, None)
 
     db_found = False
     try:
@@ -356,14 +445,8 @@ def clear_failed_auth(ip, account=None):
     key = account_key(account)
     if key:
         with FAILED_AUTH_LOCK:
-            removed = len(FAILED_AUTH_ACCOUNTS.pop((ip, key), []))
-            remaining = sorted(t for t in FAILED_AUTH_ATTEMPTS.get(ip, []))
-            if removed:
-                del remaining[:removed]
-            if remaining:
-                FAILED_AUTH_ATTEMPTS[ip] = remaining
-            else:
-                FAILED_AUTH_ATTEMPTS.pop(ip, None)
+            FAILED_AUTH_ACCOUNTS.pop((ip, key), None)
+            ACCOUNT_FAILURES.pop(key, None)
         try:
             with database() as connection:
                 connection.execute(
@@ -377,7 +460,6 @@ def clear_failed_auth(ip, account=None):
         FAILED_AUTH_ATTEMPTS.pop(ip, None)
         for account_key_value in [k for k in FAILED_AUTH_ACCOUNTS if k[0] == ip]:
             FAILED_AUTH_ACCOUNTS.pop(account_key_value, None)
-    AUTH_FAILURES.pop(ip, None)
 
     try:
         with database() as connection:
@@ -389,7 +471,8 @@ def unban_all():
     with FAILED_AUTH_LOCK:
         mem_count = len(FAILED_AUTH_ATTEMPTS)
         FAILED_AUTH_ATTEMPTS.clear()
-    AUTH_FAILURES.clear()
+        FAILED_AUTH_ACCOUNTS.clear()
+        ACCOUNT_FAILURES.clear()
 
     db_count = 0
     try:
@@ -419,7 +502,8 @@ def get_banned_ips():
     try:
         with database() as connection:
             rows = connection.execute(
-                'SELECT ip, created_at FROM fail2ban_attempts WHERE created_at > ? ORDER BY created_at DESC',
+                'SELECT ip, created_at FROM fail2ban_attempts WHERE created_at > ? '
+                'ORDER BY created_at DESC LIMIT 10000',
                 (cutoff,)
             ).fetchall()
             for row in rows:
@@ -444,7 +528,7 @@ def get_banned_ips():
             })
 
     banned_list.sort(key=lambda x: (x['isBanned'], x['lastAttempt']), reverse=True)
-    return banned_list
+    return banned_list[:5000]
 
 def parse_header_params(header_str):
     if not header_str:
@@ -611,10 +695,15 @@ def extract_spki_der(pub_bytes):
             return SPKI_P256_HEADER + x + y
     return None
 
-def verify_totp_code(secret_b32, code, time_step=30, window=1):
+def verify_totp_counter(secret_b32, code, time_step=30, window=1):
+    """Return the matched TOTP counter, or None when the code is invalid.
+
+    Returning the counter lets callers persist it and reject a replay of the same
+    code, including a code from an adjacent accepted time window.
+    """
     code = str(code or '').strip()
     if not code.isdigit() or len(code) != 6:
-        return False
+        return None
     current_counter = int(time.time() // time_step)
 
     try:
@@ -624,19 +713,61 @@ def verify_totp_code(secret_b32, code, time_step=30, window=1):
             secret_b32 += '=' * (8 - missing_padding)
         key = base64.b32decode(secret_b32, casefold=True)
     except Exception:
-        return False
+        return None
 
     for i in range(-window, window + 1):
         try:
-            msg = struct.pack('>Q', current_counter + i)
+            counter = current_counter + i
+            msg = struct.pack('>Q', counter)
             hmac_hash = hmac.new(key, msg, hashlib.sha1).digest()
             offset = hmac_hash[-1] & 0x0f
             binary = struct.unpack('>I', hmac_hash[offset:offset+4])[0] & 0x7fffffff
             generated_code = f'{binary % 1_000_000:06d}'
             if hmac.compare_digest(generated_code, code):
-                return True
+                return counter
         except Exception:
             pass
+    return None
+
+
+def verify_totp_code(secret_b32, code, time_step=30, window=1):
+    return verify_totp_counter(secret_b32, code, time_step, window) is not None
+
+
+def generate_backup_codes(count=8):
+    """Generate high-entropy one-time recovery codes (96 bits each)."""
+    codes = []
+    for _ in range(count):
+        raw = secrets.token_hex(12).upper()
+        codes.append('-'.join(raw[index:index + 4] for index in range(0, len(raw), 4)))
+    return codes
+
+
+def normalize_backup_code(code):
+    return re.sub(r'[^A-Z0-9]', '', str(code or '').upper())
+
+
+def hash_backup_code(code):
+    normalized = normalize_backup_code(code)
+    return 'sha256$' + hashlib.sha256(normalized.encode('utf-8')).hexdigest()
+
+
+def verify_backup_code(code, stored_code):
+    """Verify a hashed recovery code and reject legacy plaintext values."""
+    stored_code = str(stored_code or '')
+    if not stored_code:
+        return False
+    normalized = normalize_backup_code(code)
+    if not normalized:
+        return False
+    if stored_code.startswith('sha256$'):
+        expected = stored_code.split('$', 1)[1]
+        actual = hashlib.sha256(normalized.encode('utf-8')).hexdigest()
+        return hmac.compare_digest(actual, expected)
+    # PBKDF2 hashes from older releases remain usable until the user rotates their
+    # codes, but plaintext values are no longer accepted.
+    if stored_code.startswith('pbkdf2_sha256$'):
+        return verify_password(normalized, stored_code)
     return False
 
 
@@ -692,6 +823,97 @@ def backup_directory():
     return Path(os.environ.get('NOTKI_BACKUP_DIR') or DB_PATH.parent / 'backups')
 
 
+def server_backup_key():
+    """Return the server-managed backup key, creating a private key file once.
+
+    Notki always encrypts server backups. A deployment can supply
+    ``NOTKI_BACKUP_KEY`` instead; otherwise a random 256-bit key is stored next to
+    the database with owner-only permissions.
+    """
+    configured = os.environ.get('NOTKI_BACKUP_KEY', '')
+    if configured:
+        return configured
+    key_path = DB_PATH.parent / 'backup.key'
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        return key_path.read_text(encoding='utf-8').strip()
+    except FileNotFoundError:
+        key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('ascii')
+        try:
+            descriptor = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+                stream.write(key)
+        except FileExistsError:
+            return key_path.read_text(encoding='utf-8').strip()
+        return key
+
+
+def totp_master_key():
+    """Return a stable key used only for TOTP secrets at rest."""
+    configured = os.environ.get('NOTKI_TOTP_KEY', '')
+    if configured:
+        return configured
+    key_path = DB_PATH.parent / 'totp.key'
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        return key_path.read_text(encoding='utf-8').strip()
+    except FileNotFoundError:
+        key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('ascii')
+        try:
+            descriptor = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+                stream.write(key)
+        except FileExistsError:
+            return key_path.read_text(encoding='utf-8').strip()
+        return key
+
+
+def _totp_encryption_key():
+    material = ('notki-totp-secret:' + totp_master_key()).encode('utf-8')
+    return hashlib.sha256(material).digest()
+
+
+def protect_totp_secret(value):
+    """Encrypt a TOTP secret before it is written to SQLite."""
+    if not value:
+        return value
+    text = str(value)
+    if text.startswith('enc:v1:'):
+        return text
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except Exception as err:
+        raise RuntimeError('cryptography is required to store TOTP secrets securely.') from err
+    nonce = secrets.token_bytes(12)
+    ciphertext = AESGCM(_totp_encryption_key()).encrypt(nonce, text.encode('utf-8'), b'notki-totp-secret')
+    return f'enc:v1:{nonce.hex()}:{ciphertext.hex()}'
+
+
+def reveal_totp_secret(value):
+    """Return the plaintext TOTP secret, migrating legacy plaintext values."""
+    if not value:
+        return value
+    text = str(value)
+    if not text.startswith('enc:v1:'):
+        return text
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        _, version, nonce_hex, ciphertext_hex = text.split(':', 3)
+        if version != 'v1':
+            return None
+        plaintext = AESGCM(_totp_encryption_key()).decrypt(
+            bytes.fromhex(nonce_hex), bytes.fromhex(ciphertext_hex), b'notki-totp-secret'
+        )
+        return plaintext.decode('utf-8')
+    except Exception:
+        return None
+
+
+def totp_is_active(value):
+    secret = reveal_totp_secret(value)
+    return bool(secret and not secret.startswith('pending:'))
+
+
 def token_hash(token):
     return hashlib.sha256(token.encode('utf-8')).hexdigest()
 
@@ -726,12 +948,14 @@ def initialize_database():
             CREATE TABLE IF NOT EXISTS sessions (
                 token_hash TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                expires_at TEXT NOT NULL
+                expires_at TEXT NOT NULL,
+                last_seen_at TEXT,
+                authenticated_at TEXT
             );
             CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions(expires_at);
             CREATE TABLE IF NOT EXISTS invites (
                 token_hash TEXT PRIMARY KEY,
-                created_by INTEGER NOT NULL REFERENCES users(id),
+                created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
                 created_at TEXT NOT NULL,
                 expires_at TEXT NOT NULL,
                 used_at TEXT
@@ -797,6 +1021,33 @@ def initialize_database():
             connection.execute("ALTER TABLE users ADD COLUMN totp_secret TEXT")
         if 'backup_codes_json' not in columns:
             connection.execute("ALTER TABLE users ADD COLUMN backup_codes_json TEXT")
+        if 'totp_last_used_step' not in columns:
+            connection.execute('ALTER TABLE users ADD COLUMN totp_last_used_step INTEGER')
+
+        session_columns = {row['name'] for row in connection.execute('PRAGMA table_info(sessions)')}
+        if 'last_seen_at' not in session_columns:
+            connection.execute('ALTER TABLE sessions ADD COLUMN last_seen_at TEXT')
+            connection.execute('UPDATE sessions SET last_seen_at = ? WHERE last_seen_at IS NULL', (iso_time(),))
+        if 'authenticated_at' not in session_columns:
+            connection.execute('ALTER TABLE sessions ADD COLUMN authenticated_at TEXT')
+
+        invite_foreign_keys = connection.execute('PRAGMA foreign_key_list(invites)').fetchall()
+        if any(row['table'] == 'users' and row['on_delete'] != 'SET NULL' for row in invite_foreign_keys):
+            connection.execute('''
+                CREATE TABLE invites_new (
+                    token_hash TEXT PRIMARY KEY,
+                    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    used_at TEXT
+                )
+            ''')
+            connection.execute('''
+                INSERT INTO invites_new (token_hash, created_by, created_at, expires_at, used_at)
+                SELECT token_hash, created_by, created_at, expires_at, used_at FROM invites
+            ''')
+            connection.execute('DROP TABLE invites')
+            connection.execute('ALTER TABLE invites_new RENAME TO invites')
 
         note_columns = {row['name'] for row in connection.execute('PRAGMA table_info(notes)')}
         if 'due_date' not in note_columns:
@@ -808,6 +1059,16 @@ def initialize_database():
                 connection.execute('ALTER TABLE passkeys ADD COLUMN sign_count INTEGER NOT NULL DEFAULT 0')
             except sqlite3.OperationalError:
                 pass
+
+        # Encrypt legacy plaintext TOTP secrets at rest.
+        for user_row in connection.execute(
+            "SELECT id, totp_secret FROM users WHERE totp_secret IS NOT NULL AND totp_secret != ''"
+        ).fetchall():
+            if not str(user_row['totp_secret']).startswith('enc:v1:'):
+                connection.execute(
+                    'UPDATE users SET totp_secret = ? WHERE id = ?',
+                    (protect_totp_secret(user_row['totp_secret']), user_row['id']),
+                )
 
 
 def verify_password(password, encoded):
@@ -821,12 +1082,29 @@ def verify_password(password, encoded):
         return False
 
 
+EMAIL_LOCAL_PATTERN = re.compile(r"^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+$")
+EMAIL_DOMAIN_LABEL_PATTERN = re.compile(r'^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$')
+
+
 def normalize_email(value):
-    email = str(value or '').strip().lower()
-    if len(email) > 254 or email.count('@') != 1:
+    if not isinstance(value, str):
+        raise ValueError('Enter a valid e-mail address.')
+    email = value.strip().lower()
+    if not email or len(email) > 254 or email.count('@') != 1:
+        raise ValueError('Enter a valid e-mail address.')
+    if any(ord(character) < 32 or ord(character) == 127 for character in email):
+        raise ValueError('Enter a valid e-mail address.')
+    if any(character in '<>"\\' or character.isspace() for character in email):
         raise ValueError('Enter a valid e-mail address.')
     local, domain = email.split('@')
-    if not local or not domain or '.' not in domain or any(character.isspace() for character in email):
+    if (not local or len(local) > 64 or '.' not in domain or len(domain) > 253
+            or local.startswith('.') or local.endswith('.') or '..' in local
+            or not EMAIL_LOCAL_PATTERN.fullmatch(local)):
+        raise ValueError('Enter a valid e-mail address.')
+    labels = domain.split('.')
+    if len(labels) < 2 or any(not label or not EMAIL_DOMAIN_LABEL_PATTERN.fullmatch(label) for label in labels):
+        raise ValueError('Enter a valid e-mail address.')
+    if not labels[-1].isalpha() or len(labels[-1]) < 2:
         raise ValueError('Enter a valid e-mail address.')
     return email
 
@@ -860,7 +1138,7 @@ def public_user(row, connection=None):
     def check_user_2fa(conn):
         nonlocal has_totp, has_passkey, require_2fa
         if has_totp_col:
-            ts = totp_secret
+            ts = reveal_totp_secret(totp_secret)
             has_totp = bool(ts and not ts.startswith('pending:'))
             res = conn.execute(
                 "SELECT EXISTS(SELECT 1 FROM passkeys WHERE user_id = ?), "
@@ -879,7 +1157,7 @@ def public_user(row, connection=None):
                 (row['id'], row['id'])
             ).fetchone()
             if res:
-                ts = res['totp_secret']
+                ts = reveal_totp_secret(res['totp_secret'])
                 has_totp = bool(ts and not ts.startswith('pending:'))
                 has_passkey = bool(res[1])
                 require_2fa = bool(res[2] and res[2] == 'true')
@@ -992,6 +1270,7 @@ class APIError(Exception):
 class NotkiHandler(BaseHTTPRequestHandler):
     server_version = 'NotkiServer'
     sys_version = ''
+    timeout = REQUEST_TIMEOUT_SECONDS
 
     def version_string(self):
         # Do not disclose the exact Notki or Python version in the Server header.
@@ -1084,24 +1363,67 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 continue
         return False
 
+    def trusted_proxy_networks(self):
+        trust_proxy = os.environ.get('NOTKI_TRUST_PROXY', '').strip().lower()
+        if trust_proxy in ('0', 'false', 'no'):
+            return []
+        if trust_proxy in ('1', 'true', 'yes', 'all', '*'):
+            return [ipaddress.ip_network('0.0.0.0/0'), ipaddress.ip_network('::/0')]
+        specs = [value.strip() for value in trust_proxy.split(',') if value.strip()]
+        if not specs:
+            specs = list(DEFAULT_TRUSTED_PROXY_NETWORKS)
+        networks = []
+        for spec in specs:
+            try:
+                networks.append(ipaddress.ip_network(spec, strict=False))
+            except ValueError:
+                continue
+        return networks
+
+    def is_trusted_address(self, value):
+        try:
+            address = ipaddress.ip_address(str(value).split('%', 1)[0])
+        except ValueError:
+            return False
+        return any(address in network for network in self.trusted_proxy_networks())
+
     def get_client_ip(self):
-        """Return the client IP address.
+        """Return the client IP using the trusted proxy chain from right to left.
 
-        By default only loopback peers are trusted, so X-Forwarded-For / RFC 7239
-        ``Forwarded`` values are ignored for direct connections. Trusted proxies may
-        supply the client address through either header.
+        The rightmost untrusted address is the only value a trusted proxy cannot
+        have supplied itself. Taking the leftmost X-Forwarded-For entry (the old
+        behaviour) let an attacker rotate arbitrary values and bypass rate limits.
         """
+        peer = self.client_address[0]
         if not self.is_trusted_proxy():
-            return self.client_address[0]
+            return peer
 
-        forwarded = self.headers.get('X-Forwarded-For', '').split(',')[0].strip()
-        if forwarded:
-            return forwarded
+        xff_values = [value.strip() for value in self.headers.get('X-Forwarded-For', '').split(',') if value.strip()]
+        forwarded_nodes = parse_forwarded_for(self.headers.get('Forwarded'))
+        chain = xff_values or forwarded_nodes
+        if not chain:
+            real_ip = self.headers.get('X-Real-IP', '').strip()
+            if real_ip:
+                chain = [real_ip]
 
-        for node in parse_forwarded_for(self.headers.get('Forwarded')):
-            return node
+        if not chain:
+            return peer
 
-        return self.client_address[0]
+        trust_proxy = os.environ.get('NOTKI_TRUST_PROXY', '').strip().lower()
+        if trust_proxy in ('1', 'true', 'yes', 'all', '*'):
+            candidate = chain[0]
+            try:
+                return str(ipaddress.ip_address(candidate.split('%', 1)[0]))
+            except ValueError:
+                return peer
+
+        for candidate in reversed(chain):
+            if not self.is_trusted_address(candidate):
+                try:
+                    return str(ipaddress.ip_address(candidate.split('%', 1)[0]))
+                except ValueError:
+                    return peer
+        return peer
 
     def get_forwarded_host(self):
         """Return the host to use when building links.
@@ -1148,32 +1470,56 @@ class NotkiHandler(BaseHTTPRequestHandler):
         return 'http' if self.headers.get('Host') else ''
 
     def check_origin(self):
-        origin = self.headers.get('Origin')
-        if origin:
-            expected_host = self.get_forwarded_host()
-            if expected_host:
-                origin_parsed = urlsplit(origin)
-                origin_hostname = (origin_parsed.hostname or '').lower()
+        """Require a same-origin Origin/Referer for state-changing requests.
 
-                expected_parsed = urlsplit(f"//{expected_host}")
-                expected_hostname = (expected_parsed.hostname or '').lower()
+        Checking only the hostname allowed an HTTPS page to drive an HTTP origin
+        (and vice versa), and accepting a missing header left non-browser clients
+        outside the CSRF boundary.
+        """
+        source = self.headers.get('Origin') or self.headers.get('Referer')
+        if not source:
+            raise APIError('A cross-origin request was blocked.', 403)
+        if source == 'null':
+            raise APIError('A cross-origin request was blocked.', 403)
 
-                if origin_hostname != expected_hostname:
-                    raise APIError('A cross-origin request was blocked.', 403)
+        source_parsed = urlsplit(source)
+        expected_host = self.get_forwarded_host()
+        if not expected_host or source_parsed.scheme not in ('http', 'https'):
+            raise APIError('A cross-origin request was blocked.', 403)
 
-                if expected_parsed.port is not None:
-                    origin_port = origin_parsed.port
-                    if origin_port is None:
-                        origin_port = 443 if origin_parsed.scheme == 'https' else (80 if origin_parsed.scheme == 'http' else None)
-                    if origin_port != expected_parsed.port:
-                        raise APIError('A cross-origin request was blocked.', 403)
+        if PUBLIC_HOST.startswith(('http://', 'https://')):
+            expected_scheme = urlsplit(PUBLIC_HOST).scheme
+        else:
+            expected_scheme = 'https' if self.get_forwarded_proto() == 'https' else 'http'
+        if source_parsed.scheme != expected_scheme:
+            raise APIError('A cross-origin request was blocked.', 403)
+
+        expected_parsed = urlsplit(f'//{expected_host}')
+        origin_hostname = (source_parsed.hostname or '').lower()
+        expected_hostname = (expected_parsed.hostname or '').lower()
+        if not origin_hostname or origin_hostname != expected_hostname:
+            raise APIError('A cross-origin request was blocked.', 403)
+
+        default_port = 443 if expected_scheme == 'https' else 80
+        expected_port = expected_parsed.port or default_port
+        source_port = source_parsed.port or default_port
+        if source_port != expected_port:
+            raise APIError('A cross-origin request was blocked.', 403)
 
     def has_admin(self):
         with database() as connection:
             return connection.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").fetchone() is not None
 
     def check_setup_permission(self):
-        return self.is_local_setup_request()
+        """Authorize first-run setup with the one-time setup token only.
+
+        A loopback peer is not sufficient: reverse proxies and local port forwards
+        can make a remote client appear local, which was the root cause of the
+        original setup bypass.
+        """
+        expected_token = os.environ.get('NOTKI_SETUP_TOKEN') or GENERATED_SETUP_TOKEN
+        provided_token = self.headers.get('X-Setup-Token', '')
+        return bool(expected_token and provided_token and hmac.compare_digest(provided_token, expected_token))
 
     def is_forwarded_client_local(self):
         """Return True when proxy headers do not reveal a non-local client.
@@ -1240,20 +1586,56 @@ class NotkiHandler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
-    def current_user(self):
+    def get_session_token(self):
         cookie = cookies.SimpleCookie()
         try:
             cookie.load(self.headers.get('Cookie', ''))
-            token = cookie[SESSION_COOKIE].value
-        except (cookies.CookieError, KeyError):
+        except cookies.CookieError:
             return None
+        for name in (HOST_SESSION_COOKIE, SESSION_COOKIE):
+            if name in cookie:
+                return cookie[name].value
+        return None
+
+    def current_user(self):
+        token = self.get_session_token()
+        if not token:
+            return None
+        now = utc_now()
+        idle_cutoff = now - timedelta(hours=SESSION_IDLE_HOURS)
         with database() as connection:
             row = connection.execute('''
-                SELECT users.id, users.email, users.role, users.created_at, users.avatar, users.labels_json
+                SELECT users.id, users.email, users.role, users.created_at, users.avatar,
+                       users.labels_json, sessions.last_seen_at
                 FROM sessions JOIN users ON users.id = sessions.user_id
                 WHERE sessions.token_hash = ? AND sessions.expires_at > ?
-            ''', (token_hash(token), iso_time())).fetchone()
-            return public_user(row, connection) if row else None
+                  AND (sessions.last_seen_at IS NULL OR sessions.last_seen_at > ?)
+            ''', (token_hash(token), iso_time(now), iso_time(idle_cutoff))).fetchone()
+            if not row:
+                connection.execute('DELETE FROM sessions WHERE token_hash = ?', (token_hash(token),))
+                return None
+            last_seen = row['last_seen_at']
+            try:
+                last_seen_time = datetime.fromisoformat(last_seen) if last_seen else None
+            except (TypeError, ValueError):
+                last_seen_time = None
+            if last_seen_time is None or now - last_seen_time > timedelta(minutes=1):
+                connection.execute(
+                    'UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?',
+                    (iso_time(now), token_hash(token)),
+                )
+            return public_user(row, connection)
+
+    def invalidate_user_sessions(self, user_id, keep_token=None):
+        """Revoke every session for a user, optionally preserving the current one."""
+        with database() as connection:
+            if keep_token:
+                connection.execute(
+                    'DELETE FROM sessions WHERE user_id = ? AND token_hash != ?',
+                    (user_id, token_hash(keep_token)),
+                )
+            else:
+                connection.execute('DELETE FROM sessions WHERE user_id = ?', (user_id,))
 
     def require_user(self, admin=False):
         user = self.current_user()
@@ -1281,6 +1663,62 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
         return user
 
+    def require_step_up(self, user):
+        """Require fresh password + second-factor proof for sensitive actions."""
+        password = self.headers.get('X-Step-Up-Password', '')
+        second_factor = self.headers.get('X-Step-Up-Code', '')
+        if not password:
+            token = self.get_session_token()
+            if token:
+                with database() as connection:
+                    session = connection.execute(
+                        'SELECT authenticated_at FROM sessions WHERE token_hash = ? AND user_id = ?',
+                        (token_hash(token), user['id']),
+                    ).fetchone()
+                if session and session['authenticated_at']:
+                    try:
+                        authenticated_at = datetime.fromisoformat(session['authenticated_at'])
+                    except (TypeError, ValueError):
+                        authenticated_at = None
+                    if authenticated_at and utc_now() - authenticated_at <= timedelta(minutes=STEP_UP_WINDOW_MINUTES):
+                        return
+            raise APIError('Re-authentication required. Provide your password and second factor.', 403)
+        with database() as connection:
+            row = connection.execute(
+                'SELECT password_hash, totp_secret, backup_codes_json FROM users WHERE id = ?',
+                (user['id'],),
+            ).fetchone()
+            password_valid = bool(row and verify_password(password, row['password_hash']))
+            secret = reveal_totp_secret(row['totp_secret']) if row else None
+            has_totp = bool(secret and not secret.startswith('pending:'))
+            second_factor_valid = not has_totp
+            backup_codes = []
+            if has_totp and second_factor:
+                counter = verify_totp_counter(secret, second_factor)
+                if counter is not None and (row['totp_last_used_step'] is None or counter > row['totp_last_used_step']):
+                    second_factor_valid = True
+                    connection.execute(
+                        'UPDATE users SET totp_last_used_step = ? WHERE id = ?',
+                        (counter, user['id']),
+                    )
+                else:
+                    try:
+                        backup_codes = json.loads(row['backup_codes_json']) if row['backup_codes_json'] else []
+                    except (TypeError, json.JSONDecodeError):
+                        backup_codes = []
+                    for stored_code in list(backup_codes):
+                        if verify_backup_code(second_factor, stored_code):
+                            second_factor_valid = True
+                            backup_codes.remove(stored_code)
+                            connection.execute(
+                                'UPDATE users SET backup_codes_json = ? WHERE id = ?',
+                                (json.dumps(backup_codes), user['id']),
+                            )
+                            break
+            if not password_valid or not second_factor_valid:
+                record_failed_auth(self.get_client_ip(), user['email'])
+                raise APIError('Re-authentication failed.', 403)
+
     def get_session_days(self):
         if hasattr(self, '_session_days'):
             return self._session_days
@@ -1295,16 +1733,25 @@ class NotkiHandler(BaseHTTPRequestHandler):
         self._session_days = SESSION_DAYS
         return self._session_days
 
+    def is_https_request(self):
+        return (
+            os.environ.get('NOTKI_COOKIE_SECURE') == '1'
+            or self.get_forwarded_proto() == 'https'
+        )
+
     def session_headers(self, token, max_age=None):
-        """Return Set-Cookie session headers configured with HttpOnly, SameSite=Strict, Max-Age, and Secure flags."""
+        """Build a hardened session cookie.
+
+        HTTPS uses the ``__Host-`` prefix, which requires Secure, Path=/ and forbids
+        a Domain attribute. Plain HTTP development keeps a non-prefixed cookie so
+        local login still works.
+        """
         if max_age is None:
             max_age = self.get_session_days() * 24 * 60 * 60
-        is_https = (
-            os.environ.get('NOTKI_COOKIE_SECURE') == '1' or
-            self.get_forwarded_proto() == 'https'
-        )
+        is_https = self.is_https_request()
+        cookie_name = HOST_SESSION_COOKIE if is_https else SESSION_COOKIE
         secure = '; Secure' if is_https else ''
-        return [('Set-Cookie', f'{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={max_age}{secure}')]
+        return [('Set-Cookie', f'{cookie_name}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={max_age}{secure}')]
 
     def new_session(self, user_id):
         token = secrets.token_urlsafe(32)
@@ -1312,8 +1759,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
         with database() as connection:
             connection.execute('DELETE FROM sessions WHERE expires_at <= ?', (iso_time(),))
             connection.execute(
-                'INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)',
-                (token_hash(token), user_id, iso_time(utc_now() + timedelta(days=days))),
+                'INSERT INTO sessions (token_hash, user_id, expires_at, last_seen_at, authenticated_at) VALUES (?, ?, ?, ?, ?)',
+                (token_hash(token), user_id, iso_time(utc_now() + timedelta(days=days)), iso_time(), iso_time()),
             )
         return token
 
@@ -1331,9 +1778,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
         elif path in ('/setup', '/setup.html'):
             if self.has_admin():
                 self.send_redirect('/')
-            elif not self.check_setup_permission():
-                self.send_error_json('The first-time setup can only be completed locally or with a valid setup token.', 403)
             else:
+                # The page itself contains no secrets. The setup token is required
+                # by every mutating setup endpoint.
                 self.serve_static('setup.html')
 
     def handle_account_get(self, path):
@@ -1348,14 +1795,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
             with database() as connection:
                 row = connection.execute('SELECT totp_secret FROM users WHERE id = ?', (user['id'],)).fetchone()
                 pk_rows = connection.execute('SELECT id, name, created_at FROM passkeys WHERE user_id = ? ORDER BY created_at DESC', (user['id'],)).fetchall()
-            has_totp = bool(row and row['totp_secret'] and not row['totp_secret'].startswith('pending:'))
+            has_totp = bool(row and totp_is_active(row['totp_secret']))
             passkeys = [{'id': r['id'], 'name': r['name'], 'createdAt': r['created_at']} for r in pk_rows]
             self.send_json({'hasTotp': has_totp, 'passkeys': passkeys})
-            return True
-        elif path == '/api/users':
-            user = self.require_user()
-            query = parse_qs(urlsplit(self.path).query).get('email', [''])[0]
-            self.send_json({'users': self.directory(user['id'], query)})
             return True
         return False
 
@@ -1423,7 +1865,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                           | {'pendingInvites': pending},
                 'users': [{
                     'id': row['id'], 'email': row['email'], 'role': row['role'], 'createdAt': row['created_at'], 'notes': row['note_count'],
-                    'has2FA': bool((row['totp_secret'] and not row['totp_secret'].startswith('pending:')) or row['passkey_count'] > 0)
+                    'has2FA': bool(totp_is_active(row['totp_secret']) or row['passkey_count'] > 0)
                 } for row in users],
                 'invites': [{'tokenHash': row['token_hash'], 'createdAt': row['created_at'], 'expiresAt': row['expires_at'], 'usedAt': row['used_at']} for row in invites],
             })
@@ -1446,9 +1888,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def handle_static_get(self, path):
         if path in ('/', '/index.html') and not self.has_admin():
-            if not self.check_setup_permission():
-                self.send_error_json('Creating the first administrator requires local access or a valid setup token.', 403)
-                return True
             self.send_redirect('/setup')
             return True
         filename = 'index.html' if path in ('/', '/admin', '/admin.html') else path.lstrip('/')
@@ -1468,7 +1907,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 handled = self.handle_admin_get(path)
             elif path.startswith('/api/notes') or path == '/api/shared':
                 handled = self.handle_notes_get(path)
-            elif path in ('/api/session', '/api/account/2fa', '/api/users'):
+            elif path in ('/api/session', '/api/account/2fa'):
                 handled = self.handle_account_get(path)
             elif path in ('/', '/index.html', '/admin', '/admin.html') or path.lstrip('/') in STATIC_FILES or path.lstrip('/') in TRANSLATION_FILES:
                 handled = self.handle_static_get(path)
@@ -1520,13 +1959,27 @@ class NotkiHandler(BaseHTTPRequestHandler):
         try:
             self.check_origin()
             path = urlsplit(self.path).path
+
+            # Authenticate before reading a request body. Unauthenticated callers
+            # must not be able to allocate large buffers or occupy a worker while
+            # slowly uploading data.
+            if path.startswith('/api/admin/'):
+                self.require_user(admin=True)
+            elif path.startswith('/api/account/') or re.fullmatch(r'/api/notes/[^/]+/shares', path):
+                self.require_user()
+
+            if path in ('/api/setup/admin', '/api/setup/import', '/api/setup/import-backup'):
+                if not self.check_setup_permission():
+                    raise APIError('The first-time setup can only be completed with a valid setup token.', 403)
+
             if path in ('/api/login', '/api/login/2fa', '/api/login/passkey', '/api/account/password', '/api/account/totp/verify'):
                 client_ip = self.get_client_ip()
                 if is_rate_limited(client_ip):
                     raise APIError('Too many failed attempts. Please try again later.', 429)
             if path == '/api/setup/import-backup':
                 archive_bytes = self.read_archive_from_request()
-                self.import_snapshot_archive(archive_bytes)
+                password = self.headers.get('X-Backup-Password') or None
+                self.import_snapshot_archive(archive_bytes, password=password)
                 return
             if path == '/api/admin/backups/upload-restore':
                 self.upload_restore_server_backup()
@@ -1591,11 +2044,13 @@ class NotkiHandler(BaseHTTPRequestHandler):
             passkey_match = re.fullmatch(r'/api/account/passkey/([^/]+)', path)
             if passkey_match:
                 user = self.require_user()
+                self.require_step_up(user)
                 key_id = unquote(passkey_match.group(1))
                 with database() as connection:
                     cursor = connection.execute('DELETE FROM passkeys WHERE id = ? AND user_id = ?', (key_id, user['id']))
                     if not cursor.rowcount:
                         raise APIError('Passkey not found.', 404)
+                self.invalidate_user_sessions(user['id'], keep_token=self.get_session_token())
                 self.send_json({'deleted': True})
                 return
             share_match = re.fullmatch(r'/api/notes/([^/]+)/shares/(\d+)', path)
@@ -1676,7 +2131,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 {'id': row['id'], 'email': row['email'], 'passwordHash': row['password_hash'], 'role': row['role'],
                  'createdAt': row['created_at'], 'avatar': row['avatar'],
                  'labels': json.loads(row['labels_json']) if row['labels_json'] else [],
-                 'totpSecret': row['totp_secret'],
+                 'totpSecret': reveal_totp_secret(row['totp_secret']),
                  'backupCodes': json.loads(row['backup_codes_json']) if row['backup_codes_json'] else []}
                 for row in users
             ],
@@ -1710,7 +2165,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
         return snapshot
 
     def create_server_backup(self, payload=None):
-        self.require_user(admin=True)
+        user = self.require_user(admin=True)
+        self.require_step_up(user)
         created_at = utc_now()
         snapshot = self.build_snapshot()
         backup_bytes = json.dumps(snapshot, ensure_ascii=False, indent=2).encode('utf-8')
@@ -1718,35 +2174,34 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('The snapshot exceeds the 100 MB limit.', 413)
 
         payload = payload or {}
-        enc_password = payload.get('encryptionPassword') or payload.get('password')
-        if enc_password:
-            from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-            from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-            from cryptography.hazmat.primitives import hashes
+        provided_password = payload.get('encryptionPassword') or payload.get('password')
+        enc_password = provided_password or server_backup_key()
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+        from cryptography.hazmat.primitives import hashes
 
-            salt = secrets.token_bytes(16)
-            kdf = PBKDF2HMAC(
-                algorithm=hashes.SHA256(),
-                length=32,
-                salt=salt,
-                iterations=100_000,
-            )
-            key = kdf.derive(str(enc_password).encode('utf-8'))
-            aesgcm = AESGCM(key)
-            nonce = secrets.token_bytes(12)
-            ciphertext = aesgcm.encrypt(nonce, backup_bytes, None)
-            encrypted_data = {
-                'format': 'notki-encrypted-snapshot',
-                'version': 1,
-                'createdAt': iso_time(created_at),
-                'salt': salt.hex(),
-                'nonce': nonce.hex(),
-                'ciphertext': base64.b64encode(ciphertext).decode('utf-8'),
-            }
-            backup_bytes = json.dumps(encrypted_data, ensure_ascii=False, indent=2).encode('utf-8')
-            filename = f"notki-backup-{created_at.strftime('%Y%m%d-%H%M%SZ')}-{secrets.token_hex(4)}.enc"
-        else:
-            filename = f"notki-backup-{created_at.strftime('%Y%m%d-%H%M%SZ')}-{secrets.token_hex(4)}.json"
+        salt = secrets.token_bytes(16)
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=BACKUP_PASSWORD_ITERATIONS,
+        )
+        key = kdf.derive(str(enc_password).encode('utf-8'))
+        aesgcm = AESGCM(key)
+        nonce = secrets.token_bytes(12)
+        ciphertext = aesgcm.encrypt(nonce, backup_bytes, None)
+        encrypted_data = {
+            'format': 'notki-encrypted-snapshot',
+            'version': 1,
+            'createdAt': iso_time(created_at),
+            'salt': salt.hex(),
+            'nonce': nonce.hex(),
+            'ciphertext': base64.b64encode(ciphertext).decode('utf-8'),
+            'iterations': BACKUP_PASSWORD_ITERATIONS,
+        }
+        backup_bytes = json.dumps(encrypted_data, ensure_ascii=False, indent=2).encode('utf-8')
+        filename = f"notki-backup-{created_at.strftime('%Y%m%d-%H%M%SZ')}-{secrets.token_hex(4)}.enc"
 
         backup_dir = backup_directory()
         backup_dir.mkdir(parents=True, exist_ok=True)
@@ -1760,7 +2215,13 @@ class NotkiHandler(BaseHTTPRequestHandler):
         except OSError as error:
             temporary_path.unlink(missing_ok=True)
             raise APIError('Could not save the backup on the server.', 500) from error
-        self.send_json({'filename': filename, 'createdAt': iso_time(created_at), 'sizeBytes': backup_path.stat().st_size}, 201)
+        self.send_json({
+            'filename': filename,
+            'createdAt': iso_time(created_at),
+            'sizeBytes': backup_path.stat().st_size,
+            'encrypted': True,
+            'usesServerKey': not bool(provided_password),
+        }, 201)
 
     def list_server_backups(self):
         self.require_user(admin=True)
@@ -1815,7 +2276,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             pass
 
     def delete_server_backup(self, filename):
-        self.require_user(admin=True)
+        user = self.require_user(admin=True)
+        self.require_step_up(user)
         path = self.find_server_backup(filename)
         try:
             path.unlink()
@@ -1827,23 +2289,29 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def delete_user(self, user_id):
         admin = self.require_user(admin=True)
+        self.require_step_up(admin)
         if admin['id'] == user_id:
             raise APIError('You cannot delete your own account from the admin panel.', 400)
         with database() as connection:
             row = connection.execute('SELECT id FROM users WHERE id = ?', (user_id,)).fetchone()
             if not row:
                 raise APIError('User not found.', 404)
-            connection.execute('DELETE FROM users WHERE id = ?', (user_id,))
+            try:
+                connection.execute('DELETE FROM users WHERE id = ?', (user_id,))
+            except sqlite3.IntegrityError as error:
+                raise APIError('Could not delete user because related data still references it.', 409) from error
         self.send_json({'deleted': user_id})
 
     def reset_user_2fa(self, user_id):
-        self.require_user(admin=True)
+        admin = self.require_user(admin=True)
+        self.require_step_up(admin)
         with database() as connection:
             row = connection.execute('SELECT id FROM users WHERE id = ?', (user_id,)).fetchone()
             if not row:
                 raise APIError('User not found.', 404)
-            connection.execute('UPDATE users SET totp_secret = NULL, backup_codes_json = NULL WHERE id = ?', (user_id,))
+            connection.execute('UPDATE users SET totp_secret = NULL, backup_codes_json = NULL, totp_last_used_step = NULL WHERE id = ?', (user_id,))
             connection.execute('DELETE FROM passkeys WHERE user_id = ?', (user_id,))
+            connection.execute('DELETE FROM sessions WHERE user_id = ?', (user_id,))
         self.send_json({'reset': user_id})
 
     def delete_invite(self, token_hash):
@@ -1855,7 +2323,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
         self.send_json({'deleted': token_hash})
 
     def upload_restore_server_backup(self):
-        self.require_user(admin=True)
+        admin = self.require_user(admin=True)
+        self.require_step_up(admin)
         content_type = self.headers.get('Content-Type', '')
         if 'application/json' in content_type:
             payload = self.read_json(MAX_SNAPSHOT_BYTES)
@@ -1869,7 +2338,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
         self.restore_snapshot(snapshot, replace_existing=True)
 
     def restore_server_backup(self, filename, payload=None):
-        self.require_user(admin=True)
+        admin = self.require_user(admin=True)
+        self.require_step_up(admin)
         path = self.find_server_backup(filename)
         if path.stat().st_size > MAX_SNAPSHOT_BYTES:
             raise APIError('The backup file exceeds the size limit.', 413)
@@ -1989,15 +2459,94 @@ class NotkiHandler(BaseHTTPRequestHandler):
         except Exception as e:
             add_log('ERROR', f'Failed to update index.html version footer: {e}')
 
+
+    def _update_rollback_path(self):
+        return backup_directory() / f'update-rollback-{utc_now().strftime("%Y%m%d-%H%M%S")}-{secrets.token_hex(4)}.tar.gz'
+
+    def _create_update_rollback(self, members):
+        """Snapshot the files an update is about to overwrite."""
+        names = set()
+        for member in members:
+            parts = member.name.split('/', 1)
+            rel_name = parts[1] if len(parts) > 1 else member.name
+            if rel_name and not rel_name.startswith('/') and '..' not in Path(rel_name).parts:
+                names.add(rel_name)
+        backup_directory().mkdir(parents=True, exist_ok=True)
+        rollback_path = self._update_rollback_path()
+        with tarfile.open(rollback_path, 'w:gz') as rollback:
+            for rel_name in sorted(names):
+                source = (ROOT / rel_name).resolve()
+                if source.is_relative_to(ROOT.resolve()) and source.is_file():
+                    rollback.add(source, arcname=rel_name)
+        try:
+            os.chmod(rollback_path, 0o600)
+        except OSError:
+            pass
+        return rollback_path
+
+    @staticmethod
+    def _restore_update_rollback(rollback_path):
+        with tarfile.open(rollback_path, 'r:gz') as rollback:
+            for member in rollback.getmembers():
+                target = (ROOT / member.name).resolve()
+                if target.is_relative_to(ROOT.resolve()) and member.isfile():
+                    if hasattr(tarfile, 'data_filter'):
+                        rollback.extract(member, path=ROOT, filter='data')
+                    else:
+                        rollback.extract(member, path=ROOT)
+
+    @staticmethod
+    def _verify_update_signature(archive_bytes, payload):
+        public_key_value = os.environ.get('NOTKI_UPDATE_PUBLIC_KEY', '').strip()
+        if not public_key_value:
+            return
+        signature_value = payload.get('signature') or os.environ.get('NOTKI_UPDATE_SIGNATURE') or ''
+        if not signature_value:
+            raise APIError('An update signature is required.', 400)
+        try:
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+            from cryptography.hazmat.primitives import serialization
+
+            signature = base64.b64decode(signature_value, validate=True)
+            try:
+                raw_key = base64.b64decode(public_key_value, validate=True)
+            except Exception:
+                raw_key = b''
+            if len(raw_key) == 32:
+                public_key = Ed25519PublicKey.from_public_bytes(raw_key)
+            else:
+                public_key = serialization.load_pem_public_key(public_key_value.encode('utf-8'))
+            public_key.verify(signature, archive_bytes)
+        except APIError:
+            raise
+        except Exception as err:
+            raise APIError('The update signature is invalid.', 400) from err
+
     def perform_update(self, payload):
-        self.require_user(admin=True)
+        admin = self.require_user(admin=True)
+        self.require_step_up(admin)
         tarball_url = payload.get('tarballUrl')
         is_beta = bool(payload.get('isBeta')) or (tarball_url and tarball_url.endswith('/main'))
+        if is_beta and os.environ.get('NOTKI_ALLOW_BETA_UPDATES') != '1':
+            raise APIError('Beta updates are disabled. Set NOTKI_ALLOW_BETA_UPDATES=1 to enable them.', 403)
         if not tarball_url or not tarball_url.startswith('https://api.github.com/repos/shirou93/Notki/tarball/'):
             raise APIError('Invalid download URL.', 400)
 
-        archive_bytes = self._download_update_archive(tarball_url)
+        expected_sha256 = str(payload.get('sha256') or os.environ.get('NOTKI_UPDATE_SHA256') or '').lower()
+        allow_unverified = os.environ.get('NOTKI_ALLOW_UNVERIFIED_UPDATES') == '1'
+        if not expected_sha256 and not allow_unverified:
+            raise APIError('Update checksum is required. Set NOTKI_UPDATE_SHA256 or NOTKI_ALLOW_UNVERIFIED_UPDATES.', 400)
+        if expected_sha256 and not re.fullmatch(r'[0-9a-f]{64}', expected_sha256):
+            raise APIError('Invalid update checksum.', 400)
 
+        archive_bytes = self._download_update_archive(tarball_url)
+        if len(archive_bytes) > MAX_SNAPSHOT_BYTES:
+            raise APIError('The update archive is too large.', 413)
+        if expected_sha256 and not hmac.compare_digest(hashlib.sha256(archive_bytes).hexdigest(), expected_sha256):
+            raise APIError('The update archive checksum does not match.', 400)
+        self._verify_update_signature(archive_bytes, payload)
+
+        rollback_path = None
         try:
             with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode='r:gz') as archive:
                 members = archive.getmembers()
@@ -2006,27 +2555,33 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
                 if not is_beta:
                     self._verify_update_version(archive, members)
-                self._extract_update_archive(archive, members)
-                self._finalize_update_index_html(is_beta)
+                rollback_path = self._create_update_rollback(members)
+                try:
+                    self._extract_update_archive(archive, members)
+                    self._finalize_update_index_html(is_beta)
+                except Exception:
+                    if rollback_path and rollback_path.exists():
+                        self._restore_update_rollback(rollback_path)
+                    raise
         except APIError:
             raise
         except Exception:
-            raise APIError('Could not extract files.', 500)
+            raise APIError('Could not extract files. The previous version was restored.', 500)
 
         threading.Timer(1.0, lambda: os._exit(0)).start()
         self.send_json({'success': True})
 
-    def import_snapshot_archive(self, archive_bytes):
+    def import_snapshot_archive(self, archive_bytes, password=None):
         if not self.check_setup_permission():
-            raise APIError('Snapshot import is available only locally or with a valid setup token.', 403)
-        self.restore_snapshot(self.snapshot_from_bytes(archive_bytes), replace_existing=False)
+            raise APIError('Snapshot import is available only with a valid setup token.', 403)
+        self.restore_snapshot(self.snapshot_from_bytes(archive_bytes, password=password), replace_existing=False)
 
     @staticmethod
     def decrypt_snapshot_data(data, password=None):
         if not isinstance(data, dict) or data.get('format') != 'notki-encrypted-snapshot':
             return data
         if not password:
-            raise APIError('Backup is encrypted. Encryption password is required.', 400)
+            password = server_backup_key()
         try:
             from cryptography.hazmat.primitives.ciphers.aead import AESGCM
             from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -2035,11 +2590,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
             salt = bytes.fromhex(data['salt'])
             nonce = bytes.fromhex(data['nonce'])
             ciphertext = base64.b64decode(data['ciphertext'])
+            iterations = int(data.get('iterations', 100_000))
+            if not 100_000 <= iterations <= 2_000_000:
+                raise ValueError('Invalid KDF iterations')
             kdf = PBKDF2HMAC(
                 algorithm=hashes.SHA256(),
                 length=32,
                 salt=salt,
-                iterations=100_000,
+                iterations=iterations,
             )
             key = kdf.derive(str(password).encode('utf-8'))
             aesgcm = AESGCM(key)
@@ -2111,8 +2669,18 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 totp_secret = str(totp_secret)
                 if len(totp_secret) > 256:
                     totp_secret = None
+                else:
+                    totp_secret = protect_totp_secret(totp_secret)
             backup_codes = user.get('backupCodes')
-            backup_codes_json = json.dumps(backup_codes) if isinstance(backup_codes, list) else None
+            prepared_codes = []
+            if isinstance(backup_codes, list):
+                for raw_code in backup_codes[:32]:
+                    stored_code = str(raw_code or '')
+                    if stored_code.startswith(('sha256$', 'pbkdf2_sha256$')):
+                        prepared_codes.append(stored_code)
+                    elif normalize_backup_code(stored_code):
+                        prepared_codes.append(hash_backup_code(stored_code))
+            backup_codes_json = json.dumps(prepared_codes) if prepared_codes else None
             user_ids.add(user_id)
             emails.add(email)
             labels = user.get('labels')
@@ -2376,22 +2944,27 @@ class NotkiHandler(BaseHTTPRequestHandler):
         if len(password) > 1024:
             self.send_error_json('Invalid e-mail or password.', 401)
             return
+        if is_account_rate_limited(email):
+            raise APIError('Too many failed attempts. Please try again later.', 429)
         with database() as connection:
             row = connection.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
             # Verify password using dummy hash if user does not exist to mitigate timing side-channel attacks for email enumeration
             password_hash = row['password_hash'] if row else DUMMY_PASSWORD_HASH
             valid_password = verify_password(password, password_hash)
-            if not row or not valid_password:
-                client_ip = self.get_client_ip()
-                record_failed_auth(client_ip, email)
-                self.send_error_json('Invalid e-mail or password.', 401)
-                return
-            totp_secret = row['totp_secret']
-            has_totp = bool(totp_secret and not totp_secret.startswith('pending:'))
-            pk_count = connection.execute('SELECT COUNT(*) FROM passkeys WHERE user_id = ?', (row['id'],)).fetchone()[0]
-            has_passkey = pk_count > 0
-            req_row = connection.execute("SELECT value FROM settings WHERE key = 'require2FA'").fetchone()
-            require_2fa = req_row and req_row['value'] == 'true'
+            has_totp = False
+            has_passkey = False
+            require_2fa = False
+            if row and valid_password:
+                totp_secret = reveal_totp_secret(row['totp_secret'])
+                has_totp = bool(totp_secret and not totp_secret.startswith('pending:'))
+                pk_count = connection.execute('SELECT COUNT(*) FROM passkeys WHERE user_id = ?', (row['id'],)).fetchone()[0]
+                has_passkey = pk_count > 0
+                req_row = connection.execute("SELECT value FROM settings WHERE key = 'require2FA'").fetchone()
+                require_2fa = bool(req_row and req_row['value'] == 'true')
+        if not row or not valid_password:
+            record_failed_auth(self.get_client_ip(), email)
+            self.send_error_json('Invalid e-mail or password.', 401)
+            return
 
         if require_2fa and not (has_totp or has_passkey):
             raise APIError('Two-factor authentication is required by the administrator. Please configure it.', 403)
@@ -2411,29 +2984,43 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('2FA session expired or invalid.', 401)
         totp_code = payload.get('totpCode')
         with database() as connection:
+            connection.execute('BEGIN IMMEDIATE')
             row = connection.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
             if not row:
                 raise APIError('User not found.', 404)
-            secret = row['totp_secret']
+            if is_account_rate_limited(row['email']):
+                raise APIError('Too many failed attempts. Please try again later.', 429)
+            secret = reveal_totp_secret(row['totp_secret'])
             backup_raw = row['backup_codes_json']
-            backup_codes = json.loads(backup_raw) if backup_raw else []
+            try:
+                backup_codes = json.loads(backup_raw) if backup_raw else []
+            except (TypeError, json.JSONDecodeError):
+                backup_codes = []
 
-            clean_code = str(totp_code or '').replace('-', '').replace(' ', '').strip().upper()
-            totp_valid = secret and not secret.startswith('pending:') and verify_totp_code(secret, totp_code)
+            totp_valid = False
+            if secret and not secret.startswith('pending:'):
+                counter = verify_totp_counter(secret, totp_code)
+                if counter is not None and (row['totp_last_used_step'] is None or counter > row['totp_last_used_step']):
+                    cursor = connection.execute(
+                        'UPDATE users SET totp_last_used_step = ? WHERE id = ? '
+                        'AND (totp_last_used_step IS NULL OR totp_last_used_step < ?)',
+                        (counter, user_id, counter),
+                    )
+                    totp_valid = cursor.rowcount == 1
+
             backup_valid = False
-
-            if not totp_valid and clean_code:
-                for stored_code in backup_codes:
-                    if verify_password(clean_code, stored_code) or stored_code == clean_code:
+            if not totp_valid and backup_codes:
+                for stored_code in list(backup_codes):
+                    if verify_backup_code(totp_code, stored_code):
                         backup_valid = True
                         backup_codes.remove(stored_code)
                         connection.execute('UPDATE users SET backup_codes_json = ? WHERE id = ?', (json.dumps(backup_codes), user_id))
                         break
 
-            if not totp_valid and not backup_valid:
-                client_ip = self.get_client_ip()
-                record_failed_auth(client_ip, row['email'])
-                raise APIError('Invalid two-factor code.', 401)
+            auth_invalid = not totp_valid and not backup_valid
+        if auth_invalid:
+            record_failed_auth(self.get_client_ip(), row['email'])
+            raise APIError('Invalid two-factor code.', 401)
         clear_failed_auth(self.get_client_ip(), row['email'])
         token = self.new_session(user_id)
         with database() as connection:
@@ -2520,9 +3107,16 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def setup_totp(self):
         user = self.require_user()
+        with database() as connection:
+            row = connection.execute('SELECT totp_secret FROM users WHERE id = ?', (user['id'],)).fetchone()
+        if row and totp_is_active(row['totp_secret']):
+            self.require_step_up(user)
         secret = generate_totp_secret()
         with database() as connection:
-            connection.execute('UPDATE users SET totp_secret = ? WHERE id = ?', (f'pending:{secret}', user['id']))
+            connection.execute(
+                'UPDATE users SET totp_secret = ?, totp_last_used_step = NULL WHERE id = ?',
+                (protect_totp_secret(f'pending:{secret}'), user['id']),
+            )
         otpauth_url = f"otpauth://totp/Notki:{quote(user['email'])}?secret={secret}&issuer=Notki"
         qr_svg = qr.generate_qr_svg(otpauth_url)
         self.send_json({'secret': secret, 'qrSvg': qr_svg, 'otpauthUrl': otpauth_url})
@@ -2531,30 +3125,51 @@ class NotkiHandler(BaseHTTPRequestHandler):
         user = self.require_user()
         code = payload.get('code')
         with database() as connection:
-            row = connection.execute('SELECT totp_secret FROM users WHERE id = ?', (user['id'],)).fetchone()
-            if not row or not row['totp_secret']:
-                raise APIError('Invalid two-factor code.', 400)
-            totp_secret = row['totp_secret']
-            secret = totp_secret.removeprefix('pending:') if totp_secret.startswith('pending:') else totp_secret
-            if not verify_totp_code(secret, code):
-                client_ip = self.get_client_ip()
-                record_failed_auth(client_ip, user['email'])
-                raise APIError('Invalid two-factor code.', 400)
+            row = connection.execute(
+                'SELECT totp_secret, totp_last_used_step FROM users WHERE id = ?', (user['id'],)
+            ).fetchone()
+        if not row or not row['totp_secret']:
+            raise APIError('Invalid two-factor code.', 400)
+        totp_secret = reveal_totp_secret(row['totp_secret'])
+        if not totp_secret:
+            raise APIError('Invalid two-factor code.', 400)
+        secret = totp_secret.removeprefix('pending:') if totp_secret.startswith('pending:') else totp_secret
+        counter = verify_totp_counter(secret, code)
+        if counter is None:
+            record_failed_auth(self.get_client_ip(), user['email'])
+            raise APIError('Invalid two-factor code.', 400)
 
-            backup_codes_display = [f"{secrets.token_hex(2).upper()}-{secrets.token_hex(2).upper()}" for _ in range(8)]
-            backup_codes_store = [hash_password(c.replace('-', '')) for c in backup_codes_display]
+        backup_codes_display = generate_backup_codes()
+        backup_codes_store = [hash_backup_code(c) for c in backup_codes_display]
 
-            connection.execute('UPDATE users SET totp_secret = ?, backup_codes_json = ? WHERE id = ?', (secret, json.dumps(backup_codes_store), user['id']))
+        # Re-check the replay counter inside the write transaction so two concurrent
+        # requests cannot both consume the same time step.
+        with database() as connection:
+            connection.execute('BEGIN IMMEDIATE')
+            cursor = connection.execute(
+                'UPDATE users SET totp_secret = ?, backup_codes_json = ?, totp_last_used_step = ? '
+                'WHERE id = ? AND (totp_last_used_step IS NULL OR totp_last_used_step < ?)',
+                (protect_totp_secret(secret), json.dumps(backup_codes_store), counter, user['id'], counter),
+            )
+            if cursor.rowcount != 1:
+                raise APIError('Invalid two-factor code.', 400)
+        self.invalidate_user_sessions(user['id'], keep_token=self.get_session_token())
         self.send_json({'verified': True, 'backupCodes': backup_codes_display})
 
     def remove_totp(self):
         user = self.require_user()
+        self.require_step_up(user)
         with database() as connection:
-            connection.execute('UPDATE users SET totp_secret = NULL, backup_codes_json = NULL WHERE id = ?', (user['id'],))
+            connection.execute(
+                'UPDATE users SET totp_secret = NULL, backup_codes_json = NULL, totp_last_used_step = NULL WHERE id = ?',
+                (user['id'],),
+            )
+        self.invalidate_user_sessions(user['id'], keep_token=self.get_session_token())
         self.send_json({'removed': True})
 
     def add_passkey(self, payload):
         user = self.require_user()
+        self.require_step_up(user)
         key_id = payload.get('id')
         if not isinstance(key_id, str) or not (1 <= len(key_id) <= 512):
             raise APIError('Invalid key data.', 400)
@@ -2691,16 +3306,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
         self.send_json({'avatar': avatar})
 
     def logout(self):
-        cookie = cookies.SimpleCookie()
-        try:
-            cookie.load(self.headers.get('Cookie', ''))
-            token = cookie[SESSION_COOKIE].value
-        except (cookies.CookieError, KeyError):
-            token = None
+        token = self.get_session_token()
         if token:
             with database() as connection:
                 connection.execute('DELETE FROM sessions WHERE token_hash = ?', (token_hash(token),))
-        self.send_json({'loggedOut': True}, extra_headers=self.session_headers('', 0))
+        headers = self.session_headers('', 0)
+        if self.is_https_request():
+            headers.append(('Set-Cookie', f'{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0'))
+        self.send_json({'loggedOut': True}, extra_headers=headers)
 
     def create_invite(self, payload=None):
         user = self.require_user(admin=True)
@@ -2860,13 +3473,16 @@ class NotkiHandler(BaseHTTPRequestHandler):
             self.owned_note(connection, user['id'], note_id)
             target = connection.execute('SELECT id FROM users WHERE email = ?', (email,)).fetchone()
             if not target:
-                raise APIError('No user with that e-mail address was found.', 404)
-            if target['id'] == user['id']:
+                # Do not reveal whether an account exists. Re-render the current
+                # share list with the same success shape as a normal request.
+                pass
+            elif target['id'] == user['id']:
                 raise APIError('You cannot share a note with yourself.')
-            connection.execute('''
-                INSERT INTO note_shares (note_id, user_id, permission, created_at) VALUES (?, ?, ?, ?)
-                ON CONFLICT(note_id, user_id) DO UPDATE SET permission = excluded.permission
-            ''', (note_id, target['id'], permission, iso_time()))
+            else:
+                connection.execute('''
+                    INSERT INTO note_shares (note_id, user_id, permission, created_at) VALUES (?, ?, ?, ?)
+                    ON CONFLICT(note_id, user_id) DO UPDATE SET permission = excluded.permission
+                ''', (note_id, target['id'], permission, iso_time()))
         self.send_json({'shares': self.list_shares(user, note_id)}, 201)
 
     def delete_share(self, user, note_id, target_id):
@@ -3031,6 +3647,38 @@ class NotkiHandler(BaseHTTPRequestHandler):
         super().log_message('%s %s', command, path_str)
 
 
+class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    """Threading server with a hard concurrency cap and socket timeouts."""
+    daemon_threads = True
+
+    def __init__(self, server_address, request_handler_class, bind_and_activate=True):
+        super().__init__(server_address, request_handler_class, bind_and_activate)
+        self._request_slots = threading.BoundedSemaphore(MAX_CONCURRENT_REQUESTS)
+
+    def process_request(self, request, client_address):
+        try:
+            request.settimeout(REQUEST_TIMEOUT_SECONDS)
+        except OSError:
+            pass
+        if not self._request_slots.acquire(blocking=False):
+            try:
+                request.close()
+            except OSError:
+                pass
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._request_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._request_slots.release()
+
+
 def main():
     parser = argparse.ArgumentParser(description='Notki server with SQLite database.')
     parser.add_argument('--create-admin', action='store_true', help='Create the initial administrator account.')
@@ -3058,7 +3706,7 @@ def main():
     if args.unban_all:
         unban_all_cli()
         return
-    server = ThreadingHTTPServer((args.host, args.port), NotkiHandler)
+    server = BoundedThreadingHTTPServer((args.host, args.port), NotkiHandler)
     print(f'Notki running at http://{args.host}:{args.port}')
     with database() as connection:
         needs_setup = connection.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").fetchone() is None

@@ -1,44 +1,36 @@
 services:
   notki:
-    # Uses the stock Alpine image as-is; nothing is built.
-    image: alpine:latest
+    build: .
+    image: notki:0.1.6.0
     container_name: notki
     restart: unless-stopped
-    working_dir: /notki/app
-    # python3 is installed into the container on start, so the image stays untouched.
-    command:
-      - sh
-      - -c
-      - |
-        set -e
-        mkdir -p /notki/app /notki/data
-        if [ ! -f server.py ]; then
-          apk add --no-cache curl jq tar
-          LATEST_TARBALL=$$(curl -s https://api.github.com/repos/shirou93/Notki/tags | jq -r "[.[] | select(.name | test(\"^[0-9.]+$$\"))] | sort_by(.name | split(\".\") | map(tonumber)) | last.tarball_url")
-          if [ "$$LATEST_TARBALL" = "null" ] || [ -z "$$LATEST_TARBALL" ]; then
-            LATEST_TARBALL="https://api.github.com/repos/shirou93/Notki/tarball/main"
-          fi
-          if [ -n "$$LATEST_TARBALL" ]; then
-            curl -sL "$$LATEST_TARBALL" | tar -xz -C /notki/app --strip-components=1
-          fi
-        fi
-        apk add --no-cache python3 py3-pip openssl
-        pip install webauthn --break-system-packages
-        exec python3 server.py
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:size=64m,mode=1777
     ports:
       - "${NOTKI_HTTP_PORT:-8000}:8000"
     volumes:
-      # The application and data live in a named volume.
-      - notki:/notki
+      - notki-data:/data
     environment:
       NOTKI_HOST: 0.0.0.0
       NOTKI_PORT: "8000"
-      NOTKI_DB_PATH: /notki/data/notki.sqlite3
-      NOTKI_BACKUP_DIR: /notki/data/backups
-      # Keeps the bind-mounted source tree free of root-owned __pycache__ files.
-      PYTHONDONTWRITEBYTECODE: "1"
-      # Remote setup is disabled by default for security, but can be enabled if needed
-      NOTKI_ALLOW_REMOTE_SETUP: "${NOTKI_ALLOW_REMOTE_SETUP:-0}"
+      NOTKI_DB_PATH: /data/notki.sqlite3
+      NOTKI_BACKUP_DIR: /data/backups
+      # Set a strong, stable key so encrypted server backups survive restarts
+      # and can be restored on a fresh installation.
+      NOTKI_BACKUP_KEY: "${NOTKI_BACKUP_KEY:-}"
+      NOTKI_TOTP_KEY: "${NOTKI_TOTP_KEY:-}"
+      # Prefer setting NOTKI_SETUP_TOKEN in .env for headless deployments; the
+      # setup page asks for it before creating the administrator.
+      NOTKI_SETUP_TOKEN: "${NOTKI_SETUP_TOKEN:-}"
+      # Trust proxy headers only from the reverse proxy address/network.
+      NOTKI_TRUST_PROXY: "${NOTKI_TRUST_PROXY:-127.0.0.1/32}"
+      NOTKI_ALLOWED_HOSTS: "${NOTKI_ALLOWED_HOSTS:-}"
+      NOTKI_PUBLIC_HOST: "${NOTKI_PUBLIC_HOST:-}"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8000/api/setup/status"]
       interval: 30s
@@ -47,4 +39,4 @@ services:
       retries: 3
 
 volumes:
-  notki:
+  notki-data:

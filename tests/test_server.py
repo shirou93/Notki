@@ -23,6 +23,22 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener, urlopen
 import server
 
 
+def with_same_origin(base_url, headers=None):
+    headers = dict(headers or {})
+    if getattr(server, 'GENERATED_SETUP_TOKEN', None) and 'X-Setup-Token' not in headers:
+        headers['X-Setup-Token'] = server.GENERATED_SETUP_TOKEN
+    if 'Origin' in headers or 'Referer' in headers:
+        return headers
+    forwarded_host = headers.get('X-Forwarded-Host', '').split(',')[0].strip()
+    host = forwarded_host or urlsplit(base_url).netloc
+    proto = 'http'
+    forwarded_proto = headers.get('X-Forwarded-Proto', '').split(',')[0].strip().lower()
+    if forwarded_proto == 'https' or str(headers.get('X-Forwarded-Ssl', '')).lower() in ('on', '1', 'true'):
+        proto = 'https'
+    headers['Origin'] = f'{proto}://{host}'
+    return headers
+
+
 class ServerUnitTests(unittest.TestCase):
     def test_normalize_email_valid(self):
         self.assertEqual(server.normalize_email('user@example.com'), 'user@example.com')
@@ -87,7 +103,7 @@ class ServerFlowTests(unittest.TestCase):
         request = Request(
             self.base_url + path,
             data=body,
-            headers={'Content-Type': content_type},
+            headers=with_same_origin(self.base_url, {'Content-Type': content_type}),
             method=method,
         )
         try:
@@ -104,7 +120,7 @@ class ServerFlowTests(unittest.TestCase):
         request = Request(
             self.base_url + path,
             data=data,
-            headers={'Content-Type': 'application/json', **(headers or {})},
+            headers=with_same_origin(self.base_url, {'Content-Type': 'application/json', **(headers or {})}),
             method=method,
         )
         try:
@@ -122,7 +138,7 @@ class ServerFlowTests(unittest.TestCase):
         request = Request(
             self.base_url + path,
             data=data,
-            headers={'Content-Type': 'application/json', **(headers or {})},
+            headers=with_same_origin(self.base_url, {'Content-Type': 'application/json', **(headers or {})}),
             method=method,
         )
         try:
@@ -220,8 +236,9 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn('yourself', error['error'])
 
-        status, error = self.request(owner, 'POST', '/api/notes/mine-1/shares', {'email': 'nobody@example.com', 'permission': 'read'})
-        self.assertEqual(status, 404)
+        status, result = self.request(owner, 'POST', '/api/notes/mine-1/shares', {'email': 'nobody@example.com', 'permission': 'read'})
+        self.assertEqual(status, 201)
+        self.assertEqual(result['shares'], [])
 
         status, error = self.request(owner, 'POST', '/api/notes/mine-1/shares', {'email': 'other2@example.com', 'permission': 'admin'})
         self.assertEqual(status, 400)
@@ -312,7 +329,7 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
         self.assertEqual(status, 201)
-        self.assertRegex(backup['filename'], r'^notki-backup-\d{8}-\d{6}Z-[a-f0-9]{8}\.json$')
+        self.assertRegex(backup['filename'], r'^notki-backup-\d{8}-\d{6}Z-[a-f0-9]{8}\.enc$')
         status, backups = self.request(self.admin, 'GET', '/api/admin/backups')
         self.assertEqual(status, 200)
         self.assertEqual(backups['backups'][0]['filename'], backup['filename'])
@@ -611,20 +628,12 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(response.headers.get('Strict-Transport-Security'), 'max-age=31536000; includeSubDomains')
             self.assertNotIn('0.1.5.94', server_header)
 
-    def test_user_directory_requires_exact_email(self):
+    def test_user_directory_is_not_exposed(self):
         self.register_user('target@example.com')
-        status, res = self.request(self.admin, 'GET', '/api/users')
-        self.assertEqual(status, 200)
-        self.assertEqual(res['users'], [])
-
-        status, res = self.request(self.admin, 'GET', '/api/users?email=target@example.com')
-        self.assertEqual(status, 200)
-        self.assertEqual(len(res['users']), 1)
-        self.assertEqual(res['users'][0]['email'], 'target@example.com')
-        self.assertNotIn('avatar', res['users'][0])
-
-        status, res = self.request(self.admin, 'GET', '/api/users?email=missing@example.com')
-        self.assertEqual(res['users'], [])
+        for path in ('/api/users', '/api/users?email=target@example.com'):
+            status, res = self.request(self.admin, 'GET', path)
+            self.assertEqual(status, 404)
+            self.assertNotIn('users', res)
 
     def test_enabling_require2fa_without_admin_2fa_is_rejected(self):
         status, error = self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': True})
@@ -650,7 +659,7 @@ class ServerFlowTests(unittest.TestCase):
         with unittest.mock.patch.object(server, 'PUBLIC_HOST', 'notes.example.com'):
             status, invite = self.request(
                 self.admin, 'POST', '/api/admin/invites', {},
-                headers={'X-Forwarded-Host': 'evil.attacker.example', 'X-Forwarded-Proto': 'https'},
+                headers={'Origin': 'https://notes.example.com', 'X-Forwarded-Host': 'evil.attacker.example', 'X-Forwarded-Proto': 'https'},
             )
         self.assertEqual(status, 201)
         self.assertTrue(invite['url'].startswith('https://notes.example.com/?invite='))
@@ -686,7 +695,7 @@ class ServerFlowTests(unittest.TestCase):
 
     def test_update_check_and_perform_version_comparison(self):
         # Test check update with newer tag
-        tags_response = json.dumps([{'name': '0.1.6.0', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.6.0'}]).encode('utf-8')
+        tags_response = json.dumps([{'name': '0.1.6.1', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.6.1'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response
@@ -695,10 +704,10 @@ class ServerFlowTests(unittest.TestCase):
             status, res = self.request(self.admin, 'GET', '/api/admin/update/check')
             self.assertEqual(status, 200)
             self.assertTrue(res.get('updateAvailable', False))
-            self.assertEqual(res.get('latestVersion'), '0.1.6.0')
+            self.assertEqual(res.get('latestVersion'), '0.1.6.1')
 
         # Test check update with same tag
-        tags_response_same = json.dumps([{'name': '0.1.5.94', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.94'}]).encode('utf-8')
+        tags_response_same = json.dumps([{'name': '0.1.6.0', 'tarball_url': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.6.0'}]).encode('utf-8')
         with unittest.mock.patch('urllib.request.urlopen') as mock_urlopen:
             mock_cm = unittest.mock.MagicMock()
             mock_cm.__enter__.return_value.read.return_value = tags_response_same
@@ -723,9 +732,10 @@ class ServerFlowTests(unittest.TestCase):
             mock_opener.open.return_value = mock_cm
             mock_build_opener.return_value = mock_opener
 
-            status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.94'
-            })
+            with unittest.mock.patch.dict(os.environ, {'NOTKI_ALLOW_UNVERIFIED_UPDATES': '1'}):
+                status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
+                    'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.94'
+                })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
 
@@ -755,10 +765,11 @@ class ServerFlowTests(unittest.TestCase):
             mock_opener.open.return_value = mock_cm
             mock_build_opener.return_value = mock_opener
 
-            status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/main',
-                'isBeta': True
-            })
+            with unittest.mock.patch.dict(os.environ, {'NOTKI_ALLOW_BETA_UPDATES': '1', 'NOTKI_ALLOW_UNVERIFIED_UPDATES': '1'}):
+                status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
+                    'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/main',
+                    'isBeta': True
+                })
             self.assertEqual(status, 200)
             self.assertTrue(res.get('success', False))
             self.assertTrue(mock_extract.called)
@@ -1115,7 +1126,7 @@ class ServerFlowTests(unittest.TestCase):
         # Login 2FA with valid TOTP code
         status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa@example.com', 'password': 'user-passphrase-123'})
         temp_token = res['tempToken']
-        valid_code = server.compute_totp_code(secret)
+        valid_code = server.compute_totp_code(secret, counter=int(server.time.time() // 30) + 1)
         status, res = self.request(unauth_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': valid_code})
         self.assertEqual(status, 200)
         self.assertEqual(res['user']['email'], 'user2fa@example.com')
@@ -1221,9 +1232,8 @@ class ServerFlowTests(unittest.TestCase):
         target_user = next(u for u in summary['users'] if u['email'] == 'user2fa@example.com')
         self.assertFalse(target_user['has2FA'])
 
-        status, res = self.request(user_client, 'GET', '/api/account/2fa')
-        self.assertFalse(res['hasTotp'])
-        self.assertEqual(res['passkeys'], [])
+        status, _ = self.request(user_client, 'GET', '/api/account/2fa')
+        self.assertEqual(status, 401)  # sessions are revoked when 2FA is reset
 
         # Reset require2FA so it doesn't break subsequent tests that use this admin session
         self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': False, 'logLevel': 'INFO'})
@@ -1364,7 +1374,7 @@ class ServerFlowTests(unittest.TestCase):
         # Test check_origin accepts matching X-Forwarded-Host
         status, _ = self.request(
             self.admin, 'POST', '/api/admin/invites', {},
-            headers={'Origin': 'https://notes.example.com', 'X-Forwarded-Host': 'notes.example.com'}
+            headers={'Origin': 'https://notes.example.com', 'X-Forwarded-Host': 'notes.example.com', 'X-Forwarded-Proto': 'https'}
         )
         self.assertEqual(status, 201)
 
@@ -1379,7 +1389,7 @@ class ServerFlowTests(unittest.TestCase):
         # Test invite URL generation with X-Forwarded-Host and X-Forwarded-Proto
         status, invite = self.request(
             self.admin, 'POST', '/api/admin/invites', {},
-            headers={'X-Forwarded-Host': 'notki.cloudflare.net', 'X-Forwarded-Proto': 'https'}
+            headers={'Origin': 'https://notki.cloudflare.net', 'X-Forwarded-Host': 'notki.cloudflare.net', 'X-Forwarded-Proto': 'https'}
         )
         self.assertEqual(status, 201)
         self.assertTrue(invite['url'].startswith('https://notki.cloudflare.net/?invite='))
@@ -1390,7 +1400,7 @@ class ServerFlowTests(unittest.TestCase):
         request = Request(
             self.base_url + '/api/login',
             data=req_data,
-            headers={'Content-Type': 'application/json', 'X-Forwarded-Proto': 'https'},
+            headers=with_same_origin(self.base_url, {'Content-Type': 'application/json', 'X-Forwarded-Proto': 'https'}),
             method='POST'
         )
         with client.open(request) as response:
@@ -1420,7 +1430,7 @@ class ServerFlowTests(unittest.TestCase):
         request = Request(
             self.base_url + '/api/login',
             data=req_data,
-            headers={'Content-Type': 'application/json'},
+            headers=with_same_origin(self.base_url, {'Content-Type': 'application/json'}),
             method='POST'
         )
         with client.open(request) as response:
@@ -1436,7 +1446,7 @@ class ServerFlowTests(unittest.TestCase):
             request = Request(
                 self.base_url + '/api/login',
                 data=req_data,
-                headers={'Content-Type': 'application/json'},
+                headers=with_same_origin(self.base_url, {'Content-Type': 'application/json'}),
                 method='POST'
             )
             with client.open(request) as response:
@@ -1610,8 +1620,12 @@ class ServerFlowTests(unittest.TestCase):
         })
         self.assertEqual(status, 200)
         self.assertFalse(server.is_rate_limited(ip))
-        self.assertEqual(server.FAILED_AUTH_ATTEMPTS.get(ip, []), [])
-        self.assertEqual([item for item in server.get_banned_ips() if item['ip'] == ip], [])
+        # A successful login clears the account-specific failures but deliberately
+        # keeps the per-IP budget so an attacker cannot reset it with another login.
+        self.assertNotIn(('127.0.0.1', 'admin@example.com'), server.FAILED_AUTH_ACCOUNTS)
+        self.assertFalse(server.is_account_rate_limited('admin@example.com'))
+        self.assertEqual(len(server.FAILED_AUTH_ATTEMPTS.get(ip, [])), 2)
+        self.assertFalse(next(item for item in server.get_banned_ips() if item['ip'] == ip)['isBanned'])
 
     def test_invite_validity_days_are_bounded(self):
         from datetime import datetime
@@ -1633,6 +1647,8 @@ class FirstRunSetupTests(unittest.TestCase):
         self.original_db_path = server.DB_PATH
         server.DB_PATH = Path(self.temp_dir.name) / 'fresh.sqlite3'
         server.initialize_database()
+        self.original_setup_token = server.GENERATED_SETUP_TOKEN
+        server.GENERATED_SETUP_TOKEN = 'test-setup-token'
         self.http_server = ThreadingHTTPServer(('127.0.0.1', 0), server.NotkiHandler)
         self.thread = threading.Thread(target=self.http_server.serve_forever, daemon=True)
         self.thread.start()
@@ -1644,6 +1660,7 @@ class FirstRunSetupTests(unittest.TestCase):
         self.http_server.server_close()
         self.thread.join(timeout=2)
         server.DB_PATH = self.original_db_path
+        server.GENERATED_SETUP_TOKEN = self.original_setup_token
         self.temp_dir.cleanup()
 
     def request(self, method, path, payload=None, headers=None):
@@ -1651,7 +1668,7 @@ class FirstRunSetupTests(unittest.TestCase):
         request = Request(
             self.base_url + path,
             data=data,
-            headers={'Content-Type': 'application/json', **(headers or {})},
+            headers=with_same_origin(self.base_url, {'Content-Type': 'application/json', **(headers or {})}),
             method=method,
         )
         try:
@@ -1667,7 +1684,7 @@ class FirstRunSetupTests(unittest.TestCase):
         request = Request(
             self.base_url + path,
             data=body,
-            headers={'Content-Type': content_type},
+            headers=with_same_origin(self.base_url, {'Content-Type': content_type}),
             method=method,
         )
         try:
@@ -1702,7 +1719,7 @@ class FirstRunSetupTests(unittest.TestCase):
         status, result = self.request('POST', '/api/setup/admin', {
             'email': 'admin@example.com', 'password': 'secure-first-admin-password',
         })
-        self.assertEqual(status, 201)
+        self.assertEqual(status, 201, result)
         self.assertTrue(result['user']['isAdmin'])
         status, result = self.request('GET', '/api/setup/status')
         self.assertFalse(result['needsSetup'])
@@ -1711,7 +1728,7 @@ class FirstRunSetupTests(unittest.TestCase):
         })
         self.assertEqual(status, 409)
 
-    def test_setup_rejects_forwarded_remote_client(self):
+    def test_setup_requires_token_and_ignores_forwarded_headers(self):
         payload = {'email': 'proxy-admin@example.com', 'password': 'proxy-admin-password'}
         for headers, label in (
             ({'Host': 'localhost', 'X-Forwarded-For': '203.0.113.5'}, 'X-Forwarded-For'),
@@ -1721,11 +1738,22 @@ class FirstRunSetupTests(unittest.TestCase):
             ({'Host': 'localhost', 'Forwarded': 'host=notki.example.com;proto=http'}, 'Forwarded host'),
         ):
             with self.subTest(header=label):
-                status, _ = self.request('POST', '/api/setup/admin', payload, headers)
+                status, _ = self.request(
+                    'POST', '/api/setup/admin', payload,
+                    dict(headers, **{'X-Setup-Token': ''}),
+                )
                 self.assertEqual(status, 403)
 
-        # A direct loopback request is still allowed to create the first administrator.
-        status, result = self.request('POST', '/api/setup/admin', payload, {'Host': 'localhost'})
+        status, _ = self.request(
+            'POST', '/api/setup/admin', payload,
+            {'Host': 'localhost', 'X-Setup-Token': 'wrong-token'},
+        )
+        self.assertEqual(status, 403)
+
+        status, result = self.request(
+            'POST', '/api/setup/admin', payload,
+            {'Host': 'localhost', 'Origin': 'http://localhost', 'X-Setup-Token': 'test-setup-token'},
+        )
         self.assertEqual(status, 201)
         self.assertTrue(result['user']['isAdmin'])
 
@@ -2333,69 +2361,55 @@ class TranslateMessageTests(unittest.TestCase):
 class RecordFailedAuthTests(unittest.TestCase):
     def setUp(self):
         server.FAILED_AUTH_ATTEMPTS.clear()
-        server.AUTH_FAILURES.clear()
+        server.FAILED_AUTH_ACCOUNTS.clear()
+        server.ACCOUNT_FAILURES.clear()
 
     def tearDown(self):
         server.FAILED_AUTH_ATTEMPTS.clear()
-        server.AUTH_FAILURES.clear()
+        server.FAILED_AUTH_ACCOUNTS.clear()
+        server.ACCOUNT_FAILURES.clear()
 
     @unittest.mock.patch('server.time.time')
     def test_record_failed_auth_new_ip(self, mock_time):
         mock_time.return_value = 1000.0
-        server.record_failed_auth('192.168.1.1')
+        server.record_failed_auth('192.168.1.1', 'victim@example.com')
 
-        self.assertIn('192.168.1.1', server.FAILED_AUTH_ATTEMPTS)
         self.assertEqual(server.FAILED_AUTH_ATTEMPTS['192.168.1.1'], [1000.0])
-        self.assertIn('192.168.1.1', server.AUTH_FAILURES)
-        self.assertEqual(server.AUTH_FAILURES['192.168.1.1'], [1000.0])
+        self.assertEqual(server.FAILED_AUTH_ACCOUNTS[('192.168.1.1', 'victim@example.com')], [1000.0])
+        self.assertEqual(server.ACCOUNT_FAILURES['victim@example.com'], [1000.0])
 
     @unittest.mock.patch('server.time.time')
     def test_record_failed_auth_existing_ip(self, mock_time):
         mock_time.return_value = 1000.0
-        server.record_failed_auth('192.168.1.2')
+        server.record_failed_auth('192.168.1.2', 'victim@example.com')
 
         mock_time.return_value = 1010.0
-        server.record_failed_auth('192.168.1.2')
+        server.record_failed_auth('192.168.1.2', 'victim@example.com')
 
         self.assertEqual(server.FAILED_AUTH_ATTEMPTS['192.168.1.2'], [1000.0, 1010.0])
-        self.assertEqual(server.AUTH_FAILURES['192.168.1.2'], [1000.0, 1010.0])
+        self.assertEqual(server.ACCOUNT_FAILURES['victim@example.com'], [1000.0, 1010.0])
 
     @unittest.mock.patch('server.time.time')
     def test_record_failed_auth_removes_old_attempts(self, mock_time):
-        # Add an old attempt
         server.FAILED_AUTH_ATTEMPTS['192.168.1.3'] = [900.0]
-        server.AUTH_FAILURES['192.168.1.3'] = [900.0]
 
-        # Add a new attempt, old one should be filtered out because now - t = 1000 - 900 = 100 >= 60
+        # Entries older than one hour are dropped (1000 - 900 = 1000 ... still kept,
+        # so use a timestamp beyond the 3600 second retention window).
         mock_time.return_value = 1000.0
         server.record_failed_auth('192.168.1.3')
+        self.assertEqual(server.FAILED_AUTH_ATTEMPTS['192.168.1.3'], [900.0, 1000.0])
 
-        self.assertEqual(server.FAILED_AUTH_ATTEMPTS['192.168.1.3'], [1000.0])
-        self.assertEqual(server.AUTH_FAILURES['192.168.1.3'], [900.0, 1000.0])
-
-        # Another attempt within 60s
-        mock_time.return_value = 1050.0
+        mock_time.return_value = 5000.0
         server.record_failed_auth('192.168.1.3')
+        self.assertEqual(server.FAILED_AUTH_ATTEMPTS['192.168.1.3'], [5000.0])
 
-        # 1050.0 - 1000.0 = 50 < 60, so 1000.0 is kept
-        self.assertEqual(server.FAILED_AUTH_ATTEMPTS['192.168.1.3'], [1000.0, 1050.0])
-        self.assertEqual(server.AUTH_FAILURES['192.168.1.3'], [900.0, 1000.0, 1050.0])
-
-        # Another attempt outside 60s
-        mock_time.return_value = 1120.0
-        server.record_failed_auth('192.168.1.3')
-
-        # 1120.0 - 1000.0 = 120 >= 60 (discarded)
-        # 1120.0 - 1050.0 = 70 >= 60 (discarded)
-        self.assertEqual(server.FAILED_AUTH_ATTEMPTS['192.168.1.3'], [1120.0])
-        self.assertEqual(server.AUTH_FAILURES['192.168.1.3'], [900.0, 1000.0, 1050.0, 1120.0])
-
-        # Finally test the 3600 limit for AUTH_FAILURES
-        # 4600 - 900 = 3700 >= 3600 (filtered out)
-        # 4600 - 1000 = 3600 >= 3600 (filtered out)
-        mock_time.return_value = 4600.0
-        server.record_failed_auth('192.168.1.3')
-        self.assertEqual(server.AUTH_FAILURES['192.168.1.3'], [1050.0, 1120.0, 4600.0])
+    @unittest.mock.patch('server.time.time')
+    def test_record_failed_auth_bounds_per_key_growth(self, mock_time):
+        mock_time.return_value = 1000.0
+        for _ in range(server.MAX_ATTEMPTS_PER_KEY + 25):
+            server.record_failed_auth('192.168.1.4', 'victim@example.com')
+        self.assertEqual(len(server.FAILED_AUTH_ATTEMPTS['192.168.1.4']), server.MAX_ATTEMPTS_PER_KEY)
+        self.assertEqual(len(server.ACCOUNT_FAILURES['victim@example.com']), server.MAX_ATTEMPTS_PER_KEY)
 
 
 class IsRateLimitedTests(unittest.TestCase):
@@ -2604,6 +2618,7 @@ class TestCreateServerBackupTemporaryFile(unittest.TestCase):
                 self.response_status = status
 
         handler = DummyHandler()
+        handler.require_step_up = lambda user: None
         original_named_temp_file = tempfile.NamedTemporaryFile
         temp_files_created = []
 
@@ -2675,6 +2690,16 @@ class TestClientIPAndProxyTrust(unittest.TestCase):
         h3 = self._make_handler('172.16.0.1', '203.0.113.30')
         self.assertEqual(h3.get_client_ip(), '172.16.0.1')
 
+    def test_trusted_proxy_chain_is_walked_from_the_right(self):
+        os.environ['NOTKI_TRUST_PROXY'] = '127.0.0.1/32, 10.0.0.0/8'
+        handler = self._make_handler(
+            '127.0.0.1',
+            '198.51.100.99, 203.0.113.195, 10.0.0.5',
+        )
+        # The leftmost value is attacker-controlled; the rightmost untrusted hop
+        # is the only address a trusted proxy could not have supplied itself.
+        self.assertEqual(handler.get_client_ip(), '203.0.113.195')
+
 
 class Fail2banUnitTests(unittest.TestCase):
     def setUp(self):
@@ -2699,12 +2724,18 @@ class Fail2banUnitTests(unittest.TestCase):
             server.record_failed_auth(ip, 'attacker@example.com')
 
         # A successful login for the attacker's own account must not erase the
-        # failures recorded against the victim account.
+        # per-IP budget nor the failures recorded against the victim account.
         server.clear_failed_auth(ip, 'attacker@example.com')
-        self.assertEqual(len(server.FAILED_AUTH_ATTEMPTS.get(ip, [])), 5)
-        self.assertFalse(server.is_rate_limited(ip, max_failed=6))
+        self.assertEqual(len(server.FAILED_AUTH_ATTEMPTS.get(ip, [])), 10)
+        self.assertNotIn('attacker@example.com', server.ACCOUNT_FAILURES)
+        self.assertIn('victim@example.com', server.ACCOUNT_FAILURES)
 
         server.clear_failed_auth(ip, 'victim@example.com')
+        self.assertEqual(len(server.FAILED_AUTH_ATTEMPTS.get(ip, [])), 10)
+        self.assertNotIn('victim@example.com', server.ACCOUNT_FAILURES)
+
+        # Clearing without an account (unban tooling) resets the whole IP budget.
+        server.clear_failed_auth(ip)
         self.assertEqual(server.FAILED_AUTH_ATTEMPTS.get(ip, []), [])
         self.assertFalse(server.is_rate_limited(ip))
 
@@ -2794,7 +2825,7 @@ class Fail2banAPITests(unittest.TestCase):
             data = json.dumps(body).encode('utf-8')
             headers['Content-Type'] = 'application/json'
 
-        req = urllib.request.Request(url, data=data, headers=headers, method=method)
+        req = urllib.request.Request(url, data=data, headers=with_same_origin(url, headers), method=method)
         try:
             with urllib.request.urlopen(req) as resp:
                 payload = json.loads(resp.read().decode('utf-8'))
@@ -2900,8 +2931,8 @@ class TestSecurityAndBackupFixes(ServerFlowTests):
         with server.database() as conn:
             row = conn.execute("SELECT backup_codes_json FROM users WHERE email = 'encbackupuser@example.com'").fetchone()
             stored = json.loads(row['backup_codes_json'])
-            # Verify stored backup codes are hashed (start with pbkdf2_sha256$)
-            self.assertTrue(stored[0].startswith('pbkdf2_sha256$'))
+            # Verify stored backup codes are hashed (start with sha256$)
+            self.assertTrue(stored[0].startswith('sha256$'))
 
         # Create encrypted server backup
         status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {'encryptionPassword': 'secret-backup-pass'})
@@ -2945,11 +2976,98 @@ class TestSecurityAndBackupFixes(ServerFlowTests):
             handler = DummyHandler()
             self.assertFalse(handler.check_setup_permission())
 
+    def test_totp_secret_is_encrypted_at_rest(self):
+        user = self.register_user('encryptedtotp@example.com', 'user-passphrase-123')
+        status, res = self.request(user, 'POST', '/api/account/totp')
+        self.assertEqual(status, 200)
+        code = server.compute_totp_code(res['secret'])
+        status, _ = self.request(user, 'POST', '/api/account/totp/verify', {'code': code})
+        self.assertEqual(status, 200)
+
+        with server.database() as connection:
+            stored = connection.execute(
+                "SELECT totp_secret FROM users WHERE email = 'encryptedtotp@example.com'"
+            ).fetchone()['totp_secret']
+        self.assertTrue(stored.startswith('enc:v1:'))
+        self.assertNotIn(res['secret'], stored)
+        self.assertEqual(server.reveal_totp_secret(stored), res['secret'])
+
+    def test_legacy_plaintext_totp_secret_is_migrated(self):
+        user = self.register_user('legacytotp@example.com', 'user-passphrase-123')
+        secret = server.generate_totp_secret()
+        with server.database() as connection:
+            connection.execute(
+                "UPDATE users SET totp_secret = ? WHERE email = 'legacytotp@example.com'",
+                (secret,),
+            )
+        server.initialize_database()
+        with server.database() as connection:
+            stored = connection.execute(
+                "SELECT totp_secret FROM users WHERE email = 'legacytotp@example.com'"
+            ).fetchone()['totp_secret']
+        self.assertTrue(stored.startswith('enc:v1:'))
+        self.assertEqual(server.reveal_totp_secret(stored), secret)
+
+    def test_setup_status_does_not_expose_accounts(self):
+        self.register_user('hidden@example.com')
+        status, res = self.request(self.new_client(), 'GET', '/api/setup/status')
+        self.assertEqual(status, 200)
+        self.assertEqual(res, {'needsSetup': False})
+
+    def test_step_up_requires_recent_authentication(self):
+        user = self.register_user('stepup@example.com', 'user-passphrase-123')
+        with server.database() as connection:
+            user_id = connection.execute(
+                "SELECT id FROM users WHERE email = 'stepup@example.com'"
+            ).fetchone()['id']
+            connection.execute(
+                'UPDATE sessions SET authenticated_at = ? WHERE user_id = ?',
+                (server.iso_time(server.utc_now() - timedelta(minutes=30)), user_id),
+            )
+
+        status, _ = self.request(user, 'DELETE', '/api/account/totp')
+        self.assertEqual(status, 403)
+
+        status, _ = self.request(
+            user, 'DELETE', '/api/account/totp',
+            headers={'X-Step-Up-Password': 'user-passphrase-123'},
+        )
+        self.assertEqual(status, 200)
+
     def test_public_host_invite_link(self):
         with unittest.mock.patch('server.PUBLIC_HOST', 'https://notki.example.com'):
-            status, res = self.request(self.admin, 'POST', '/api/admin/invites', {})
+            status, res = self.request(
+                self.admin, 'POST', '/api/admin/invites', {},
+                headers={'Origin': 'https://notki.example.com'},
+            )
             self.assertEqual(status, 201)
             self.assertTrue(res['url'].startswith('https://notki.example.com/?invite='))
+
+    def test_update_signature_is_verified_when_configured(self):
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from cryptography.hazmat.primitives import serialization
+
+        private_key = Ed25519PrivateKey.generate()
+        public_raw = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        payload_bytes = b'update-archive'
+        signature = private_key.sign(payload_bytes)
+        handler = server.NotkiHandler
+
+        with unittest.mock.patch.dict(os.environ, {
+            'NOTKI_UPDATE_PUBLIC_KEY': base64.b64encode(public_raw).decode('ascii'),
+        }):
+            handler._verify_update_signature(payload_bytes, {
+                'signature': base64.b64encode(signature).decode('ascii'),
+            })
+            with self.assertRaises(server.APIError):
+                handler._verify_update_signature(payload_bytes + b'x', {
+                    'signature': base64.b64encode(signature).decode('ascii'),
+                })
+            with self.assertRaises(server.APIError):
+                handler._verify_update_signature(payload_bytes, {})
 
     def test_csp_and_hsts_headers(self):
         status, res, headers = self.request_with_response_headers(self.admin, 'GET', '/api/admin/settings')

@@ -1,0 +1,4 @@
+# Runtime dependencies are pinned; install with --only-binary=:all: so no
+# unreviewed build backend is executed during deployment.
+webauthn==2.7.1
+cryptography==50.0.2

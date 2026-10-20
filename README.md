@@ -1,6 +1,6 @@
 # Notki
 
-A fast, lightweight, and private web-based note-taking application written in pure Python (Python 3.9+) with zero external dependencies from PyPI.
+A fast, lightweight, and private web-based note-taking application written in Python 3.9+. Runtime dependencies are pinned in `requirements.txt` (`webauthn` for passkeys and `cryptography` for encrypted backups).
 
 ![Main notes view](docs/desktop_notes_light.png)
 
@@ -19,7 +19,7 @@ A fast, lightweight, and private web-based note-taking application written in pu
   - Emergency 2FA recovery backup codes.
   - Option to enforce 2FA server-wide via administrative settings.
   - Fail2ban rate limiting on login and 2FA endpoints to prevent brute-force attempts, with configurable ban thresholds and duration in the Admin Panel.
-- 💾 **Transparent JSON Backups**: Full server state backup, download, upload, and restore in transparent `.json` format, with backup import support during first-run setup.
+- 💾 **Encrypted Backups**: Full server state backup, download, upload, and restore. Backups are encrypted with AES-GCM using a server key or an explicit password, with import support during first-run setup.
 - ⚙️ **Comprehensive Admin Panel**: User account management, single-use invitation link generation with custom expiration, server system stats, pinned server announcements, and direct update checks via GitHub releases.
 - 🎨 **Themes & Multi-Language Support (i18n)**: Native Light, Dark, and System theme integration, with built-in translations for English, Polish, German, French, Japanese, Korean, Italian, and Spanish.
 
@@ -38,25 +38,22 @@ A fast, lightweight, and private web-based note-taking application written in pu
 
 The easiest and recommended way to deploy Notki is using **Docker Compose**.
 
-1. Create a project directory and download `docker-compose.yml`:
+1. Download the source (or clone the pinned release) and start the locally built image:
    ```bash
-   mkdir notki && cd notki
-   curl -O https://raw.githubusercontent.com/shirou93/Notki/main/docker-compose.yml
+   git clone --branch v0.1.6.0 --depth 1 https://github.com/shirou93/Notki.git notki
+   cd notki
+   docker compose up -d --build
    ```
 
-2. Start the container in background mode:
+2. Read the one-time setup token from the container log:
    ```bash
-   docker compose up -d
+   docker compose logs notki | grep "SETUP TOKEN"
    ```
 
-3. Open your browser at `http://localhost:8000/setup` and complete the initial administrator setup.
+3. Open `http://localhost:8000/setup`, paste the token, and create the administrator.
 
-> **Security Warning (Remote Setup):**
-> For security, remote first-time setup is disabled by default. If you are accessing Notki remotely, you must either:
-> - Use an SSH tunnel to port-forward the service to your local machine (e.g. `ssh -L 8000:localhost:8000 user@server`).
-> - Pass the auto-generated setup token printed in the server console via the `X-Setup-Token` HTTP header when using the API.
-> - Temporarily set `NOTKI_ALLOW_REMOTE_SETUP=1` to allow public web access to the setup page (not recommended).
-> Alternatively, you can pre-define a custom token by setting the `NOTKI_SETUP_TOKEN` environment variable.
+> **Security Warning (First-run setup):**
+> The setup API always requires the one-time `X-Setup-Token`, regardless of the client address. The setup page asks for that token before it can create an administrator or import a backup. Set `NOTKI_SETUP_TOKEN` to a strong value before the first start if you want to choose the token yourself. Do not expose the setup page publicly without TLS.
 
 ---
 
@@ -90,12 +87,12 @@ python3 server.py --host 0.0.0.0 --port 8000
 
 ### 1. Direct Execution (Python 3.9+)
 
-Notki relies on the standard library but requires the `webauthn` library for Passkey support.
+Notki requires the pinned packages in `requirements.txt`.
 
 ```bash
-git clone https://github.com/shirou93/Notki.git
+git clone --branch v0.1.6.0 --depth 1 https://github.com/shirou93/Notki.git
 cd Notki
-pip3 install webauthn
+python3 -m pip install --only-binary=:all: -r requirements.txt
 python3 server.py
 ```
 The application will be accessible at `http://localhost:8000`.
@@ -111,12 +108,15 @@ The script creates a dedicated system user `notki`, installs the application int
 
 ---
 
-## 🛡️ Server Backups (JSON Backup)
+## 🛡️ Server Backups (Encrypted)
 
-From the **Admin Panel** under **Server Backups**, you can easily manage server data:
-- Backups include all user accounts, notes, labels, invitations, and system settings.
-- Files are saved in human-readable `.json` format with timestamped filenames (e.g., `notki-backup-20261014-120000Z-a1b2c3d4.json`).
-- You can download backups, restore existing archives on the server, upload `.json` backups from your local device, or import a backup during initial first-run setup on a new server.
+From the **Admin Panel** under **Server Backups**, you can manage server data:
+- Backups include all user accounts, notes, labels, invitations, and system settings, but never active sessions.
+- Backups are always encrypted with AES-256-GCM and use timestamped `.enc` filenames. TOTP secrets are also encrypted at rest in SQLite.
+- By default the server derives the encryption key from `NOTKI_BACKUP_KEY` or from `data/backup.key` (created with mode `0600`). Set `NOTKI_BACKUP_KEY` to a strong secret if you need to restore a backup on a fresh installation.
+- When creating a backup you may supply a separate `encryptionPassword`; restoring it then requires that password.
+- You can download backups, restore archives on the server, upload `.enc`/`.tgz`/`.json` backups, or import one during first-run setup.
+- Legacy plaintext `.json` snapshots remain importable; plaintext backup codes are re-hashed during import.
 
 ---
 
@@ -125,15 +125,26 @@ From the **Admin Panel** under **Server Backups**, you can easily manage server 
 | Variable | Description | Default Value |
 |---|---|---|
 | `NOTKI_HOST` | Network interface IP for server binding | `127.0.0.1` (`0.0.0.0` in Docker) |
-| `NOTKI_PORT` / `NOTKI_HTTP_PORT` | HTTP server port | `8000` |
+| `NOTKI_PORT` | HTTP server port | `8000` |
 | `NOTKI_DB_PATH` | Path to the SQLite3 database file | `./data/notki.sqlite3` |
-| `NOTKI_BACKUP_DIR` | Directory path for storing JSON backups | `./data/backups` |
-| `NOTKI_ALLOW_REMOTE_SETUP` | Allow first-time setup from remote IP addresses | `0` |
-| `NOTKI_SETUP_TOKEN` | A token required to perform setup remotely | Auto-generated |
-| `NOTKI_TRUST_PROXY` | Trust `X-Forwarded-For` header for rate limiting (`1`/`true` or IP/CIDR list) | `0` |
+| `NOTKI_BACKUP_DIR` | Directory for encrypted backups | `./data/backups` |
+| `NOTKI_BACKUP_KEY` | Master key for server-created encrypted backups | Key file `data/backup.key` |
+| `NOTKI_TOTP_KEY` | Key for TOTP secrets encrypted at rest | Key file `data/totp.key` |
+| `NOTKI_SETUP_TOKEN` | One-time token required by every setup/import API call | Auto-generated and printed |
+| `NOTKI_TRUST_PROXY` | Proxy peers whose forwarding headers are trusted (`1`/`true`/`all` or IP/CIDR list) | Loopback only |
+| `NOTKI_ALLOWED_HOSTS` | Optional allowlist for forwarded/host names | Empty |
+| `NOTKI_PUBLIC_HOST` | Canonical public host (or full URL) used for links and Origin checks | Empty |
+| `NOTKI_COOKIE_SECURE` | Force `Secure` + `__Host-` session cookies (`1`) or automatic (`0`/unset) | Automatic |
+| `NOTKI_PUBLIC_HTTPS` | Emit HTTPS links when TLS terminates at a proxy | `0` |
+| `NOTKI_ALLOW_BETA_UPDATES` | Allow installing the moving `main` tarball (not recommended) | `0` |
+| `NOTKI_UPDATE_SHA256` | Expected SHA-256 of an update tarball | Empty |
+| `NOTKI_UPDATE_PUBLIC_KEY` | Ed25519 public key (raw base64 or PEM) required to sign updates | Empty |
+| `NOTKI_ALLOW_UNVERIFIED_UPDATES` | Allow updates without a checksum (dangerous) | `0` |
 
 > **Reverse Proxies & HTTPS (Cloudflare Tunnel, Nginx, Caddy, Traefik, NPM):**
-> Notki operates natively as an HTTP server and automatically detects reverse proxy forwarding headers (`X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Forwarded-Ssl`). It handles secure cookie flags and generates valid HTTPS invite links without extra SSL configuration inside the app.
+> Notki validates `Origin`/`Referer` scheme, host, and port for every mutating request, and only accepts `X-Forwarded-*` headers from peers allowed by `NOTKI_TRUST_PROXY`. Configure your proxy to overwrite (not append untrusted) forwarding headers and set `NOTKI_PUBLIC_HOST`.
+>
+> **Security notes:** see [SECURITY.md](SECURITY.md) for the 0.1.6.0 hardening changelog and deployment checklist.
 
 ---
 
