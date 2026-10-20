@@ -2359,139 +2359,134 @@
     }
   }
 
-  function renderStandardView() {
-    if ($('#pinned-label-text')) $('#pinned-label-text').textContent = t('section.pinned');
-    elements.otherLabelText.textContent = t('section.other');
+  function groupDailyPlanNotes(visible) {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
-    const visible = filteredNotes();
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    const tomorrowEnd = new Date(todayEnd);
+    tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
 
-    if (view === 'dailyPlan') {
-      elements.pinnedLabel.hidden = true;
-      elements.otherLabel.hidden = true;
-      elements.pinnedGrid.replaceChildren();
-      elements.grid.replaceChildren();
-      elements.pinnedGrid.hidden = true;
-      elements.grid.hidden = true;
+    const dayOfWeek = todayStart.getDay() === 0 ? 7 : todayStart.getDay();
+    const daysUntilEndOfWeek = 7 - dayOfWeek;
+    const endOfWeek = new Date(todayEnd);
+    endOfWeek.setDate(endOfWeek.getDate() + daysUntilEndOfWeek);
 
-      const timelineEl = $('#timeline-area');
-      if (timelineEl) {
-        timelineEl.replaceChildren();
-        timelineEl.hidden = visible.length === 0;
+    const endOfNextWeek = new Date(endOfWeek);
+    endOfNextWeek.setDate(endOfNextWeek.getDate() + 7);
 
-        if (visible.length > 0) {
-          const now = new Date();
-          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-          const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const endOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59, 999);
 
-          const tomorrowStart = new Date(todayStart);
-          tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-          const tomorrowEnd = new Date(todayEnd);
-          tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
+    const groups = {
+      overdue: [],
+      today: [],
+      tomorrow: [],
+      thisWeek: [],
+      nextWeek: [],
+      thisMonth: [],
+      nextMonth: [],
+      later: []
+    };
 
-          const dayOfWeek = todayStart.getDay() === 0 ? 7 : todayStart.getDay();
-          const daysUntilEndOfWeek = 7 - dayOfWeek;
-          const endOfWeek = new Date(todayEnd);
-          endOfWeek.setDate(endOfWeek.getDate() + daysUntilEndOfWeek);
-
-          const endOfNextWeek = new Date(endOfWeek);
-          endOfNextWeek.setDate(endOfNextWeek.getDate() + 7);
-
-          const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-          const endOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59, 999);
-
-          const groups = {
-            overdue: [],
-            today: [],
-            tomorrow: [],
-            thisWeek: [],
-            nextWeek: [],
-            thisMonth: [],
-            nextMonth: [],
-            later: []
-          };
-
-          visible.forEach(note => {
-            const d = new Date(note.dueDate);
-            if (Number.isNaN(d.getTime())) return;
-            if (d < todayStart) {
-              groups.overdue.push(note);
-            } else if (d <= todayEnd) {
-              groups.today.push(note);
-            } else if (d <= tomorrowEnd) {
-              groups.tomorrow.push(note);
-            } else if (d <= endOfWeek) {
-              groups.thisWeek.push(note);
-            } else if (d <= endOfNextWeek) {
-              groups.nextWeek.push(note);
-            } else if (d <= endOfMonth) {
-              groups.thisMonth.push(note);
-            } else if (d <= endOfNextMonth) {
-              groups.nextMonth.push(note);
-            } else {
-              groups.later.push(note);
-            }
-          });
-
-          const groupOrder = currentSort === 'newest'
-            ? ['later', 'nextMonth', 'thisMonth', 'nextWeek', 'thisWeek', 'tomorrow', 'today', 'overdue']
-            : ['overdue', 'today', 'tomorrow', 'thisWeek', 'nextWeek', 'thisMonth', 'nextMonth', 'later'];
-
-          groupOrder.forEach(key => {
-            const items = groups[key];
-            if (items && items.length > 0) {
-              const labelDiv = document.createElement('div');
-              labelDiv.className = 'section-label';
-              const spanText = document.createElement('span');
-              spanText.textContent = t(`section.${key}`);
-              const spanRule = document.createElement('span');
-              spanRule.className = 'section-rule';
-              labelDiv.appendChild(spanText);
-              labelDiv.appendChild(spanRule);
-
-              const gridDiv = document.createElement('div');
-              gridDiv.className = 'notes-grid';
-              gridDiv.replaceChildren(...items.map(makeCard));
-
-              timelineEl.appendChild(labelDiv);
-              timelineEl.appendChild(gridDiv);
-            }
-          });
-        }
+    visible.forEach(note => {
+      const d = new Date(note.dueDate);
+      if (Number.isNaN(d.getTime())) return;
+      if (d < todayStart) {
+        groups.overdue.push(note);
+      } else if (d <= todayEnd) {
+        groups.today.push(note);
+      } else if (d <= tomorrowEnd) {
+        groups.tomorrow.push(note);
+      } else if (d <= endOfWeek) {
+        groups.thisWeek.push(note);
+      } else if (d <= endOfNextWeek) {
+        groups.nextWeek.push(note);
+      } else if (d <= endOfMonth) {
+        groups.thisMonth.push(note);
+      } else if (d <= endOfNextMonth) {
+        groups.nextMonth.push(note);
+      } else {
+        groups.later.push(note);
       }
+    });
+    return groups;
+  }
 
-      const headingActions = $('#page-heading-actions');
-      if (headingActions) {
-        headingActions.replaceChildren();
-        if (visible.length > 0) {
-          const exportBtn = document.createElement('button');
-          exportBtn.type = 'button';
-          exportBtn.className = 'button-secondary';
-          exportBtn.style.fontSize = '12px';
-          exportBtn.style.padding = '6px 12px';
-          exportBtn.style.display = 'inline-flex';
-          exportBtn.style.alignItems = 'center';
-          exportBtn.style.gap = '6px';
-          exportBtn.innerHTML = `<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>${t('dailyPlan.exportCalendar')}</span>`;
-          exportBtn.addEventListener('click', () => {
-            downloadIcsFile('plan-dnia.ics', visible);
-          });
-          headingActions.appendChild(exportBtn);
-        }
-      }
+  function renderTimelineGroups(groups, timelineEl) {
+    const groupOrder = currentSort === 'newest'
+      ? ['later', 'nextMonth', 'thisMonth', 'nextWeek', 'thisWeek', 'tomorrow', 'today', 'overdue']
+      : ['overdue', 'today', 'tomorrow', 'thisWeek', 'nextWeek', 'thisMonth', 'nextMonth', 'later'];
 
-      elements.empty.hidden = visible.length !== 0;
-      elements.countLabel.textContent = query
-        ? t('count.searchResults', { count: visible.length })
-        : `${visible.length} ${pluralText('count.notesLabel', visible.length)}`;
-      elements.footerCount.textContent = `${visible.length} ${pluralText('footer.count', visible.length)}`;
-      updateEmptyState();
-      if (activeId) {
-        const current = notes.find(note => note.id === activeId) || sharedNotes.find(note => note.id === activeId);
-        if (current) updateEditorActions(current);
+    groupOrder.forEach(key => {
+      const items = groups[key];
+      if (items && items.length > 0) {
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'section-label';
+        const spanText = document.createElement('span');
+        spanText.textContent = t(`section.${key}`);
+        const spanRule = document.createElement('span');
+        spanRule.className = 'section-rule';
+        labelDiv.appendChild(spanText);
+        labelDiv.appendChild(spanRule);
+
+        const gridDiv = document.createElement('div');
+        gridDiv.className = 'notes-grid';
+        gridDiv.replaceChildren(...items.map(makeCard));
+
+        timelineEl.appendChild(labelDiv);
+        timelineEl.appendChild(gridDiv);
       }
-      return;
+    });
+  }
+
+  function createExportCalendarButton(visible) {
+    const exportBtn = document.createElement('button');
+    exportBtn.type = 'button';
+    exportBtn.className = 'button-secondary';
+    exportBtn.style.fontSize = '12px';
+    exportBtn.style.padding = '6px 12px';
+    exportBtn.style.display = 'inline-flex';
+    exportBtn.style.alignItems = 'center';
+    exportBtn.style.gap = '6px';
+    exportBtn.innerHTML = `<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>${t('dailyPlan.exportCalendar')}</span>`;
+    exportBtn.addEventListener('click', () => {
+      downloadIcsFile('plan-dnia.ics', visible);
+    });
+    return exportBtn;
+  }
+
+  function renderDailyPlanView(visible) {
+    elements.pinnedLabel.hidden = true;
+    elements.otherLabel.hidden = true;
+    elements.pinnedGrid.replaceChildren();
+    elements.grid.replaceChildren();
+    elements.pinnedGrid.hidden = true;
+    elements.grid.hidden = true;
+
+    const timelineEl = $('#timeline-area');
+    if (timelineEl) {
+      timelineEl.replaceChildren();
+      timelineEl.hidden = visible.length === 0;
+
+      if (visible.length > 0) {
+        const groups = groupDailyPlanNotes(visible);
+        renderTimelineGroups(groups, timelineEl);
+      }
     }
 
+    const headingActions = $('#page-heading-actions');
+    if (headingActions) {
+      headingActions.replaceChildren();
+      if (visible.length > 0) {
+        headingActions.appendChild(createExportCalendarButton(visible));
+      }
+    }
+  }
+
+  function renderRegularView(visible) {
     const headingActions = $('#page-heading-actions');
     if (headingActions) {
       headingActions.replaceChildren();
@@ -2512,6 +2507,20 @@
     elements.grid.replaceChildren(...regularItems.map(makeCard));
     elements.pinnedLabel.hidden = pinnedItems.length === 0;
     elements.otherLabel.hidden = pinnedItems.length === 0 || regularItems.length === 0;
+  }
+
+  function renderStandardView() {
+    if ($('#pinned-label-text')) $('#pinned-label-text').textContent = t('section.pinned');
+    elements.otherLabelText.textContent = t('section.other');
+
+    const visible = filteredNotes();
+
+    if (view === 'dailyPlan') {
+      renderDailyPlanView(visible);
+    } else {
+      renderRegularView(visible);
+    }
+
     elements.empty.hidden = visible.length !== 0;
     elements.countLabel.textContent = query
       ? t('count.searchResults', { count: visible.length })
@@ -2523,7 +2532,6 @@
       if (current) updateEditorActions(current);
     }
   }
-
   function render() {
     updateSidebarCounts();
     renderAnnouncementBanner();
