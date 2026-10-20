@@ -416,7 +416,7 @@ def unban_ip(ip):
     with FAILED_AUTH_LOCK:
         mem_found = ip in FAILED_AUTH_ATTEMPTS
         FAILED_AUTH_ATTEMPTS.pop(ip, None)
-        for account_key_value in [k for k in FAILED_AUTH_ACCOUNTS if k[0] == ip]:
+        for account_key_value in tuple(k for k in FAILED_AUTH_ACCOUNTS if k[0] == ip):
             FAILED_AUTH_ACCOUNTS.pop(account_key_value, None)
 
     db_found = False
@@ -457,7 +457,7 @@ def clear_failed_auth(ip, account=None):
 
     with FAILED_AUTH_LOCK:
         FAILED_AUTH_ATTEMPTS.pop(ip, None)
-        for account_key_value in [k for k in FAILED_AUTH_ACCOUNTS if k[0] == ip]:
+        for account_key_value in tuple(k for k in FAILED_AUTH_ACCOUNTS if k[0] == ip):
             FAILED_AUTH_ACCOUNTS.pop(account_key_value, None)
 
     try:
