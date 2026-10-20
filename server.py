@@ -266,7 +266,7 @@ def get_fail2ban_config():
     ban_time = 60
     try:
         with database() as connection:
-            rows = connection.execute("SELECT key, value FROM settings WHERE key LIKE 'fail2ban%'").fetchall()
+            rows = connection.execute("SELECT key, value FROM settings WHERE key LIKE ?", ('fail2ban%',)).fetchall()
             settings_dict = {row['key']: row['value'] for row in rows}
             if 'fail2banEnabled' in settings_dict:
                 enabled = settings_dict['fail2banEnabled'] == 'true'
