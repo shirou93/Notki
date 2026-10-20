@@ -2559,6 +2559,42 @@ class TestParseHeaderParams(unittest.TestCase):
                 self.assertEqual(result, expected)
 
 
+class TestHashPassword(unittest.TestCase):
+    def test_hash_format(self):
+        password = "secret_password_123"
+        hashed = server.hash_password(password)
+        parts = hashed.split('$')
+
+        self.assertEqual(len(parts), 4)
+        self.assertEqual(parts[0], 'pbkdf2_sha256')
+        self.assertEqual(int(parts[1]), server.PASSWORD_ITERATIONS)
+        self.assertEqual(len(parts[2]), 32) # 16 bytes in hex is 32 chars
+        self.assertEqual(len(parts[3]), 64) # 32 bytes in hex is 64 chars
+
+    def test_salting_randomness(self):
+        password = "secret_password_123"
+        hashed1 = server.hash_password(password)
+        hashed2 = server.hash_password(password)
+
+        self.assertNotEqual(hashed1, hashed2)
+
+        # Verify that the salts are different
+        salt1 = hashed1.split('$')[2]
+        salt2 = hashed2.split('$')[2]
+        self.assertNotEqual(salt1, salt2)
+
+    def test_empty_password(self):
+        hashed = server.hash_password("")
+        self.assertTrue(hashed.startswith(f'pbkdf2_sha256${server.PASSWORD_ITERATIONS}$'))
+        self.assertEqual(len(hashed.split('$')), 4)
+
+    def test_unicode_password(self):
+        password = "🔒secret_password_日本語"
+        hashed = server.hash_password(password)
+        self.assertTrue(hashed.startswith(f'pbkdf2_sha256${server.PASSWORD_ITERATIONS}$'))
+        self.assertEqual(len(hashed.split('$')), 4)
+
+
 class TestVerifyPassword(unittest.TestCase):
     def test_verify_password_valid(self):
         password = "secret_password_123"
