@@ -62,6 +62,9 @@ const {
   openShare,
   getQuery,
   setQuery,
+  captureSlots,
+  getDragState,
+  setDragState,
 } = require('../../app.js');
 
 describe('createIconSvg', () => {
@@ -819,5 +822,39 @@ describe('buildTaskDragPreview', () => {
     expect(preview.querySelector('.task-text').textContent).toBe('<img src=x onerror="window.__xss=true">');
     // Assert that the handler didn't execute
     expect(window.__xss).toBe(false);
+  });
+});
+
+describe('captureSlots', () => {
+  it('should correctly capture the grid slots and dragged card info', () => {
+    // Setup the mock DOM for dragState.grid
+    const grid = document.createElement('div');
+    const card1 = document.createElement('div');
+    card1.className = 'note-card';
+    const card2 = document.createElement('div');
+    card2.className = 'note-card';
+    const card3 = document.createElement('div');
+    card3.className = 'note-card';
+
+    grid.appendChild(card1);
+    grid.appendChild(card2);
+    grid.appendChild(card3);
+
+    const s = {
+      grid: grid,
+      card: card2,
+      others: [],
+      startIndex: null,
+      gapIndex: null
+    };
+    setDragState(s);
+
+    captureSlots();
+
+    const state = getDragState();
+
+    expect(state.others).toEqual([card1, card3]);
+    expect(state.startIndex).toBe(1);
+    expect(state.gapIndex).toBe(1);
   });
 });

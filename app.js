@@ -4398,7 +4398,10 @@
       setCurrentSort: (s) => { currentSort = s; },
       getQuery: () => query,
       setQuery: (q) => { query = q; },
-      buildTaskDragPreview
+      buildTaskDragPreview,
+      captureSlots,
+      getDragState: () => dragState,
+      setDragState: (s) => { dragState = s; }
     };
   }
 })();
