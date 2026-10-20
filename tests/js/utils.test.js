@@ -821,3 +821,63 @@ describe('buildTaskDragPreview', () => {
     expect(window.__xss).toBe(false);
   });
 });
+
+describe('cleanupAllTaskDrags', () => {
+  let cleanupAllTaskDrags;
+
+  beforeEach(() => {
+    cleanupAllTaskDrags = require('../../app.js').cleanupAllTaskDrags;
+    // Clean up DOM before each test
+    document.body.innerHTML = '';
+    document.body.className = '';
+  });
+
+  it('removes all elements with task-drag-preview class', () => {
+    const preview1 = document.createElement('div');
+    preview1.className = 'task-drag-preview';
+    const preview2 = document.createElement('div');
+    preview2.className = 'task-drag-preview';
+
+    document.body.appendChild(preview1);
+    document.body.appendChild(preview2);
+
+    expect(document.querySelectorAll('.task-drag-preview').length).toBe(2);
+
+    cleanupAllTaskDrags();
+
+    expect(document.querySelectorAll('.task-drag-preview').length).toBe(0);
+  });
+
+  it('removes is-dragging-task class from all items', () => {
+    const item1 = document.createElement('div');
+    item1.className = 'is-dragging-task item1';
+    const item2 = document.createElement('div');
+    item2.className = 'is-dragging-task item2';
+
+    document.body.appendChild(item1);
+    document.body.appendChild(item2);
+
+    expect(document.querySelectorAll('.is-dragging-task').length).toBe(2);
+
+    cleanupAllTaskDrags();
+
+    expect(document.querySelectorAll('.is-dragging-task').length).toBe(0);
+    expect(item1.className).toBe('item1');
+    expect(item2.className).toBe('item2');
+  });
+
+  it('removes is-dragging-task-active class from body', () => {
+    document.body.classList.add('is-dragging-task-active');
+
+    expect(document.body.classList.contains('is-dragging-task-active')).toBe(true);
+
+    cleanupAllTaskDrags();
+
+    expect(document.body.classList.contains('is-dragging-task-active')).toBe(false);
+  });
+
+  it('handles empty states gracefully', () => {
+    // Should not throw when nothing to clean up
+    expect(() => cleanupAllTaskDrags()).not.toThrow();
+  });
+});
