@@ -2857,6 +2857,30 @@ class Fail2banUnitTests(unittest.TestCase):
             server.unban_all_cli()
         self.assertIn('Unbanned all IPs', buf_all.getvalue())
 
+    def test_is_account_rate_limited(self):
+        # Empty account key
+        self.assertFalse(server.is_account_rate_limited(''))
+
+        account = 'test_limit@example.com'
+        server.ACCOUNT_FAILURES.clear()
+        import time
+
+        with unittest.mock.patch('server.get_fail2ban_config', return_value={'max_attempts': 3}):
+            # Default max_failed is max(50, 3 * 5) = 50
+
+            # Use max_failed=5 directly for testing
+            now = time.time()
+            server.ACCOUNT_FAILURES[server.account_key(account)] = [now, now, now]
+            self.assertFalse(server.is_account_rate_limited(account, max_failed=5))
+
+            server.ACCOUNT_FAILURES[server.account_key(account)] = [now, now, now, now, now]
+            self.assertTrue(server.is_account_rate_limited(account, max_failed=5))
+
+            # Test window expiry
+            old = now - 4000
+            server.ACCOUNT_FAILURES[server.account_key(account)] = [old, old, old, old, old, now]
+            self.assertFalse(server.is_account_rate_limited(account, max_failed=5, window_seconds=3600))
+
 
 class Fail2banAPITests(unittest.TestCase):
     @classmethod
