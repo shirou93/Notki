@@ -2882,6 +2882,30 @@ class Fail2banUnitTests(unittest.TestCase):
     def tearDown(self):
         server.unban_all()
 
+    @unittest.mock.patch('server.database')
+    def test_get_fail2ban_config(self, mock_db_manager):
+        mock_connection = unittest.mock.MagicMock()
+        mock_db_manager.return_value.__enter__.return_value = mock_connection
+
+        # Test 1: Default configuration when database returns empty
+        mock_connection.execute.return_value.fetchall.return_value = []
+        config = server.get_fail2ban_config()
+        self.assertEqual(config, {'enabled': True, 'max_attempts': 15, 'ban_time': 60})
+
+        # Test 2: Custom configuration when database returns values
+        mock_connection.execute.return_value.fetchall.return_value = [
+            {'key': 'fail2banEnabled', 'value': 'false'},
+            {'key': 'fail2banMaxAttempts', 'value': '5'},
+            {'key': 'fail2banBanTime', 'value': '120'}
+        ]
+        config = server.get_fail2ban_config()
+        self.assertEqual(config, {'enabled': False, 'max_attempts': 5, 'ban_time': 120})
+
+        # Test 3: Exception during database operation falls back to default configuration
+        mock_connection.execute.side_effect = Exception("DB error")
+        config = server.get_fail2ban_config()
+        self.assertEqual(config, {'enabled': True, 'max_attempts': 15, 'ban_time': 60})
+
     def test_record_failed_auth_and_get_banned_ips(self):
         ip = '10.20.30.40'
         for _ in range(5):
