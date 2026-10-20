@@ -38,6 +38,7 @@ window.i18n = {
 // require the module
 const {
   bufferToBase64,
+  getCacheKey,
   encodeBase64Url,
   getTaskStatsFromHtml,
   tableCell,
@@ -879,5 +880,23 @@ describe('cleanupAllTaskDrags', () => {
   it('handles empty states gracefully', () => {
     // Should not throw when nothing to clean up
     expect(() => cleanupAllTaskDrags()).not.toThrow();
+  });
+});
+
+describe('getCacheKey', () => {
+  it('should generate a correct cache key given a standard userId and key', () => {
+    expect(getCacheKey('user123', 'notes')).toBe('notki.cache.notes.user123');
+  });
+
+  it('should handle an empty string for userId and key', () => {
+    expect(getCacheKey('', '')).toBe('notki.cache..');
+    expect(getCacheKey('', 'notes')).toBe('notki.cache.notes.');
+    expect(getCacheKey('user123', '')).toBe('notki.cache..user123');
+  });
+
+  it('should handle null or undefined gracefully', () => {
+    expect(getCacheKey(null, null)).toBe('notki.cache.null.null');
+    expect(getCacheKey(undefined, undefined)).toBe('notki.cache.undefined.undefined');
+    expect(getCacheKey('user123', null)).toBe('notki.cache.null.user123');
   });
 });
