@@ -822,17 +822,33 @@ def backup_directory():
     return Path(os.environ.get('NOTKI_BACKUP_DIR') or DB_PATH.parent / 'backups')
 
 
+def _get_key_path(filename):
+    """Return the Path where a given key file should be stored or read.
+    Respects NOTKI_KEY_DIR if set. Otherwise, uses NOTKI_KEY_DIR defaults,
+    but falls back to DB_PATH.parent if the legacy key file already exists there.
+    """
+    env_dir = os.environ.get('NOTKI_KEY_DIR')
+    if env_dir:
+        return Path(env_dir) / filename
+
+    legacy_path = DB_PATH.parent / filename
+    if legacy_path.exists():
+        return legacy_path
+
+    # If no legacy file exists, default to .keys directory in ROOT
+    return ROOT / '.keys' / filename
+
+
 def server_backup_key():
     """Return the server-managed backup key, creating a private key file once.
 
     Notki always encrypts server backups. A deployment can supply
-    ``NOTKI_BACKUP_KEY`` instead; otherwise a random 256-bit key is stored next to
-    the database with owner-only permissions.
+    ``NOTKI_BACKUP_KEY`` instead; otherwise a random 256-bit key is stored.
     """
     configured = os.environ.get('NOTKI_BACKUP_KEY', '')
     if configured:
         return configured
-    key_path = DB_PATH.parent / 'backup.key'
+    key_path = _get_key_path('backup.key')
     key_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         return key_path.read_text(encoding='utf-8').strip()
@@ -852,7 +868,7 @@ def totp_master_key():
     configured = os.environ.get('NOTKI_TOTP_KEY', '')
     if configured:
         return configured
-    key_path = DB_PATH.parent / 'totp.key'
+    key_path = _get_key_path('totp.key')
     key_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         return key_path.read_text(encoding='utf-8').strip()
@@ -2955,6 +2971,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             has_totp = False
             has_passkey = False
             require_2fa = False
+            user_data = None
             if row and valid_password:
                 totp_secret = reveal_totp_secret(row['totp_secret'])
                 has_totp = bool(totp_secret and not totp_secret.startswith('pending:'))
@@ -2962,6 +2979,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 has_passkey = pk_count > 0
                 req_row = connection.execute("SELECT value FROM settings WHERE key = 'require2FA'").fetchone()
                 require_2fa = bool(req_row and req_row['value'] == 'true')
+                user_data = public_user(row, connection)
         if not row or not valid_password:
             record_failed_auth(self.get_client_ip(), email)
             self.send_error_json('Invalid e-mail or password.', 401)
@@ -2977,7 +2995,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
         clear_failed_auth(self.get_client_ip(), email)
         token = self.new_session(row['id'])
-        self.send_json({'user': public_user(row, connection)}, extra_headers=self.session_headers(token))
+        self.send_json({'user': user_data}, extra_headers=self.session_headers(token))
 
     def login_2fa(self, payload):
         user_id = consume_temp_2fa_token(payload.get('tempToken'))
