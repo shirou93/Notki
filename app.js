@@ -4413,7 +4413,14 @@
       setCurrentSort: (s) => { currentSort = s; },
       getQuery: () => query,
       setQuery: (q) => { query = q; },
-      buildTaskDragPreview
+      buildTaskDragPreview,
+      updateStorageIndicator,
+      setOnlineStatus: (status) => { isOffline = !status; },
+      setIsSyncing: (syncing) => { isSyncing = syncing; },
+      setCurrentUser: (user) => { currentUser = user; },
+      setPendingSync: (pending) => { pendingSync = pending; },
+      hasPendingSync,
+      getElements: () => elements
     };
   }
 })();

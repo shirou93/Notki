@@ -61,7 +61,17 @@ const {
   downloadIcsFile,
   openShare,
   getQuery,
+
   setQuery,
+  buildTaskDragPreview,
+  updateStorageIndicator,
+  setOnlineStatus,
+  setIsSyncing,
+  setCurrentUser,
+  setPendingSync,
+  hasPendingSync,
+  getElements
+
 } = require('../../app.js');
 
 describe('createIconSvg', () => {
@@ -879,5 +889,107 @@ describe('cleanupAllTaskDrags', () => {
   it('handles empty states gracefully', () => {
     // Should not throw when nothing to clean up
     expect(() => cleanupAllTaskDrags()).not.toThrow();
+  });
+});
+
+
+describe('updateStorageIndicator', () => {
+  let container, dot, label, topbarSync;
+
+  beforeEach(() => {
+      document.body.innerHTML = `
+          <div class="storage-note">
+              <div class="storage-dot"></div>
+              <span></span>
+          </div>
+          <button id="topbar-sync-button"></button>
+      `;
+
+      container = document.querySelector('.storage-note');
+      dot = document.querySelector('.storage-dot');
+      label = document.querySelector('span:not(.storage-dot)');
+      topbarSync = document.getElementById('topbar-sync-button');
+
+      // Reset app state
+      setOnlineStatus(true);
+      setIsSyncing(false);
+      setCurrentUser(null);
+      setPendingSync(false);
+
+      // Mock localStorage for hasPendingSync
+      const localStorageMock = (function() {
+          let store = {};
+          return {
+              getItem: function(key) { return store[key] || null; },
+              setItem: function(key, value) { store[key] = value.toString(); },
+              removeItem: function(key) { delete store[key]; },
+              clear: function() { store = {}; }
+          };
+      })();
+      Object.defineProperty(window, 'localStorage', {
+          value: localStorageMock,
+          configurable: true,
+          writable: true
+      });
+  });
+
+  afterEach(() => {
+      window.localStorage.clear();
+      document.body.innerHTML = '';
+  });
+
+  it('should set syncing state (yellow dot, syncing text)', () => {
+      setIsSyncing(true);
+      getElements().topbarSyncBtn = topbarSync;
+      updateStorageIndicator();
+
+      expect(dot.style.background).toBe('rgb(230, 200, 117)'); // #e6c875
+      expect(label.textContent).toBe('nav.storageSyncing');
+      expect(topbarSync.disabled).toBe(true);
+  });
+
+  it('should set offline state (red dot, offline text)', () => {
+      setOnlineStatus(false);
+      getElements().topbarSyncBtn = topbarSync;
+      updateStorageIndicator();
+
+      expect(dot.style.background).toBe('rgb(229, 115, 115)'); // #e57373
+      expect(label.textContent).toBe('nav.storageOffline');
+      expect(topbarSync.hidden).toBe(false); // showSync is true when offline
+  });
+
+  it('should set pending sync state if currentUser has pending sync in localStorage', () => {
+      setCurrentUser({ id: 'user1' });
+      window.localStorage.setItem('notki.sync.pending.user1', '1');
+      getElements().topbarSyncBtn = topbarSync;
+      updateStorageIndicator();
+
+      expect(dot.style.background).toBe('rgb(230, 200, 117)'); // #e6c875
+      expect(label.textContent).toBe('nav.storageSyncing');
+  });
+
+  it('should set pending sync state if pendingSync flag is true', () => {
+      setCurrentUser({ id: 'user1' });
+      setPendingSync(true);
+      getElements().topbarSyncBtn = topbarSync;
+      updateStorageIndicator();
+
+      expect(dot.style.background).toBe('rgb(230, 200, 117)'); // #e6c875
+      expect(label.textContent).toBe('nav.storageSyncing');
+  });
+
+  it('should set normal state (green dot, normal text)', () => {
+      getElements().topbarSyncBtn = topbarSync;
+      updateStorageIndicator();
+
+      expect(dot.style.background).toBe('rgb(169, 211, 119)'); // #a9d377
+      expect(label.textContent).toBe('nav.storage');
+      expect(topbarSync.hidden).toBe(true); // hide when online
+  });
+
+  it('handles missing container gracefully', () => {
+      document.body.innerHTML = '';
+      getElements().topbarSyncBtn = topbarSync;
+      expect(() => updateStorageIndicator()).not.toThrow();
   });
 });
