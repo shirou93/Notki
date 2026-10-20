@@ -931,11 +931,7 @@ def database():
         connection.close()
 
 
-def initialize_database():
-    with database() as connection:
-        connection.execute('PRAGMA journal_mode = WAL')
-        connection.execute('PRAGMA synchronous = NORMAL')
-        connection.executescript('''
+SCHEMA_SQL = '''
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY,
                 email TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -1004,7 +1000,13 @@ def initialize_database():
                 created_at REAL NOT NULL
             );
             CREATE INDEX IF NOT EXISTS fail2ban_ip_idx ON fail2ban_attempts(ip);
-        ''')
+        '''
+
+def initialize_database():
+    with database() as connection:
+        connection.execute('PRAGMA journal_mode = WAL')
+        connection.execute('PRAGMA synchronous = NORMAL')
+        connection.executescript(SCHEMA_SQL)
         fail2ban_columns = {row['name'] for row in connection.execute('PRAGMA table_info(fail2ban_attempts)')}
         if 'account' not in fail2ban_columns:
             try:
