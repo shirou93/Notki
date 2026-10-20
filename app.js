@@ -2816,6 +2816,117 @@
     render();
   }
 
+
+  function handleCardSwipePointerDown(event, state, readOnly) {
+    if (readOnly) return;
+    if (event.button !== 0) return;
+    if (event.target.closest('button, input, .task-checkbox, .task-drag-handle, .card-drag, .card-pin, .card-tag, .card-share')) return;
+
+    state.swipe = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      deltaX: 0,
+      deltaY: 0,
+      swiping: false,
+      direction: null,
+      disqualified: false,
+    };
+  }
+
+  function handleCardSwipePointerMove(event, state, card, cardInner, swipeBgRight, swipeBgLeft) {
+    if (!state.swipe || state.swipe.disqualified || event.pointerId !== state.swipe.pointerId) return;
+
+    const deltaX = event.clientX - state.swipe.startX;
+    const deltaY = event.clientY - state.swipe.startY;
+
+    if (!state.swipe.swiping) {
+      if (Math.abs(deltaY) > 10 && Math.abs(deltaY) > Math.abs(deltaX)) {
+        state.swipe.disqualified = true;
+        return;
+      }
+      if (Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY)) {
+        state.swipe.swiping = true;
+        card.classList.add('is-swiping');
+        try { card.setPointerCapture(event.pointerId); } catch {}
+      }
+    }
+
+    if (state.swipe.swiping) {
+      event.preventDefault();
+      state.swipe.deltaX = deltaX;
+      const width = card.getBoundingClientRect().width || 200;
+      const maxSwipe = width * 0.7;
+      const maxSwipeRight = maxSwipe;
+      const clampedX = Math.max(-maxSwipe, Math.min(maxSwipeRight, deltaX));
+      cardInner.style.transform = `translateX(${clampedX}px)`;
+
+      const SWIPE_THRESHOLD = 70;
+      if (clampedX > 0) {
+        swipeBgRight.classList.add('is-visible');
+        swipeBgLeft.classList.remove('is-visible');
+        swipeBgRight.classList.toggle('is-active', clampedX >= SWIPE_THRESHOLD);
+      } else if (clampedX < 0) {
+        swipeBgLeft.classList.add('is-visible');
+        swipeBgRight.classList.remove('is-visible');
+        swipeBgLeft.classList.toggle('is-active', Math.abs(clampedX) >= SWIPE_THRESHOLD);
+      } else {
+        swipeBgRight.classList.remove('is-visible');
+        swipeBgLeft.classList.remove('is-visible');
+      }
+    }
+  }
+
+  function handleCardSwipeFinish(event, state, card, cardInner, swipeBgRight, swipeBgLeft, note) {
+    if (!state.swipe || event.pointerId !== state.swipe.pointerId) return;
+    const { swiping, deltaX } = state.swipe;
+    const pointerId = state.swipe.pointerId;
+    state.swipe = null;
+
+    if (swiping) {
+      state.wasSwiping = true;
+      window.setTimeout(() => { state.wasSwiping = false; }, 300);
+
+      card.classList.remove('is-swiping');
+      try { card.releasePointerCapture(pointerId); } catch {}
+      cardInner.style.transform = '';
+      swipeBgRight.classList.remove('is-visible', 'is-active');
+      swipeBgLeft.classList.remove('is-visible', 'is-active');
+
+      const SWIPE_THRESHOLD = 70;
+      if (deltaX >= SWIPE_THRESHOLD) {
+        handleSwipeRight(note);
+      } else if (deltaX <= -SWIPE_THRESHOLD) {
+        handleSwipeLeft(note);
+      }
+    }
+  }
+
+  function handleCardClick(event, state, card, note, readOnly) {
+    if (state.wasSwiping || (state.swipe && state.swipe.swiping)) {
+      event.stopPropagation();
+      event.preventDefault();
+      return;
+    }
+    if (event.target.closest('input[type="checkbox"], .task-checkbox, .task-drag-handle')) return;
+    if (event.target.closest('button')) return;
+    if (event.target.closest('.card-drag, .card-pin')) return;
+    if (!readOnly) {
+      const taskItem = event.target.closest('li, p, label');
+      const checkbox = (taskItem ? taskItem.querySelector('input[type="checkbox"], .task-checkbox') : null)
+        || event.target.closest('label')?.querySelector('input[type="checkbox"], .task-checkbox')
+        || (event.target.getAttribute?.('for') && card.querySelector(`#${CSS.escape ? CSS.escape(event.target.getAttribute('for')) : event.target.getAttribute('for')}`));
+      if (checkbox) {
+        event.preventDefault();
+        event.stopPropagation();
+        checkbox.checked = !checkbox.checked;
+        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        return;
+      }
+    }
+    openEditor(note.id);
+  }
+
   function setupCardSwipe(card, note, readOnly) {
     const swipeBgRight = $('.card-swipe-right', card);
     const swipeBgLeft = $('.card-swipe-left', card);
@@ -2823,123 +2934,18 @@
     setupSwipeLabels(card, note);
 
     const cardInner = $('.card-inner', card);
-    let cardSwipeState = null;
+    const state = { swipe: null, wasSwiping: false };
 
-    card.addEventListener('pointerdown', event => {
-      if (readOnly) return;
-      if (event.button !== 0) return;
-      if (event.target.closest('button, input, .task-checkbox, .task-drag-handle, .card-drag, .card-pin, .card-tag, .card-share')) return;
+    card.addEventListener('pointerdown', event => handleCardSwipePointerDown(event, state, readOnly));
+    card.addEventListener('pointermove', event => handleCardSwipePointerMove(event, state, card, cardInner, swipeBgRight, swipeBgLeft));
 
-      cardSwipeState = {
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        deltaX: 0,
-        deltaY: 0,
-        swiping: false,
-        direction: null,
-        disqualified: false,
-      };
-    });
-
-    card.addEventListener('pointermove', event => {
-      if (!cardSwipeState || cardSwipeState.disqualified || event.pointerId !== cardSwipeState.pointerId) return;
-
-      const deltaX = event.clientX - cardSwipeState.startX;
-      const deltaY = event.clientY - cardSwipeState.startY;
-
-      if (!cardSwipeState.swiping) {
-        if (Math.abs(deltaY) > 10 && Math.abs(deltaY) > Math.abs(deltaX)) {
-          cardSwipeState.disqualified = true;
-          return;
-        }
-        if (Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY)) {
-          cardSwipeState.swiping = true;
-          card.classList.add('is-swiping');
-          try { card.setPointerCapture(event.pointerId); } catch {}
-        }
-      }
-
-      if (cardSwipeState.swiping) {
-        event.preventDefault();
-        cardSwipeState.deltaX = deltaX;
-        const width = card.getBoundingClientRect().width || 200;
-        const maxSwipe = width * 0.7;
-        const maxSwipeRight = maxSwipe;
-        const clampedX = Math.max(-maxSwipe, Math.min(maxSwipeRight, deltaX));
-        cardInner.style.transform = `translateX(${clampedX}px)`;
-
-        const SWIPE_THRESHOLD = 70;
-        if (clampedX > 0) {
-          swipeBgRight.classList.add('is-visible');
-          swipeBgLeft.classList.remove('is-visible');
-          swipeBgRight.classList.toggle('is-active', clampedX >= SWIPE_THRESHOLD);
-        } else if (clampedX < 0) {
-          swipeBgLeft.classList.add('is-visible');
-          swipeBgRight.classList.remove('is-visible');
-          swipeBgLeft.classList.toggle('is-active', Math.abs(clampedX) >= SWIPE_THRESHOLD);
-        } else {
-          swipeBgRight.classList.remove('is-visible');
-          swipeBgLeft.classList.remove('is-visible');
-        }
-      }
-    });
-
-    let wasSwiping = false;
-
-    const finishSwipe = (event) => {
-      if (!cardSwipeState || event.pointerId !== cardSwipeState.pointerId) return;
-      const { swiping, deltaX } = cardSwipeState;
-      const pointerId = cardSwipeState.pointerId;
-      cardSwipeState = null;
-
-      if (swiping) {
-        wasSwiping = true;
-        window.setTimeout(() => { wasSwiping = false; }, 300);
-
-        card.classList.remove('is-swiping');
-        try { card.releasePointerCapture(pointerId); } catch {}
-        cardInner.style.transform = '';
-        swipeBgRight.classList.remove('is-visible', 'is-active');
-        swipeBgLeft.classList.remove('is-visible', 'is-active');
-
-        const SWIPE_THRESHOLD = 70;
-        if (deltaX >= SWIPE_THRESHOLD) {
-          handleSwipeRight(note);
-        } else if (deltaX <= -SWIPE_THRESHOLD) {
-          handleSwipeLeft(note);
-        }
-      }
-    };
-
+    const finishSwipe = event => handleCardSwipeFinish(event, state, card, cardInner, swipeBgRight, swipeBgLeft, note);
     card.addEventListener('pointerup', finishSwipe);
     card.addEventListener('pointercancel', finishSwipe);
 
-    card.addEventListener('click', event => {
-      if (wasSwiping || (cardSwipeState && cardSwipeState.swiping)) {
-        event.stopPropagation();
-        event.preventDefault();
-        return;
-      }
-      if (event.target.closest('input[type="checkbox"], .task-checkbox, .task-drag-handle')) return;
-      if (event.target.closest('button')) return;
-      if (event.target.closest('.card-drag, .card-pin')) return;
-      if (!readOnly) {
-        const taskItem = event.target.closest('li, p, label');
-        const checkbox = (taskItem ? taskItem.querySelector('input[type="checkbox"], .task-checkbox') : null)
-          || event.target.closest('label')?.querySelector('input[type="checkbox"], .task-checkbox')
-          || (event.target.getAttribute?.('for') && card.querySelector(`#${CSS.escape ? CSS.escape(event.target.getAttribute('for')) : event.target.getAttribute('for')}`));
-        if (checkbox) {
-          event.preventDefault();
-          event.stopPropagation();
-          checkbox.checked = !checkbox.checked;
-          checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-          return;
-        }
-      }
-      openEditor(note.id);
-    });
+    card.addEventListener('click', event => handleCardClick(event, state, card, note, readOnly));
   }
+
 
   function setupCardTaskDrag(card, note, shared, readOnly) {
     let cardTaskDragItem = null;
