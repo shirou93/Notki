@@ -2536,6 +2536,28 @@ class AddLogTests(unittest.TestCase):
             server.MAX_LOG_ENTRIES = old_max
 
 
+class TestParseForwardedElements(unittest.TestCase):
+    def test_parse_forwarded_elements(self):
+        cases = [
+            ("empty string", "", []),
+            ("none", None, []),
+            ("single key-value", "for=192.0.2.60", [{"for": "192.0.2.60"}]),
+            ("multiple key-value", "for=192.0.2.60;proto=http;by=203.0.113.43", [{"for": "192.0.2.60", "proto": "http", "by": "203.0.113.43"}]),
+            ("multiple elements", "for=192.0.2.60, for=198.51.100.17", [{"for": "192.0.2.60"}, {"for": "198.51.100.17"}]),
+            ("mixed elements and attributes", "for=192.0.2.60;proto=http, for=198.51.100.17", [{"for": "192.0.2.60", "proto": "http"}, {"for": "198.51.100.17"}]),
+            ("quoted values", 'for="192.0.2.60"', [{"for": "192.0.2.60"}]),
+            ("whitespace trimming", "  for  =  192.0.2.60  ", [{"for": "192.0.2.60"}]),
+            ("case-insensitive keys", "For=192.0.2.60; PROTO=https", [{"for": "192.0.2.60", "proto": "https"}]),
+            ("malformed pair without equals", "for=192.0.2.60;proto", [{"for": "192.0.2.60"}]),
+            ("only malformed pair", "proto", []),
+            ("empty element", ",for=192.0.2.60", [{"for": "192.0.2.60"}]),
+        ]
+
+        for name, input_val, expected in cases:
+            with self.subTest(msg=name):
+                self.assertEqual(server.parse_forwarded_elements(input_val), expected)
+
+
 class TestParseForwardedFor(unittest.TestCase):
     def test_parse_forwarded_for(self):
         cases = [
