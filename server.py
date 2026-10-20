@@ -2962,22 +2962,23 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 has_passkey = pk_count > 0
                 req_row = connection.execute("SELECT value FROM settings WHERE key = 'require2FA'").fetchone()
                 require_2fa = bool(req_row and req_row['value'] == 'true')
-        if not row or not valid_password:
-            record_failed_auth(self.get_client_ip(), email)
-            self.send_error_json('Invalid e-mail or password.', 401)
-            return
 
-        if require_2fa and not (has_totp or has_passkey):
-            raise APIError('Two-factor authentication is required by the administrator. Please configure it.', 403)
+            if not row or not valid_password:
+                record_failed_auth(self.get_client_ip(), email)
+                self.send_error_json('Invalid e-mail or password.', 401)
+                return
 
-        if has_totp or has_passkey:
-            temp_token = create_temp_2fa_token(row['id'])
-            self.send_json({'requires2FA': True, 'tempToken': temp_token, 'hasTotp': has_totp, 'hasPasskey': has_passkey})
-            return
+            if require_2fa and not (has_totp or has_passkey):
+                raise APIError('Two-factor authentication is required by the administrator. Please configure it.', 403)
 
-        clear_failed_auth(self.get_client_ip(), email)
-        token = self.new_session(row['id'])
-        self.send_json({'user': public_user(row, connection)}, extra_headers=self.session_headers(token))
+            if has_totp or has_passkey:
+                temp_token = create_temp_2fa_token(row['id'])
+                self.send_json({'requires2FA': True, 'tempToken': temp_token, 'hasTotp': has_totp, 'hasPasskey': has_passkey})
+                return
+
+            clear_failed_auth(self.get_client_ip(), email)
+            token = self.new_session(row['id'])
+            self.send_json({'user': public_user(row, connection)}, extra_headers=self.session_headers(token))
 
     def login_2fa(self, payload):
         user_id = consume_temp_2fa_token(payload.get('tempToken'))
