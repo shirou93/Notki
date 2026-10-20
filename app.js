@@ -4386,6 +4386,7 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       bufferToBase64,
+      getCacheKey,
       encodeBase64Url,
       getTaskStatsFromHtml,
       tableCell,
