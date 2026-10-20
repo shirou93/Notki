@@ -2528,6 +2528,39 @@ class IsRateLimitedTests(unittest.TestCase):
         self.assertTrue(server.is_rate_limited('192.168.1.1'))
         self.assertFalse(server.is_rate_limited('192.168.1.2'))
 
+    @unittest.mock.patch('server.get_fail2ban_config')
+    def test_is_rate_limited_disabled(self, mock_config):
+        mock_config.return_value = {'enabled': False, 'max_attempts': 15, 'ban_time': 60}
+        self.assertFalse(server.is_rate_limited('192.168.1.100'))
+
+    @unittest.mock.patch('server.database')
+    def test_is_rate_limited_database_lookup(self, mock_db):
+        mock_conn = unittest.mock.MagicMock()
+        mock_db.return_value.__enter__.return_value = mock_conn
+        mock_cursor = unittest.mock.MagicMock()
+        mock_conn.execute.return_value = mock_cursor
+        mock_cursor.fetchone.return_value = [15]
+
+        self.assertTrue(server.is_rate_limited('192.168.1.100'))
+
+    @unittest.mock.patch('server.database')
+    def test_is_rate_limited_database_lookup_under_threshold(self, mock_db):
+        mock_conn = unittest.mock.MagicMock()
+        mock_db.return_value.__enter__.return_value = mock_conn
+        mock_cursor = unittest.mock.MagicMock()
+        mock_conn.execute.return_value = mock_cursor
+        mock_cursor.fetchone.return_value = [14]
+
+        self.assertFalse(server.is_rate_limited('192.168.1.100'))
+
+    @unittest.mock.patch('server.database')
+    def test_is_rate_limited_database_exception(self, mock_db):
+        mock_conn = unittest.mock.MagicMock()
+        mock_db.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.side_effect = Exception("Database error")
+
+        self.assertFalse(server.is_rate_limited('192.168.1.100'))
+
 
 class AddLogTests(unittest.TestCase):
     def setUp(self):
