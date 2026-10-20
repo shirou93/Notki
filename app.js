@@ -142,7 +142,7 @@
     const label = container.querySelector('span:not(.storage-dot)');
 
     const showSync = isOffline;
-    const topbarSync = elements.topbarSyncBtn || $('#topbar-sync-button');
+    const topbarSync = document.getElementById('topbar-sync-button');
 
     if (topbarSync) {
       topbarSync.hidden = !showSync;
@@ -4415,7 +4415,15 @@
       setCurrentSort: (s) => { currentSort = s; },
       getQuery: () => query,
       setQuery: (q) => { query = q; },
-      buildTaskDragPreview
+      buildTaskDragPreview,
+      updateStorageIndicator,
+      setIsOffline: (v) => { isOffline = v; },
+      setIsSyncing: (v) => { isSyncing = v; },
+      getIsSyncing: () => isSyncing,
+      hasPendingSync,
+      queueSync,
+      setPendingSync: (v) => { pendingSync = v; },
+      setCurrentUser: (v) => { currentUser = v; }
     };
   }
 })();
