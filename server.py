@@ -659,7 +659,7 @@ def compute_totp_code(secret_b32, time_step=30, counter=None):
         secret_b32 += '=' * (8 - missing_padding)
     key = base64.b32decode(secret_b32, casefold=True)
     msg = struct.pack('>Q', counter)
-    hmac_hash = hmac.new(key, msg, hashlib.sha1).digest()
+    hmac_hash = hmac.new(key, msg, hashlib.sha256).digest()
     offset = hmac_hash[-1] & 0x0f
     binary = struct.unpack('>I', hmac_hash[offset:offset+4])[0] & 0x7fffffff
     code = binary % 1_000_000
@@ -719,7 +719,7 @@ def verify_totp_counter(secret_b32, code, time_step=30, window=1):
         try:
             counter = current_counter + i
             msg = struct.pack('>Q', counter)
-            hmac_hash = hmac.new(key, msg, hashlib.sha1).digest()
+            hmac_hash = hmac.new(key, msg, hashlib.sha256).digest()
             offset = hmac_hash[-1] & 0x0f
             binary = struct.unpack('>I', hmac_hash[offset:offset+4])[0] & 0x7fffffff
             generated_code = f'{binary % 1_000_000:06d}'
@@ -3114,7 +3114,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 'UPDATE users SET totp_secret = ?, totp_last_used_step = NULL WHERE id = ?',
                 (protect_totp_secret(f'pending:{secret}'), user['id']),
             )
-        otpauth_url = f"otpauth://totp/Notki:{quote(user['email'])}?secret={secret}&issuer=Notki"
+        otpauth_url = f"otpauth://totp/Notki:{quote(user['email'])}?secret={secret}&issuer=Notki&algorithm=SHA256"
         qr_svg = qr.generate_qr_svg(otpauth_url)
         self.send_json({'secret': secret, 'qrSvg': qr_svg, 'otpauthUrl': otpauth_url})
 
