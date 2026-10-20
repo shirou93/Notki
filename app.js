@@ -4388,6 +4388,7 @@
       bufferToBase64,
       getCacheKey,
       encodeBase64Url,
+      getTaskStatsFromElement,
       getTaskStatsFromHtml,
       tableCell,
       createIconSvg,
