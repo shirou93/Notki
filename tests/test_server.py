@@ -2536,6 +2536,38 @@ class AddLogTests(unittest.TestCase):
             server.MAX_LOG_ENTRIES = old_max
 
 
+class TestParseForwardedFor(unittest.TestCase):
+    def test_parse_forwarded_for(self):
+        cases = [
+            ("empty", "", []),
+            ("none", None, []),
+            ("no for", "proto=http;by=203.0.113.43", []),
+            ("empty for", "for=", []),
+            ("empty quoted for", 'for=""', []),
+            ("single ipv4", "for=192.0.2.60", ["192.0.2.60"]),
+            ("single ipv4 port", "for=192.0.2.60:8080", ["192.0.2.60"]),
+            ("quoted single ipv4", 'for="192.0.2.60"', ["192.0.2.60"]),
+            ("quoted single ipv4 port", 'for="192.0.2.60:8080"', ["192.0.2.60"]),
+            ("single ipv6", 'for="[2001:db8:cafe::17]"', ["2001:db8:cafe::17"]),
+            ("single ipv6 port", 'for="[2001:db8:cafe::17]:4711"', ["2001:db8:cafe::17"]),
+            ("ipv4 with spaces", " for = 192.0.2.60 ", ["192.0.2.60"]),
+            ("multiple params", "for=192.0.2.60;proto=http;by=203.0.113.43", ["192.0.2.60"]),
+            ("multiple IPs", "for=192.0.2.60, for=198.51.100.17", ["192.0.2.60", "198.51.100.17"]),
+            ("multiple IPs with params", "for=192.0.2.60;proto=http;by=203.0.113.43, for=198.51.100.17", ["192.0.2.60", "198.51.100.17"]),
+            ("mixed validity", "for=192.0.2.60, proto=http, for=198.51.100.17, for=", ["192.0.2.60", "198.51.100.17"]),
+            ("capitalized keys", "For=192.0.2.60", ["192.0.2.60"]),
+            ("ipv6 missing closing bracket", 'for="[2001:db8:cafe::17"', ["2001:db8:cafe::17"]),
+            ("ipv4 simple port", "for=192.0.2.60:80", ["192.0.2.60"]),
+            ("unknown key", "unknown=192.0.2.60", []),
+            ("malformed header", "for;192.0.2.60", []),
+            ("malformed element", "for=192.0.2.60;proto", ["192.0.2.60"]),
+        ]
+
+        for name, input_val, expected in cases:
+            with self.subTest(msg=name):
+                self.assertEqual(server.parse_forwarded_for(input_val), expected)
+
+
 class TestParseHeaderParams(unittest.TestCase):
     def test_parse_header_params(self):
         cases = [
