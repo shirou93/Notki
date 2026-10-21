@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-NOTKI_INSTALL_REF="${NOTKI_INSTALL_REF:-v0.1.6.0}"
+NOTKI_INSTALL_REF="${NOTKI_INSTALL_REF:-v0.1.6.2}"
 
 echo "Installing Notki..."
 
