@@ -59,7 +59,6 @@ REQUEST_TIMEOUT_SECONDS = 15
 MAX_AUTH_TRACKED_IPS = 10_000
 MAX_AUTH_ACCOUNTS = 10_000
 MAX_ATTEMPTS_PER_KEY = 1_000
-FAIL2BAN_RETENTION_SECONDS = 7 * 24 * 60 * 60
 FAIL2BAN_PRUNE_INTERVAL = 300
 
 def hash_password(password):
@@ -197,6 +196,7 @@ TEMP_2FA_LOCK = threading.Lock()
 PASSKEY_CHALLENGES = {}
 PASSKEY_CHALLENGES_LOCK = threading.Lock()
 FAILED_AUTH_ATTEMPTS = {}
+UNFLUSHED_FAIL2BAN_ATTEMPTS = []
 # Failed attempts attributed to a specific (ip, account) pair. This lets a successful
 # login clear only the failures recorded for that account instead of wiping the whole
 # per-IP budget (which allowed brute-force protection to be reset with a second account).
@@ -316,6 +316,27 @@ def _prune_auth_state_locked(now):
         ACCOUNT_FAILURES.pop(oldest_account, None)
 
 
+
+def _flush_fail2ban_buffer():
+    with FAILED_AUTH_LOCK:
+        if not UNFLUSHED_FAIL2BAN_ATTEMPTS:
+            return
+        to_flush = UNFLUSHED_FAIL2BAN_ATTEMPTS[:]
+        UNFLUSHED_FAIL2BAN_ATTEMPTS.clear()
+
+    try:
+        with database() as connection:
+            connection.executemany(
+                'INSERT INTO fail2ban_attempts (ip, account, created_at) VALUES (?, ?, ?)',
+                to_flush
+            )
+    except Exception:
+        # If DB write fails, re-queue the items but cap at a large limit to avoid memory leaks
+        with FAILED_AUTH_LOCK:
+            UNFLUSHED_FAIL2BAN_ATTEMPTS.extend(to_flush)
+            if len(UNFLUSHED_FAIL2BAN_ATTEMPTS) > MAX_AUTH_TRACKED_IPS * 2:
+                del UNFLUSHED_FAIL2BAN_ATTEMPTS[:-MAX_AUTH_TRACKED_IPS * 2]
+
 def _prune_fail2ban_database(now):
     """Delete old fail2ban rows occasionally so the table cannot grow forever."""
     global LAST_FAIL2BAN_PRUNE
@@ -323,11 +344,21 @@ def _prune_fail2ban_database(now):
         if now - LAST_FAIL2BAN_PRUNE < FAIL2BAN_PRUNE_INTERVAL:
             return
         LAST_FAIL2BAN_PRUNE = now
+
+    _flush_fail2ban_buffer()
+
     try:
+        ban_time = get_fail2ban_config()['ban_time']
         with database() as connection:
             connection.execute(
                 'DELETE FROM fail2ban_attempts WHERE created_at < ?',
-                (now - FAIL2BAN_RETENTION_SECONDS,),
+                (now - ban_time,)
+            )
+            # Cap the table size
+            connection.execute(
+                'DELETE FROM fail2ban_attempts WHERE rowid NOT IN ('
+                '  SELECT rowid FROM fail2ban_attempts ORDER BY created_at DESC LIMIT 100000'
+                ')'
             )
     except Exception:
         pass
@@ -348,16 +379,13 @@ def record_failed_auth(ip, account=None):
             global_attempts.append(now)
             ACCOUNT_FAILURES[key] = global_attempts[-MAX_ATTEMPTS_PER_KEY:]
         _prune_auth_state_locked(now)
+        UNFLUSHED_FAIL2BAN_ATTEMPTS.append((ip, key or None, now))
 
-    try:
-        with database() as connection:
-            connection.execute(
-                'INSERT INTO fail2ban_attempts (ip, account, created_at) VALUES (?, ?, ?)',
-                (ip, key or None, now),
-            )
-    except Exception:
-        pass
+    if len(UNFLUSHED_FAIL2BAN_ATTEMPTS) >= MAX_AUTH_TRACKED_IPS:
+        _flush_fail2ban_buffer()
+
     _prune_fail2ban_database(now)
+
 
 
 def is_rate_limited(ip, max_failed=None, window_seconds=None):

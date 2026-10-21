@@ -2438,15 +2438,11 @@ class RecordFailedAuthTests(unittest.TestCase):
     @unittest.mock.patch('server.time.time')
     def test_record_failed_auth_database_insertion(self, mock_time, mock_prune, mock_database):
         mock_time.return_value = 1000.0
-        mock_conn = unittest.mock.MagicMock()
-        mock_database.return_value.__enter__.return_value = mock_conn
+        server.UNFLUSHED_FAIL2BAN_ATTEMPTS.clear()
 
         server.record_failed_auth('192.168.1.5', 'user@example.com')
 
-        mock_conn.execute.assert_called_once_with(
-            'INSERT INTO fail2ban_attempts (ip, account, created_at) VALUES (?, ?, ?)',
-            ('192.168.1.5', 'user@example.com', 1000.0),
-        )
+        self.assertEqual(server.UNFLUSHED_FAIL2BAN_ATTEMPTS, [('192.168.1.5', 'user@example.com', 1000.0)])
         mock_prune.assert_called_once_with(1000.0)
 
     @unittest.mock.patch('server.database')
