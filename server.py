@@ -529,7 +529,7 @@ def get_banned_ips():
         for ip, attempts in FAILED_AUTH_ATTEMPTS.items():
             valid = [t for t in attempts if t > cutoff]
             if valid:
-                ip_attempts[ip] = list(valid)
+                ip_attempts[ip] = set(valid)
 
     try:
         with database() as connection:
@@ -542,9 +542,8 @@ def get_banned_ips():
                 ip = row['ip']
                 t = row['created_at']
                 if ip not in ip_attempts:
-                    ip_attempts[ip] = []
-                if t not in ip_attempts[ip]:
-                    ip_attempts[ip].append(t)
+                    ip_attempts[ip] = set()
+                ip_attempts[ip].add(t)
     except Exception:
         pass
 
