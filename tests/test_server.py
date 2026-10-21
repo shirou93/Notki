@@ -5,7 +5,6 @@ import secrets
 import http.cookiejar
 import io
 import json
-import subprocess
 import tarfile
 import tempfile
 import threading
