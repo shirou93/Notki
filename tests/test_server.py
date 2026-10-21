@@ -3100,6 +3100,7 @@ class Fail2banUnitTests(unittest.TestCase):
         mock_db_manager.return_value.__enter__.return_value = mock_connection
 
         # Test 1: Default configuration when database returns empty
+        server._FAIL2BAN_CONFIG_CACHE = None
         mock_connection.execute.return_value.fetchall.return_value = []
         config = server.get_fail2ban_config()
         self.assertEqual(config, {'enabled': True, 'max_attempts': 15, 'ban_time': 60})
@@ -3110,11 +3111,13 @@ class Fail2banUnitTests(unittest.TestCase):
             {'key': 'fail2banMaxAttempts', 'value': '5'},
             {'key': 'fail2banBanTime', 'value': '120'}
         ]
+        server._FAIL2BAN_CONFIG_CACHE = None
         config = server.get_fail2ban_config()
         self.assertEqual(config, {'enabled': False, 'max_attempts': 5, 'ban_time': 120})
 
         # Test 3: Exception during database operation falls back to default configuration
         mock_connection.execute.side_effect = Exception("DB error")
+        server._FAIL2BAN_CONFIG_CACHE = None
         config = server.get_fail2ban_config()
         self.assertEqual(config, {'enabled': True, 'max_attempts': 15, 'ban_time': 60})
 

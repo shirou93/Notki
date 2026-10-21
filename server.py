@@ -263,7 +263,13 @@ def parse_forwarded_host(value):
             return host.split(',')[0].strip()
     return None
 
+_FAIL2BAN_CONFIG_CACHE = None
+
 def get_fail2ban_config():
+    global _FAIL2BAN_CONFIG_CACHE
+    if _FAIL2BAN_CONFIG_CACHE is not None:
+        return _FAIL2BAN_CONFIG_CACHE
+
     enabled = True
     max_attempts = 15
     ban_time = 60
@@ -279,7 +285,9 @@ def get_fail2ban_config():
                 ban_time = int(settings_dict['fail2banBanTime'])
     except Exception:
         pass
-    return {'enabled': enabled, 'max_attempts': max_attempts, 'ban_time': ban_time}
+
+    _FAIL2BAN_CONFIG_CACHE = {'enabled': enabled, 'max_attempts': max_attempts, 'ban_time': ban_time}
+    return _FAIL2BAN_CONFIG_CACHE
 
 def _prune_auth_state_locked(now):
     """Bound in-memory authentication state and drop stale entries."""
@@ -2845,6 +2853,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
         return prepared_settings
 
     def _apply_snapshot_data(self, prepared_users, prepared_notes, prepared_invites, prepared_shares, prepared_passkeys, prepared_settings, replace_existing):
+        global _FAIL2BAN_CONFIG_CACHE
+        _FAIL2BAN_CONFIG_CACHE = None
         with database() as connection:
             connection.execute('BEGIN IMMEDIATE')
             has_existing_data = bool(connection.execute(
@@ -3635,6 +3645,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
         })
 
     def save_settings(self, payload):
+        global _FAIL2BAN_CONFIG_CACHE
+        _FAIL2BAN_CONFIG_CACHE = None
         user = self.require_user(admin=True)
         require_2fa = 'true' if payload.get('require2FA') else 'false'
         if require_2fa == 'true' and not user.get('has2FA'):
