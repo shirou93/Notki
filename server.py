@@ -230,6 +230,7 @@ FAILED_AUTH_LOCK = threading.Lock()
 ACCOUNT_FAILURES = {}
 FAIL2BAN_PRUNE_LOCK = threading.Lock()
 LAST_FAIL2BAN_PRUNE = 0.0
+LAST_AUTH_STATE_PRUNE = 0.0
 
 
 def account_key(account):
@@ -310,41 +311,40 @@ def get_fail2ban_config():
 
 def _prune_auth_state_locked(now):
     """Bound in-memory authentication state and drop stale entries."""
-    global LAST_FAIL2BAN_PRUNE
-    for ip in tuple(FAILED_AUTH_ATTEMPTS):
-        attempts = [t for t in FAILED_AUTH_ATTEMPTS[ip] if now - t < 3600]
-        if len(attempts) > MAX_ATTEMPTS_PER_KEY:
-            attempts = attempts[-MAX_ATTEMPTS_PER_KEY:]
-        if attempts:
-            FAILED_AUTH_ATTEMPTS[ip] = attempts
-        else:
-            FAILED_AUTH_ATTEMPTS.pop(ip, None)
-    for key in tuple(FAILED_AUTH_ACCOUNTS):
-        attempts = [t for t in FAILED_AUTH_ACCOUNTS[key] if now - t < 3600]
-        if len(attempts) > MAX_ATTEMPTS_PER_KEY:
-            attempts = attempts[-MAX_ATTEMPTS_PER_KEY:]
-        if attempts:
-            FAILED_AUTH_ACCOUNTS[key] = attempts
-        else:
-            FAILED_AUTH_ACCOUNTS.pop(key, None)
-    for key in tuple(ACCOUNT_FAILURES):
-        attempts = [t for t in ACCOUNT_FAILURES[key] if now - t < 3600]
-        if len(attempts) > MAX_ATTEMPTS_PER_KEY:
-            attempts = attempts[-MAX_ATTEMPTS_PER_KEY:]
-        if attempts:
-            ACCOUNT_FAILURES[key] = attempts
-        else:
-            ACCOUNT_FAILURES.pop(key, None)
+    global LAST_AUTH_STATE_PRUNE
+    if now - LAST_AUTH_STATE_PRUNE >= FAIL2BAN_PRUNE_INTERVAL:
+        LAST_AUTH_STATE_PRUNE = now
+        for ip in tuple(FAILED_AUTH_ATTEMPTS):
+            attempts = [t for t in FAILED_AUTH_ATTEMPTS[ip] if now - t < 3600]
+            if len(attempts) > MAX_ATTEMPTS_PER_KEY:
+                attempts = attempts[-MAX_ATTEMPTS_PER_KEY:]
+            if attempts:
+                FAILED_AUTH_ATTEMPTS[ip] = attempts
+            else:
+                FAILED_AUTH_ATTEMPTS.pop(ip, None)
+        for key in tuple(FAILED_AUTH_ACCOUNTS):
+            attempts = [t for t in FAILED_AUTH_ACCOUNTS[key] if now - t < 3600]
+            if len(attempts) > MAX_ATTEMPTS_PER_KEY:
+                attempts = attempts[-MAX_ATTEMPTS_PER_KEY:]
+            if attempts:
+                FAILED_AUTH_ACCOUNTS[key] = attempts
+            else:
+                FAILED_AUTH_ACCOUNTS.pop(key, None)
+        for key in tuple(ACCOUNT_FAILURES):
+            attempts = [t for t in ACCOUNT_FAILURES[key] if now - t < 3600]
+            if len(attempts) > MAX_ATTEMPTS_PER_KEY:
+                attempts = attempts[-MAX_ATTEMPTS_PER_KEY:]
+            if attempts:
+                ACCOUNT_FAILURES[key] = attempts
+            else:
+                ACCOUNT_FAILURES.pop(key, None)
 
     while len(FAILED_AUTH_ATTEMPTS) > MAX_AUTH_TRACKED_IPS:
-        oldest_ip = min(FAILED_AUTH_ATTEMPTS, key=lambda item: max(FAILED_AUTH_ATTEMPTS[item]))
-        FAILED_AUTH_ATTEMPTS.pop(oldest_ip, None)
+        FAILED_AUTH_ATTEMPTS.pop(next(iter(FAILED_AUTH_ATTEMPTS)), None)
     while len(FAILED_AUTH_ACCOUNTS) > MAX_AUTH_TRACKED_IPS:
-        oldest_key = min(FAILED_AUTH_ACCOUNTS, key=lambda item: max(FAILED_AUTH_ACCOUNTS[item]))
-        FAILED_AUTH_ACCOUNTS.pop(oldest_key, None)
+        FAILED_AUTH_ACCOUNTS.pop(next(iter(FAILED_AUTH_ACCOUNTS)), None)
     while len(ACCOUNT_FAILURES) > MAX_AUTH_ACCOUNTS:
-        oldest_account = min(ACCOUNT_FAILURES, key=lambda item: max(ACCOUNT_FAILURES[item]))
-        ACCOUNT_FAILURES.pop(oldest_account, None)
+        ACCOUNT_FAILURES.pop(next(iter(ACCOUNT_FAILURES)), None)
 
 
 
@@ -399,14 +399,14 @@ def record_failed_auth(ip, account=None):
     now = time.time()
     key = account_key(account)
     with FAILED_AUTH_LOCK:
-        attempts = [t for t in FAILED_AUTH_ATTEMPTS.get(ip, []) if now - t < 3600]
+        attempts = [t for t in FAILED_AUTH_ATTEMPTS.pop(ip, []) if now - t < 3600]
         attempts.append(now)
         FAILED_AUTH_ATTEMPTS[ip] = attempts[-MAX_ATTEMPTS_PER_KEY:]
         if key:
-            account_attempts = [t for t in FAILED_AUTH_ACCOUNTS.get((ip, key), []) if now - t < 3600]
+            account_attempts = [t for t in FAILED_AUTH_ACCOUNTS.pop((ip, key), []) if now - t < 3600]
             account_attempts.append(now)
             FAILED_AUTH_ACCOUNTS[(ip, key)] = account_attempts[-MAX_ATTEMPTS_PER_KEY:]
-            global_attempts = [t for t in ACCOUNT_FAILURES.get(key, []) if now - t < 3600]
+            global_attempts = [t for t in ACCOUNT_FAILURES.pop(key, []) if now - t < 3600]
             global_attempts.append(now)
             ACCOUNT_FAILURES[key] = global_attempts[-MAX_ATTEMPTS_PER_KEY:]
         _prune_auth_state_locked(now)
