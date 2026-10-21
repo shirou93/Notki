@@ -2833,6 +2833,25 @@ class TestHashPassword(unittest.TestCase):
 
 
 
+class TestNormalizeBackupCode(unittest.TestCase):
+    def test_normalize_backup_code_normal(self):
+        self.assertEqual(server.normalize_backup_code("1234ABCD"), "1234ABCD")
+
+    def test_normalize_backup_code_lowercase(self):
+        self.assertEqual(server.normalize_backup_code("1234abcd"), "1234ABCD")
+
+    def test_normalize_backup_code_with_formatting(self):
+        self.assertEqual(server.normalize_backup_code("1234-abcd 5678"), "1234ABCD5678")
+        self.assertEqual(server.normalize_backup_code("!@#$%^&*()1234"), "1234")
+
+    def test_normalize_backup_code_empty_and_none(self):
+        self.assertEqual(server.normalize_backup_code(""), "")
+        self.assertEqual(server.normalize_backup_code(None), "")
+
+    def test_normalize_backup_code_non_string(self):
+        self.assertEqual(server.normalize_backup_code(12345), "12345")
+
+
 class TestHashBackupCode(unittest.TestCase):
     def test_hash_backup_code_normal(self):
         code = "1234ABCD"
