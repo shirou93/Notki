@@ -2647,6 +2647,40 @@ class TestParseForwardedFor(unittest.TestCase):
                 self.assertEqual(server.parse_forwarded_for(input_val), expected)
 
 
+class TestParseHeaders(unittest.TestCase):
+    def test_parse_headers_normal(self):
+        header_str = "Content-Type: application/json\r\nAccept: text/html\r\n"
+        expected = {"content-type": "application/json", "accept": "text/html"}
+        self.assertEqual(server.parse_headers(header_str), expected)
+
+    def test_parse_headers_empty(self):
+        self.assertEqual(server.parse_headers(""), {})
+        self.assertEqual(server.parse_headers("\r\n"), {})
+
+    def test_parse_headers_no_colon(self):
+        # A line without a colon is ignored
+        header_str = "Content-Type: application/json\r\nInvalid-Header\r\nAccept: text/html\r\n"
+        expected = {"content-type": "application/json", "accept": "text/html"}
+        self.assertEqual(server.parse_headers(header_str), expected)
+
+    def test_parse_headers_value_with_colon(self):
+        # Value contains colon
+        header_str = "Host: example.com:8080\r\n"
+        expected = {"host": "example.com:8080"}
+        self.assertEqual(server.parse_headers(header_str), expected)
+
+    def test_parse_headers_trailing_newlines(self):
+        # No trailing newline
+        header_str1 = "Content-Type: application/json"
+        expected1 = {"content-type": "application/json"}
+        self.assertEqual(server.parse_headers(header_str1), expected1)
+
+        # Multiple newlines
+        header_str2 = "Content-Type: application/json\r\n\r\n\r\nAccept: text/html"
+        expected2 = {"content-type": "application/json", "accept": "text/html"}
+        self.assertEqual(server.parse_headers(header_str2), expected2)
+
+
 class TestParseHeaderParams(unittest.TestCase):
     def test_parse_header_params(self):
         cases = [
