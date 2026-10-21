@@ -11,7 +11,7 @@ import tempfile
 import threading
 import unittest
 import unittest.mock
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 import urllib.request
@@ -45,6 +45,13 @@ class ServerUnitTests(unittest.TestCase):
         self.assertEqual(server.normalize_email('  user@example.com  '), 'user@example.com')
         self.assertEqual(server.normalize_email('USER@EXAMPLE.COM'), 'user@example.com')
         self.assertEqual(server.normalize_email('u.ser+tag@sub.example.co.uk'), 'u.ser+tag@sub.example.co.uk')
+
+    def test_iso_time(self):
+        fixed_time = datetime(2023, 10, 21, 12, 0, 0, tzinfo=timezone.utc)
+        self.assertEqual(server.iso_time(fixed_time), '2023-10-21T12:00:00+00:00')
+
+        with unittest.mock.patch('server.utc_now', return_value=fixed_time):
+            self.assertEqual(server.iso_time(), '2023-10-21T12:00:00+00:00')
 
     def test_account_key(self):
         self.assertEqual(server.account_key('USER@EXAMPLE.COM'), 'user@example.com')
