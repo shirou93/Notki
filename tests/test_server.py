@@ -2892,6 +2892,29 @@ class TestVerifyPassword(unittest.TestCase):
                 self.assertIs(server.verify_password("secret_password_123", encoded_str), expected)
 
 
+class TestSafeB64Decode(unittest.TestCase):
+    def test_safe_b64decode_empty_or_none(self):
+        self.assertEqual(server.safe_b64decode(''), b'')
+        self.assertEqual(server.safe_b64decode(None), b'')
+
+    def test_safe_b64decode_standard_padding(self):
+        self.assertEqual(server.safe_b64decode('SGVsbG8gV29ybGQ='), b'Hello World')
+        self.assertEqual(server.safe_b64decode('YW55IGNhcm5hbCBwbGVhcw=='), b'any carnal pleas')
+
+    def test_safe_b64decode_standard_missing_padding(self):
+        self.assertEqual(server.safe_b64decode('SGVsbG8gV29ybGQ'), b'Hello World')
+        self.assertEqual(server.safe_b64decode('YW55IGNhcm5hbCBwbGVhcw'), b'any carnal pleas')
+
+    def test_safe_b64decode_url_safe(self):
+        self.assertEqual(server.safe_b64decode('-_8='), b'\xfb\xff')
+        self.assertEqual(server.safe_b64decode('-_8'), b'\xfb\xff')
+
+    def test_safe_b64decode_invalid_chars(self):
+        import binascii
+        with self.assertRaises(binascii.Error):
+            server.safe_b64decode('invalid base64!!!')
+
+
 class TestGenerateTOTPSecret(unittest.TestCase):
     @unittest.mock.patch('secrets.choice')
     def test_generate_totp_secret_properties(self, mock_choice):
