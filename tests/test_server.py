@@ -2803,16 +2803,30 @@ class TestVerifyPassword(unittest.TestCase):
 
 
 class TestGenerateTOTPSecret(unittest.TestCase):
-    def test_generate_totp_secret_properties(self):
+    @unittest.mock.patch('secrets.choice')
+    def test_generate_totp_secret_properties(self, mock_choice):
+        mock_choice.return_value = 'A'
         secret = server.generate_totp_secret()
         self.assertIsInstance(secret, str)
         self.assertEqual(len(secret), 16)
         valid_alphabet = set('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567')
         self.assertTrue(set(secret).issubset(valid_alphabet))
+        self.assertEqual(secret, 'A'*16)
+        self.assertEqual(mock_choice.call_count, 16)
+        mock_choice.assert_called_with('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567')
+
+    def test_generate_totp_secret_length(self):
+        secret = server.generate_totp_secret()
+        self.assertEqual(len(secret), 16)
 
     def test_generate_totp_secret_uniqueness(self):
-        secrets_set = {server.generate_totp_secret() for _ in range(20)}
-        self.assertEqual(len(secrets_set), 20)
+        secrets_set = {server.generate_totp_secret() for _ in range(100)}
+        self.assertEqual(len(secrets_set), 100)
+
+    def test_generate_totp_secret_alphabet(self):
+        secret = server.generate_totp_secret()
+        valid_alphabet = set('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567')
+        self.assertTrue(set(secret).issubset(valid_alphabet))
 
 
 class TestCreateServerBackupTemporaryFile(unittest.TestCase):
