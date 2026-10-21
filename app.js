@@ -1334,7 +1334,15 @@
       const response = await apiRequest('/api/account/totp', { method: 'POST', body: '{}' });
       $('#totp-secret-code').textContent = response.secret;
       if ($('#totp-qr-container') && response.qrSvg) {
-        $('#totp-qr-container').innerHTML = response.qrSvg;
+        const purify = getDOMPurify();
+        if (purify) {
+          $('#totp-qr-container').replaceChildren(purify.sanitize(response.qrSvg, {
+            USE_PROFILES: { svg: true },
+            RETURN_DOM_FRAGMENT: true
+          }));
+        } else {
+          $('#totp-qr-container').textContent = t('setup.totpUnavailable', { message: 'DOMPurify is missing' }) || 'Error generating secure QR code.';
+        }
       }
       $('#totp-verify-area').hidden = false;
       $('#setup-totp-btn').hidden = true;
