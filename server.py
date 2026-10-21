@@ -1,5 +1,6 @@
 import argparse
 import base64
+import functools
 import getpass
 import hashlib
 import hmac
@@ -45,6 +46,24 @@ ALLOWED_HOSTS = {
 # Reverse proxies on the loopback interface are trusted by default (typical for a
 # local Nginx/Caddy sidecar); other deployments must opt in via NOTKI_TRUST_PROXY.
 DEFAULT_TRUSTED_PROXY_NETWORKS = ('127.0.0.0/8', '::1/128')
+
+@functools.lru_cache(maxsize=1)
+def _get_trusted_proxy_networks(trust_proxy):
+    if trust_proxy in ('0', 'false', 'no'):
+        return []
+    if trust_proxy in ('1', 'true', 'yes', 'all', '*'):
+        return [ipaddress.ip_network('0.0.0.0/0'), ipaddress.ip_network('::/0')]
+    specs = [value.strip() for value in trust_proxy.split(',') if value.strip()]
+    if not specs:
+        specs = list(DEFAULT_TRUSTED_PROXY_NETWORKS)
+    networks = []
+    for spec in specs:
+        try:
+            networks.append(ipaddress.ip_network(spec, strict=False))
+        except ValueError:
+            continue
+    return networks
+
 SESSION_COOKIE = 'notki_session'
 HOST_SESSION_COOKIE = '__Host-notki_session'
 SESSION_DAYS = 30
@@ -1437,37 +1456,20 @@ class NotkiHandler(BaseHTTPRequestHandler):
             return False
         if trust_proxy in ('1', 'true', 'yes', 'all', '*'):
             return True
-        specs = [value.strip() for value in trust_proxy.split(',') if value.strip()]
-        if not specs:
-            specs = list(DEFAULT_TRUSTED_PROXY_NETWORKS)
         try:
             peer = ipaddress.ip_address(self.client_address[0].split('%', 1)[0])
         except ValueError:
             return False
-        for spec in specs:
-            try:
-                if peer in ipaddress.ip_network(spec, strict=False):
-                    return True
-            except ValueError:
-                continue
+
+        networks = _get_trusted_proxy_networks(trust_proxy)
+        for network in networks:
+            if peer in network:
+                return True
         return False
 
     def trusted_proxy_networks(self):
         trust_proxy = os.environ.get('NOTKI_TRUST_PROXY', '').strip().lower()
-        if trust_proxy in ('0', 'false', 'no'):
-            return []
-        if trust_proxy in ('1', 'true', 'yes', 'all', '*'):
-            return [ipaddress.ip_network('0.0.0.0/0'), ipaddress.ip_network('::/0')]
-        specs = [value.strip() for value in trust_proxy.split(',') if value.strip()]
-        if not specs:
-            specs = list(DEFAULT_TRUSTED_PROXY_NETWORKS)
-        networks = []
-        for spec in specs:
-            try:
-                networks.append(ipaddress.ip_network(spec, strict=False))
-            except ValueError:
-                continue
-        return networks
+        return _get_trusted_proxy_networks(trust_proxy)
 
     def is_trusted_address(self, value):
         try:
