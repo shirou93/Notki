@@ -46,6 +46,24 @@ class ServerUnitTests(unittest.TestCase):
         self.assertEqual(server.normalize_email('USER@EXAMPLE.COM'), 'user@example.com')
         self.assertEqual(server.normalize_email('u.ser+tag@sub.example.co.uk'), 'u.ser+tag@sub.example.co.uk')
 
+    def test_utc_now(self):
+        now = server.utc_now()
+        self.assertEqual(now.tzinfo, timezone.utc)
+        self.assertEqual(now.microsecond, 0)
+        self.assertIsInstance(now, datetime)
+
+        with unittest.mock.patch('server.datetime') as mock_datetime:
+            mock_now = datetime(2023, 10, 21, 12, 0, 0, 123456, tzinfo=timezone.utc)
+            class MockDatetimeNow:
+                def replace(self, **kwargs):
+                    return mock_now.replace(**kwargs)
+            mock_datetime.now.return_value = MockDatetimeNow()
+
+            result = server.utc_now()
+
+            mock_datetime.now.assert_called_once_with(timezone.utc)
+            self.assertEqual(result.microsecond, 0)
+
     def test_iso_time(self):
         fixed_time = datetime(2023, 10, 21, 12, 0, 0, tzinfo=timezone.utc)
         self.assertEqual(server.iso_time(fixed_time), '2023-10-21T12:00:00+00:00')
