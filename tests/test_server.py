@@ -2690,6 +2690,25 @@ class AddLogTests(unittest.TestCase):
             server.MAX_LOG_ENTRIES = old_max
 
 
+class TestParseVersion(unittest.TestCase):
+    def test_parse_version(self):
+        cases = [
+            ("basic semantic version", "1.0.0", (1, 0, 0)),
+            ("with v prefix", "v1.2.3", (1, 2, 3)),
+            ("missing patch version", "v1.0", (1, 0)),
+            ("major version only", "v1", (1,)),
+            ("with pre-release suffix", "v1.0.0-beta", (1, 0, 0)),
+            ("leading and trailing whitespace", "  v2.0.1  ", (2, 0, 1)),
+            ("multiple digits", "10.20.300", (10, 20, 300)),
+            ("invalid format", "invalid", (0, 0, 0)),
+            ("empty string", "", (0, 0, 0)),
+        ]
+        for name, input_str, expected in cases:
+            with self.subTest(name=name):
+                result = server.parse_version(input_str)
+                self.assertEqual(result, expected)
+
+
 class TestParseForwardedElements(unittest.TestCase):
     def test_parse_forwarded_elements(self):
         cases = [
