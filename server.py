@@ -2423,8 +2423,30 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     if parse_version(new_version) <= parse_version(VERSION):
                         raise APIError('No newer version available.', 400)
 
+    @staticmethod
+    def _safe_extract(archive, path, members=None):
+        if members is None:
+            members = archive.getmembers()
+        safe_members = []
+        base_path = os.path.realpath(path)
+        for member in members:
+            # Emulate Python 3.12 data_filter for older versions
+            if hasattr(tarfile, 'data_filter'):
+                safe_members.append(member)
+            else:
+                if member.issym() or member.islnk():
+                    continue
+                member_path = os.path.realpath(os.path.join(base_path, member.name))
+                if os.path.commonpath([base_path, member_path]) == base_path:
+                    safe_members.append(member)
+
+        if hasattr(tarfile, 'data_filter'):
+            archive.extractall(path=path, members=safe_members, filter='data')
+        else:
+            archive.extractall(path=path, members=safe_members)
+
     def _extract_update_archive(self, archive, members):
-        root_resolved = ROOT.resolve()
+        valid_members = []
         for member in members:
             parts = member.name.split('/', 1)
             if len(parts) > 1:
@@ -2436,15 +2458,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     continue
                 if not (member.isreg() or member.isdir()):
                     continue
-                try:
-                    target_path = (root_resolved / member_path).resolve()
-                except Exception:
-                    continue
-                if target_path.is_relative_to(root_resolved):
-                    if hasattr(tarfile, 'data_filter'):
-                        archive.extract(member, path=root_resolved, filter='data')
-                    else:
-                        archive.extract(member, path=root_resolved)
+                valid_members.append(member)
+
+        self._safe_extract(archive, ROOT, valid_members)
 
     def _finalize_update_index_html(self, is_beta):
         index_path = ROOT / 'index.html'
@@ -2488,13 +2504,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _restore_update_rollback(rollback_path):
         with tarfile.open(rollback_path, 'r:gz') as rollback:
-            for member in rollback.getmembers():
-                target = (ROOT / member.name).resolve()
-                if target.is_relative_to(ROOT.resolve()) and member.isfile():
-                    if hasattr(tarfile, 'data_filter'):
-                        rollback.extract(member, path=ROOT, filter='data')
-                    else:
-                        rollback.extract(member, path=ROOT)
+            valid_members = [m for m in rollback.getmembers() if m.isfile()]
+            NotkiHandler._safe_extract(rollback, ROOT, valid_members)
 
     @staticmethod
     def _verify_update_signature(archive_bytes, payload):
