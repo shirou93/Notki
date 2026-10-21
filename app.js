@@ -195,7 +195,7 @@
     if (cached && cached.body === note.body && cached.bodyFormat === note.bodyFormat) {
       return cached.stats;
     }
-    const html = note.bodyFormat === 1 ? sanitizeRichHtml(note.body) : plainTextToHtml(note.body);
+    const html = note.bodyFormat === 1 ? sanitizeRichHtmlToString(note.body) : plainTextToHtml(note.body);
     const stats = getTaskStatsFromHtml(html);
     taskStatsCache.set(note, { body: note.body, bodyFormat: note.bodyFormat, stats });
     return stats;
@@ -1563,7 +1563,7 @@
 
   function sanitizeRichHtml(html) {
     const purify = getDOMPurify();
-    if (!purify) return '';
+    if (!purify) return document.createDocumentFragment();
 
     purify.addHook('afterSanitizeElements', (node) => {
       if (node.nodeType !== Node.ELEMENT_NODE) return;
@@ -1622,12 +1622,16 @@
 
     purify.removeHook('afterSanitizeElements');
 
-    const wrapper = document.createElement('div');
-    wrapper.appendChild(fragment);
-    wrapper.querySelectorAll('.task-drag-handle').forEach(handle => {
+    fragment.querySelectorAll('.task-drag-handle').forEach(handle => {
       handle.innerHTML = TASK_DRAG_SVG;
     });
 
+    return fragment;
+  }
+
+  function sanitizeRichHtmlToString(html) {
+    const wrapper = document.createElement('div');
+    wrapper.appendChild(sanitizeRichHtml(html));
     return wrapper.innerHTML;
   }
 
@@ -1657,7 +1661,7 @@
       return cached.text;
     }
     const output = document.createElement('div');
-    output.innerHTML = sanitizeRichHtml(note.body);
+    output.appendChild(sanitizeRichHtml(note.body));
     const text = (output.innerText || output.textContent || '').replace(/\n{3,}/g, '\n\n');
     plainTextCache.set(note, { body: note.body, text });
     return text;
@@ -1670,7 +1674,7 @@
       if (checkedState[index]) input.setAttribute('checked', '');
       else input.removeAttribute('checked');
     });
-    return sanitizeRichHtml(clone.innerHTML);
+    return sanitizeRichHtmlToString(clone.innerHTML);
   }
 
   function normalizeTaskText(value) {
@@ -2599,7 +2603,7 @@
     const cardBody = $('.card-body', card);
     if (cardBody) {
       if (note.bodyFormat === 1 && note.body) {
-        cardBody.innerHTML = sanitizeRichHtml(note.body);
+        cardBody.replaceChildren(sanitizeRichHtml(note.body));
       } else {
         cardBody.textContent = noteText(note) || t('editor.emptyNote');
       }
@@ -3045,7 +3049,7 @@
         const wrapper = document.createElement('div');
         wrapper.innerHTML = cardBody.innerHTML;
         normalizeChecklistGroups(wrapper);
-        note.body = sanitizeRichHtml(wrapper.innerHTML);
+        note.body = sanitizeRichHtmlToString(wrapper.innerHTML);
         note.updatedAt = new Date().toISOString();
         if (shared && !readOnly) {
           persistShared(note);
@@ -3070,7 +3074,7 @@
       if (event.target.matches('input[type="checkbox"]')) {
         event.stopPropagation();
         const wrapper = document.createElement('div');
-        wrapper.innerHTML = sanitizeRichHtml(note.body);
+        wrapper.appendChild(sanitizeRichHtml(note.body));
         const checkboxes = [...wrapper.querySelectorAll('input[type="checkbox"]')];
         const cardCheckboxes = [...card.querySelectorAll('input[type="checkbox"]')];
         const index = cardCheckboxes.indexOf(event.target);
@@ -3083,7 +3087,7 @@
             checkboxes[index].checked = false;
           }
           normalizeChecklistGroups(wrapper);
-          note.body = sanitizeRichHtml(wrapper.innerHTML);
+          note.body = sanitizeRichHtmlToString(wrapper.innerHTML);
           note.updatedAt = new Date().toISOString();
           if (shared && !readOnly) {
             persistShared(note);
@@ -3172,7 +3176,11 @@
       dueDateInput.value = note.dueDate ? note.dueDate.slice(0, 16) : '';
     }
     editorRange = null;
-    elements.noteBody.innerHTML = note.bodyFormat === 1 ? sanitizeRichHtml(note.body) : plainTextToHtml(note.body);
+    if (note.bodyFormat === 1) {
+      elements.noteBody.replaceChildren(sanitizeRichHtml(note.body));
+    } else {
+      elements.noteBody.innerHTML = plainTextToHtml(note.body);
+    }
     normalizeChecklistGroups();
     updateEditorProgress();
     $('#task-restore-suggestions').replaceChildren();
