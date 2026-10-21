@@ -2554,6 +2554,25 @@ class RecordFailedAuthTests(unittest.TestCase):
 
         mock_prune.assert_called_once_with(1000.0)
 
+    @unittest.mock.patch('server._prune_fail2ban_database')
+    @unittest.mock.patch('server._flush_fail2ban_buffer')
+    @unittest.mock.patch('server.time.time')
+    def test_record_failed_auth_flushes_buffer(self, mock_time, mock_flush, mock_prune):
+        mock_time.return_value = 1000.0
+        server.UNFLUSHED_FAIL2BAN_ATTEMPTS.clear()
+
+        # Pre-fill buffer just below the limit
+        for i in range(server.MAX_AUTH_TRACKED_IPS - 1):
+            server.UNFLUSHED_FAIL2BAN_ATTEMPTS.append((f'10.0.0.{i}', None, 900.0))
+
+        mock_flush.assert_not_called()
+
+        # This insertion should trigger the flush
+        server.record_failed_auth('192.168.1.7', 'user3@example.com')
+
+        mock_flush.assert_called_once()
+        mock_prune.assert_called_once_with(1000.0)
+
 
 class IsRateLimitedTests(unittest.TestCase):
     def setUp(self):
