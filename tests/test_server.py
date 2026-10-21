@@ -2079,6 +2079,14 @@ class VerifyTOTPCodeTests(unittest.TestCase):
         code = "123456"
         self.assertFalse(server.verify_totp_code(invalid_secret, code, self.time_step, window=1))
 
+    @unittest.mock.patch('time.time')
+    def test_hmac_exception_handling(self, mock_time):
+        # Force current_counter to be negative so that struct.pack('>Q', counter) throws struct.error
+        # This will trigger the exception block inside the inner loop of verify_totp_counter.
+        mock_time.return_value = -31.0
+        code = "123456"
+        self.assertFalse(server.verify_totp_code(self.secret, code, self.time_step, window=1))
+
 
 class ParseMultipartDataTests(unittest.TestCase):
     def test_happy_path(self):
