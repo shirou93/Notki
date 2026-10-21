@@ -46,6 +46,27 @@ class ServerUnitTests(unittest.TestCase):
         self.assertEqual(server.normalize_email('USER@EXAMPLE.COM'), 'user@example.com')
         self.assertEqual(server.normalize_email('u.ser+tag@sub.example.co.uk'), 'u.ser+tag@sub.example.co.uk')
 
+    def test_consume_temp_2fa_token(self):
+        user_id = 123
+        # Test normal consumption
+        token = server.create_temp_2fa_token(user_id)
+        self.assertIsNotNone(token)
+        self.assertEqual(server.consume_temp_2fa_token(token), user_id)
+
+        # Test token is one-time use
+        self.assertIsNone(server.consume_temp_2fa_token(token))
+
+        # Test with None or empty string
+        self.assertIsNone(server.consume_temp_2fa_token(None))
+        self.assertIsNone(server.consume_temp_2fa_token(''))
+
+        # Test expiration
+        token2 = server.create_temp_2fa_token(user_id)
+        # Mock time to be 6 minutes in the future (expires in 5 minutes)
+        future_time = server.utc_now() + timedelta(minutes=6)
+        with unittest.mock.patch('server.utc_now', return_value=future_time):
+            self.assertIsNone(server.consume_temp_2fa_token(token2))
+
     def test_utc_now(self):
         now = server.utc_now()
         self.assertEqual(now.tzinfo, timezone.utc)
