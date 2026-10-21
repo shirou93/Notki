@@ -2430,7 +2430,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def _download_update_archive(self, tarball_url):
         class UpdateRedirectHandler(urllib.request.HTTPRedirectHandler):
-            def redirect_request(self, req, fp, code, msg, headers, newurl):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):  # pylint: disable=too-many-arguments
                 if not newurl.startswith('https://codeload.github.com/shirou93/Notki/'):
                     raise urllib.error.URLError("Invalid redirect URL.")
                 return super().redirect_request(req, fp, code, msg, headers, newurl)
