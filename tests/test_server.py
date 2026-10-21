@@ -2629,6 +2629,9 @@ class IsRateLimitedTests(unittest.TestCase):
 
     def tearDown(self):
         server.FAILED_AUTH_ATTEMPTS.clear()
+        server.FAILED_AUTH_ACCOUNTS.clear()
+        server.ACCOUNT_FAILURES.clear()
+        server.UNFLUSHED_FAIL2BAN_ATTEMPTS.clear()
 
     def test_is_rate_limited_empty_ip(self):
         self.assertFalse(server.is_rate_limited('192.168.1.100'))
@@ -2660,7 +2663,7 @@ class IsRateLimitedTests(unittest.TestCase):
         mock_time.return_value = 1059.0
         self.assertTrue(server.is_rate_limited('192.168.1.100'))
 
-        # At t=1060.0 (60 seconds later, 1060.0 - 1000.0 = 60, not < 60), attempts expire
+        # At exactly the cutoff t=1060.0 (t > cutoff becomes 1000.0 > 1000.0 which is False), attempts expire
         mock_time.return_value = 1060.0
         self.assertFalse(server.is_rate_limited('192.168.1.100'))
         self.assertEqual(server.FAILED_AUTH_ATTEMPTS['192.168.1.100'], [])
@@ -2694,6 +2697,23 @@ class IsRateLimitedTests(unittest.TestCase):
         mock_config.return_value = {'enabled': False, 'max_attempts': 15, 'ban_time': 60}
         self.assertFalse(server.is_rate_limited('192.168.1.100'))
 
+    @unittest.mock.patch('server.time.time')
+    @unittest.mock.patch('server.get_fail2ban_config')
+    def test_is_rate_limited_disabled_with_custom_params(self, mock_config, mock_time):
+        mock_time.return_value = 1000.0
+        mock_config.return_value = {'enabled': False, 'max_attempts': 15, 'ban_time': 60}
+        server.FAILED_AUTH_ATTEMPTS['192.168.1.100'] = [1000.0] * 10
+        self.assertTrue(server.is_rate_limited('192.168.1.100', max_failed=10, window_seconds=30))
+        self.assertFalse(server.is_rate_limited('192.168.1.100', max_failed=11, window_seconds=30))
+
+    @unittest.mock.patch('server.time.time')
+    @unittest.mock.patch('server.get_fail2ban_config')
+    def test_is_rate_limited_disabled_with_none_params(self, mock_config, mock_time):
+        mock_time.return_value = 1000.0
+        mock_config.return_value = {'enabled': False, 'max_attempts': 15, 'ban_time': 60}
+        server.FAILED_AUTH_ATTEMPTS['192.168.1.100'] = [1000.0] * 15
+        self.assertFalse(server.is_rate_limited('192.168.1.100', max_failed=None, window_seconds=None))
+
     @unittest.mock.patch('server.database')
     def test_is_rate_limited_database_lookup(self, mock_db):
         mock_conn = unittest.mock.MagicMock()
@@ -2721,6 +2741,23 @@ class IsRateLimitedTests(unittest.TestCase):
         mock_conn.execute.side_effect = Exception("Database error")
 
         self.assertFalse(server.is_rate_limited('192.168.1.100'))
+
+    def test_unban_ip_empty(self):
+        self.assertFalse(server.unban_ip(None))
+        self.assertFalse(server.unban_ip('   '))
+
+    def test_unban_ip_clears_failed_auth_accounts(self):
+        server.FAILED_AUTH_ACCOUNTS[('192.168.1.100', 'test@example.com')] = [1000.0]
+        server.unban_ip('192.168.1.100')
+        self.assertNotIn(('192.168.1.100', 'test@example.com'), server.FAILED_AUTH_ACCOUNTS)
+
+    @unittest.mock.patch('server.database')
+    def test_unban_ip_database_exception(self, mock_db):
+        mock_conn = unittest.mock.MagicMock()
+        mock_db.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.side_effect = Exception("Database error")
+        # Should not raise exception
+        self.assertFalse(server.unban_ip('192.168.1.100'))
 
 
 class AddLogTests(unittest.TestCase):
