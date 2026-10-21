@@ -113,7 +113,7 @@ The script creates a dedicated system user `notki`, installs the application int
 From the **Admin Panel** under **Server Backups**, you can manage server data:
 - Backups include all user accounts, notes, labels, invitations, and system settings, but never active sessions.
 - Backups are always encrypted with AES-256-GCM and use timestamped `.enc` filenames. TOTP secrets are also encrypted at rest in SQLite.
-- By default the server derives the encryption key from `NOTKI_BACKUP_KEY` or from `data/backup.key` (created with mode `0600`). Set `NOTKI_BACKUP_KEY` to a strong secret if you need to restore a backup on a fresh installation.
+- By default the server derives the encryption key from `NOTKI_BACKUP_KEY` or from a generated file. To protect against directory dumps compromising both ciphertext and keys, it is highly recommended to supply keys via environment variables or mount a separate `NOTKI_KEY_DIR` outside the data volume.
 - When creating a backup you may supply a separate `encryptionPassword`; restoring it then requires that password.
 - You can download backups, restore archives on the server, upload `.enc`/`.tgz`/`.json` backups, or import one during first-run setup.
 - Legacy plaintext `.json` snapshots remain importable; plaintext backup codes are re-hashed during import.
@@ -128,8 +128,9 @@ From the **Admin Panel** under **Server Backups**, you can manage server data:
 | `NOTKI_PORT` | HTTP server port | `8000` |
 | `NOTKI_DB_PATH` | Path to the SQLite3 database file | `./data/notki.sqlite3` |
 | `NOTKI_BACKUP_DIR` | Directory for encrypted backups | `./data/backups` |
-| `NOTKI_BACKUP_KEY` | Master key for server-created encrypted backups | Key file `data/backup.key` |
-| `NOTKI_TOTP_KEY` | Key for TOTP secrets encrypted at rest | Key file `data/totp.key` |
+| `NOTKI_KEY_DIR` | Directory for storing generated `backup.key` and `totp.key` | `./.keys` |
+| `NOTKI_BACKUP_KEY` | Master key for server-created encrypted backups | Key file in `NOTKI_KEY_DIR` |
+| `NOTKI_TOTP_KEY` | Key for TOTP secrets encrypted at rest | Key file in `NOTKI_KEY_DIR` |
 | `NOTKI_SETUP_TOKEN` | One-time token required by every setup/import API call | Auto-generated and printed |
 | `NOTKI_TRUST_PROXY` | Proxy peers whose forwarding headers are trusted (`1`/`true`/`all` or IP/CIDR list) | Loopback only |
 | `NOTKI_ALLOWED_HOSTS` | Optional allowlist for forwarded/host names | Empty |

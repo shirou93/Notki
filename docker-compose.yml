@@ -15,11 +15,13 @@ services:
       - "${NOTKI_HTTP_PORT:-8000}:8000"
     volumes:
       - notki-data:/data
+      - notki-keys:/keys
     environment:
       NOTKI_HOST: 0.0.0.0
       NOTKI_PORT: "8000"
       NOTKI_DB_PATH: /data/notki.sqlite3
       NOTKI_BACKUP_DIR: /data/backups
+      NOTKI_KEY_DIR: /keys
       # Set a strong, stable key so encrypted server backups survive restarts
       # and can be restored on a fresh installation.
       NOTKI_BACKUP_KEY: "${NOTKI_BACKUP_KEY:-}"
@@ -40,3 +42,4 @@ services:
 
 volumes:
   notki-data:
+  notki-keys:
