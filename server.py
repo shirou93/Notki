@@ -31,7 +31,7 @@ import webauthn
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.6.1'
+VERSION = '0.1.6.2'
 GENERATED_SETUP_TOKEN = None
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 # Canonical public host used when generating links (e.g. invitations). When set, it
