@@ -77,6 +77,55 @@ class ServerUnitTests(unittest.TestCase):
                     server.normalize_email(email)
 
 
+class TestAddLog(unittest.TestCase):
+    def setUp(self):
+        # Save original state
+        self.original_log_buffer = server.LOG_BUFFER[:]
+        self.original_max_entries = server.MAX_LOG_ENTRIES
+        # Clear log buffer for testing
+        server.LOG_BUFFER.clear()
+
+    def tearDown(self):
+        # Restore original state
+        server.LOG_BUFFER[:] = self.original_log_buffer
+        server.MAX_LOG_ENTRIES = self.original_max_entries
+
+    def test_add_log_basic(self):
+        server.add_log('INFO', 'Test message')
+        self.assertEqual(len(server.LOG_BUFFER), 1)
+        entry = server.LOG_BUFFER[0]
+        self.assertEqual(entry['level'], 'INFO')
+        self.assertEqual(entry['message'], 'Test message')
+        self.assertIn('time', entry)
+
+    def test_add_log_capacity(self):
+        server.MAX_LOG_ENTRIES = 3
+        server.add_log('INFO', 'Msg 1')
+        server.add_log('INFO', 'Msg 2')
+        server.add_log('INFO', 'Msg 3')
+        server.add_log('INFO', 'Msg 4')
+
+        self.assertEqual(len(server.LOG_BUFFER), 3)
+        self.assertEqual(server.LOG_BUFFER[0]['message'], 'Msg 2')
+        self.assertEqual(server.LOG_BUFFER[1]['message'], 'Msg 3')
+        self.assertEqual(server.LOG_BUFFER[2]['message'], 'Msg 4')
+
+    def test_add_log_concurrency(self):
+        server.MAX_LOG_ENTRIES = 100
+
+        def worker(worker_id):
+            for i in range(10):
+                server.add_log('INFO', f'Worker {worker_id} msg {i}')
+
+        threads = [threading.Thread(target=worker, args=(w,)) for w in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(len(server.LOG_BUFFER), 50)
+
+
 class ServerFlowTests(unittest.TestCase):
     avatar_data = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
