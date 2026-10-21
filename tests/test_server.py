@@ -2992,6 +2992,40 @@ class TestGenerateTOTPSecret(unittest.TestCase):
         self.assertTrue(set(secret).issubset(valid_alphabet))
 
 
+class TestComputeTOTPCode(unittest.TestCase):
+    def test_compute_totp_code_known_values(self):
+        secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'
+        self.assertEqual(server.compute_totp_code(secret, counter=1), '247374')
+        self.assertEqual(server.compute_totp_code(secret, counter=59), '465435')
+        self.assertEqual(server.compute_totp_code(secret, counter=37037036), '756375')
+
+    def test_compute_totp_code_padding(self):
+        secret_padded = 'NBSWY3DPO5XXE3DEEE======'
+        secret_unpadded = 'NBSWY3DPO5XXE3DEEE'
+        self.assertEqual(
+            server.compute_totp_code(secret_padded, counter=1),
+            server.compute_totp_code(secret_unpadded, counter=1)
+        )
+
+    def test_compute_totp_code_formatting(self):
+        secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'
+        secret_lower = secret.lower()
+        secret_spaces = f"  {secret}  "
+        code1 = server.compute_totp_code(secret, counter=1)
+        code2 = server.compute_totp_code(secret_lower, counter=1)
+        code3 = server.compute_totp_code(secret_spaces, counter=1)
+        self.assertEqual(code1, code2)
+        self.assertEqual(code1, code3)
+
+    @unittest.mock.patch('time.time')
+    def test_compute_totp_code_default_counter(self, mock_time):
+        # mock_time.return_value // 30 will be 37037036
+        mock_time.return_value = 37037036 * 30 + 15
+        secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'
+        code = server.compute_totp_code(secret)
+        self.assertEqual(code, '756375')
+
+
 class TestCreateServerBackupTemporaryFile(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
