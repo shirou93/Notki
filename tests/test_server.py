@@ -2437,11 +2437,20 @@ class PerformUpdateHelperTests(unittest.TestCase):
         mock_root.resolve.return_value = mock_root
         mock_root.__truediv__.return_value.resolve.return_value = mock_target_path
 
-        with unittest.mock.patch('server.tarfile', spec=[]):
+        mock_src = unittest.mock.MagicMock()
+        mock_src.read.side_effect = [b'content', b'']
+        mock_archive.extractfile.return_value = mock_src
+
+        mock_open = unittest.mock.mock_open()
+
+        with unittest.mock.patch('server.tarfile', spec=[]), \
+             unittest.mock.patch('builtins.open', mock_open), \
+             unittest.mock.patch('os.makedirs'), \
+             unittest.mock.patch('os.chmod'):
             self.handler._extract_update_archive(mock_archive, [mock_member])
 
         self.assertEqual(mock_member.name, 'app.js')
-        mock_archive.extractall.assert_called_once_with(path=mock_root, members=[mock_member])
+        mock_archive.extractfile.assert_called_once_with(mock_member)
 
 
 class GetForwardedProtoTests(unittest.TestCase):
