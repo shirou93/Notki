@@ -71,6 +71,16 @@ class ServerUnitTests(unittest.TestCase):
         with unittest.mock.patch('server.utc_now', return_value=fixed_time):
             self.assertEqual(server.iso_time(), '2023-10-21T12:00:00+00:00')
 
+    def test_backup_directory(self):
+        # Scenario 1: NOTKI_BACKUP_DIR is not set
+        with unittest.mock.patch.dict('os.environ', {}, clear=True):
+            expected_fallback = server.DB_PATH.parent / 'backups'
+            self.assertEqual(server.backup_directory(), expected_fallback)
+
+        # Scenario 2: NOTKI_BACKUP_DIR is set
+        with unittest.mock.patch.dict('os.environ', {'NOTKI_BACKUP_DIR': '/custom/backup/dir'}, clear=True):
+            self.assertEqual(server.backup_directory(), Path('/custom/backup/dir'))
+
     def test_account_key(self):
         self.assertEqual(server.account_key('USER@EXAMPLE.COM'), 'user@example.com')
         self.assertEqual(server.account_key('  User@Example.Com  '), 'user@example.com')
