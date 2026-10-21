@@ -1613,16 +1613,17 @@
       }
     });
 
-    const sanitized = purify.sanitize(html || '', {
+    const fragment = purify.sanitize(html || '', {
       ALLOWED_TAGS: ['a', 'b', 'blockquote', 'br', 'div', 'em', 'font', 'h2', 'h3', 'i', 'input', 'li', 'ol', 'p', 's', 'span', 'strong', 'u', 'ul'],
       ALLOWED_ATTR: ['href', 'size', 'type', 'checked', 'class'],
-      KEEP_CONTENT: true
+      KEEP_CONTENT: true,
+      RETURN_DOM_FRAGMENT: true
     });
 
     purify.removeHook('afterSanitizeElements');
 
     const wrapper = document.createElement('div');
-    wrapper.innerHTML = sanitized;
+    wrapper.appendChild(fragment);
     wrapper.querySelectorAll('.task-drag-handle').forEach(handle => {
       handle.innerHTML = TASK_DRAG_SVG;
     });
