@@ -35,6 +35,8 @@ window.i18n = {
   getLanguage: jest.fn(() => 'pl')
 };
 
+global.DOMPurify = require('dompurify')(window);
+
 // require the module
 const {
   bufferToBase64,

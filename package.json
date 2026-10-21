@@ -11,5 +11,8 @@
   },
   "jest": {
     "testEnvironment": "jsdom"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.17"
   }
 }

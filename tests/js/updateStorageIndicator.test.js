@@ -33,6 +33,8 @@ const {
   queueSync,
 } = require('../../app.js');
 
+global.DOMPurify = require('dompurify')(window);
+
 describe('updateStorageIndicator', () => {
   let container, dot, label, topbarSync;
 

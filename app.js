@@ -1547,72 +1547,87 @@
       note.order = Date.now();
     }
 
+  const getDOMPurify = () => {
+    if (typeof window !== 'undefined' && window.DOMPurify) return window.DOMPurify;
+    if (typeof require !== 'undefined') {
+      try {
+        const createDOMPurify = require('dompurify');
+        if (typeof window !== 'undefined') return createDOMPurify(window);
+        if (typeof global !== 'undefined' && global.DOMPurify) return global.DOMPurify;
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  };
+
   function sanitizeRichHtml(html) {
-    const template = document.createElement('template');
-    template.innerHTML = String(html || '');
-    const allowedTags = new Set(['A', 'B', 'BLOCKQUOTE', 'BR', 'DIV', 'EM', 'FONT', 'H2', 'H3', 'I', 'INPUT', 'LI', 'OL', 'P', 'S', 'SPAN', 'STRONG', 'U', 'UL']);
-    const output = document.createElement('div');
-    const copySafeNode = (parent, node) => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        parent.append(document.createTextNode(node.nodeValue || ''));
-        return;
-      }
+    const purify = getDOMPurify();
+    if (!purify) return '';
+
+    purify.addHook('afterSanitizeElements', (node) => {
       if (node.nodeType !== Node.ELEMENT_NODE) return;
-      if (!allowedTags.has(node.tagName)) {
-        [...node.childNodes].forEach(child => copySafeNode(parent, child));
-        return;
-      }
+
+      // Extract existing classes that need to be preserved
+      const isTaskList = node.tagName === 'UL' && node.classList.contains('task-list');
+      const isTaskListCompleted = node.tagName === 'UL' && node.classList.contains('task-list-completed');
+      const isTaskGroupLabel = node.tagName === 'P' && node.classList.contains('task-group-label');
+      const isTaskDragHandle = node.tagName === 'SPAN' && node.classList.contains('task-drag-handle');
+
+      const isTaskText = node.tagName === 'SPAN' && (node.classList.contains('task-text')
+        || (!node.classList.contains('task-drag-handle') && node.parentElement?.matches('li') && node.parentElement.querySelector('input[type="checkbox"]')));
+
+      // Remove any arbitrary classes provided by user
+      if (node.hasAttribute('class')) node.removeAttribute('class');
+
       if (node.tagName === 'INPUT') {
-        if (node.type !== 'checkbox') return;
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'task-checkbox';
-        if (node.checked || node.hasAttribute('checked')) checkbox.setAttribute('checked', '');
-        checkbox.contentEditable = 'false';
-        checkbox.setAttribute('aria-label', t('editor.checkboxAria'));
-        parent.append(checkbox);
-        return;
-      }
-      const safeNode = document.createElement(node.tagName.toLowerCase());
-      if (node.tagName === 'FONT' && node.hasAttribute('size')) {
-        safeNode.setAttribute('size', node.getAttribute('size'));
-      }
-      if (node.tagName === 'UL' && node.classList.contains('task-list')) {
-        safeNode.className = node.classList.contains('task-list-completed') ? 'task-list task-list-completed' : 'task-list';
-      }
-      if (node.tagName === 'LI' && node.closest('.task-list')) {
+        if (node.type !== 'checkbox') {
+          node.remove();
+          return;
         }
-      if (node.tagName === 'P' && node.classList.contains('task-group-label')) {
-        safeNode.className = 'task-group-label';
-        safeNode.contentEditable = 'false';
+        node.className = 'task-checkbox';
+        node.contentEditable = 'false';
+        node.setAttribute('aria-label', t('editor.checkboxAria'));
       }
-      if (node.tagName === 'SPAN' && node.classList.contains('task-drag-handle')) {
-        safeNode.className = 'task-drag-handle';
-        safeNode.contentEditable = 'false';
-        safeNode.setAttribute('aria-label', t('card.drag'));
-        safeNode.title = t('card.dragTitle');
-        safeNode.innerHTML = TASK_DRAG_SVG;
-        parent.append(safeNode);
-        return;
+
+      if (isTaskList) {
+        node.className = isTaskListCompleted ? 'task-list task-list-completed' : 'task-list';
       }
-      if (node.tagName === 'SPAN' && (node.classList.contains('task-text')
-          || (!node.classList.contains('task-drag-handle') && node.parentElement?.matches('li') && node.parentElement.querySelector('input[type="checkbox"]')))) {
-        safeNode.className = 'task-text';
-        safeNode.tabIndex = 0;
+
+      if (isTaskGroupLabel) {
+        node.className = 'task-group-label';
+        node.contentEditable = 'false';
       }
-      if (node.tagName === 'A') {
-        try {
-          const url = new URL(node.getAttribute('href'), window.location.href);
-          if (['http:', 'https:', 'mailto:'].includes(url.protocol)) safeNode.setAttribute('href', url.href);
-        } catch {
-          safeNode.removeAttribute('href');
-        }
+
+      if (isTaskDragHandle) {
+        node.className = 'task-drag-handle';
+        node.contentEditable = 'false';
+        node.setAttribute('aria-label', t('card.drag'));
+        node.title = t('card.dragTitle');
+        // SVG injected post-sanitization to avoid DOMPurify removing the SVG path elements.
       }
-      [...node.childNodes].forEach(child => copySafeNode(safeNode, child));
-      parent.append(safeNode);
-    };
-    [...template.content.childNodes].forEach(child => copySafeNode(output, child));
-    return output.innerHTML;
+
+      if (isTaskText) {
+        node.className = 'task-text';
+        node.tabIndex = 0;
+      }
+    });
+
+    const sanitized = purify.sanitize(html || '', {
+      ALLOWED_TAGS: ['a', 'b', 'blockquote', 'br', 'div', 'em', 'font', 'h2', 'h3', 'i', 'input', 'li', 'ol', 'p', 's', 'span', 'strong', 'u', 'ul'],
+      ALLOWED_ATTR: ['href', 'size', 'type', 'checked', 'class'],
+      KEEP_CONTENT: true
+    });
+
+    purify.removeHook('afterSanitizeElements');
+
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = sanitized;
+    wrapper.querySelectorAll('.task-drag-handle').forEach(handle => {
+      handle.innerHTML = TASK_DRAG_SVG;
+    });
+
+    return wrapper.innerHTML;
   }
 
   function plainTextToHtml(text) {
