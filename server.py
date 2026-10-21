@@ -54,6 +54,9 @@ STEP_UP_WINDOW_MINUTES = 5
 INVITE_DAYS = 7
 PASSWORD_ITERATIONS = 310_000
 BACKUP_PASSWORD_ITERATIONS = 200_000
+SCRYPT_N = 65536
+SCRYPT_R = 8
+SCRYPT_P = 1
 MAX_CONCURRENT_REQUESTS = 32
 REQUEST_TIMEOUT_SECONDS = 15
 MAX_AUTH_TRACKED_IPS = 10_000
@@ -63,8 +66,10 @@ FAIL2BAN_PRUNE_INTERVAL = 300
 
 def hash_password(password):
     salt = secrets.token_bytes(16)
-    derived = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, PASSWORD_ITERATIONS)
-    return f'pbkdf2_sha256${PASSWORD_ITERATIONS}${salt.hex()}${derived.hex()}'
+    derived = hashlib.scrypt(
+        password.encode('utf-8'), salt=salt, n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, maxmem=1024**3
+    )
+    return f'scrypt${SCRYPT_N}${SCRYPT_R}${SCRYPT_P}${salt.hex()}${derived.hex()}'
 
 # Dummy hash used to mitigate timing side-channel attacks during login when email is not found
 # This hash must be generated properly to have exact exact same timing properties.
@@ -1116,13 +1121,36 @@ def initialize_database():
                 )
 
 
+def password_needs_rehash(encoded):
+    try:
+        parts = encoded.split('$')
+        if parts[0] != 'scrypt':
+            return True
+        _, n, r, p, _, _ = parts
+        if int(n) != SCRYPT_N or int(r) != SCRYPT_R or int(p) != SCRYPT_P:
+            return True
+        return False
+    except Exception:
+        return False
+
+
 def verify_password(password, encoded):
     try:
-        algorithm, iterations, salt_hex, expected_hex = encoded.split('$')
-        if algorithm != 'pbkdf2_sha256':
-            return False
-        actual = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), bytes.fromhex(salt_hex), int(iterations))
-        return hmac.compare_digest(actual.hex(), expected_hex)
+        parts = encoded.split('$')
+        if parts[0] == 'scrypt':
+            _, n, r, p, salt_hex, expected_hex = parts
+            actual = hashlib.scrypt(
+                password.encode('utf-8'), salt=bytes.fromhex(salt_hex),
+                n=int(n), r=int(r), p=int(p), maxmem=1024**3
+            )
+            return hmac.compare_digest(actual.hex(), expected_hex)
+        elif parts[0] == 'pbkdf2_sha256':
+            _, iterations, salt_hex, expected_hex = parts
+            actual = hashlib.pbkdf2_hmac(
+                'sha256', password.encode('utf-8'), bytes.fromhex(salt_hex), int(iterations)
+            )
+            return hmac.compare_digest(actual.hex(), expected_hex)
+        return False
     except (ValueError, TypeError, AttributeError):
         return False
 
@@ -2887,12 +2915,21 @@ class NotkiHandler(BaseHTTPRequestHandler):
     @staticmethod
     def valid_password_hash(password_hash):
         try:
-            algorithm, iterations, salt_hex, digest_hex = password_hash.split('$')
-            count = int(iterations)
-            return (
-                algorithm == 'pbkdf2_sha256' and 100_000 <= count <= 2_000_000
-                and len(bytes.fromhex(salt_hex)) == 16 and len(bytes.fromhex(digest_hex)) == 32
-            )
+            parts = password_hash.split('$')
+            if parts[0] == 'scrypt':
+                _, n, r, p, salt_hex, digest_hex = parts
+                return (
+                    1024 <= int(n) <= 1_048_576 and 1 <= int(r) <= 32 and 1 <= int(p) <= 10
+                    and len(bytes.fromhex(salt_hex)) == 16 and len(bytes.fromhex(digest_hex)) >= 16
+                )
+            elif parts[0] == 'pbkdf2_sha256':
+                _, iterations, salt_hex, digest_hex = parts
+                count = int(iterations)
+                return (
+                    100_000 <= count <= 2_000_000
+                    and len(bytes.fromhex(salt_hex)) == 16 and len(bytes.fromhex(digest_hex)) == 32
+                )
+            return False
         except (ValueError, TypeError):
             return False
 
@@ -2945,6 +2982,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             require_2fa = False
             user_data = None
             if row and valid_password:
+                if password_needs_rehash(password_hash):
+                    connection.execute('UPDATE users SET password_hash = ? WHERE id = ?', (hash_password(password), row['id']))
                 totp_secret = reveal_totp_secret(row['totp_secret'])
                 has_totp = bool(totp_secret and not totp_secret.startswith('pending:'))
                 pk_count = connection.execute('SELECT COUNT(*) FROM passkeys WHERE user_id = ?', (row['id'],)).fetchone()[0]
