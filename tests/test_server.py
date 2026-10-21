@@ -2282,15 +2282,23 @@ class PerformUpdateHelperTests(unittest.TestCase):
 
         # Should extract file1.py with filter='data'
         self.assertEqual(mock_member1.name, 'file1.py')
-        mock_archive.extract.assert_called_once_with(mock_member1, path=mock_root, filter='data')
+        mock_archive.extractall.assert_called_once_with(path=mock_root, members=[mock_member1], filter='data')
 
+    @unittest.mock.patch('server.os.path.commonpath')
+    @unittest.mock.patch('server.os.path.realpath')
     @unittest.mock.patch('server.ROOT')
-    def test_extract_update_archive_without_data_filter(self, mock_root):
+    def test_extract_update_archive_without_data_filter(self, mock_root, mock_realpath, mock_commonpath):
+        mock_realpath.side_effect = lambda x: str(x)
+        mock_commonpath.return_value = str(mock_root)
         mock_archive = unittest.mock.MagicMock()
 
         mock_member = unittest.mock.MagicMock()
         mock_member.name = 'Notki-master/app.js'
         mock_member.isreg.return_value = True
+        mock_member.issym.return_value = False
+        mock_member.islnk.return_value = False
+        mock_member.issym.return_value = False
+        mock_member.islnk.return_value = False
         mock_member.isdir.return_value = False
 
         mock_target_path = unittest.mock.MagicMock()
@@ -2302,7 +2310,7 @@ class PerformUpdateHelperTests(unittest.TestCase):
             self.handler._extract_update_archive(mock_archive, [mock_member])
 
         self.assertEqual(mock_member.name, 'app.js')
-        mock_archive.extract.assert_called_once_with(mock_member, path=mock_root)
+        mock_archive.extractall.assert_called_once_with(path=mock_root, members=[mock_member])
 
 
 class GetForwardedProtoTests(unittest.TestCase):
