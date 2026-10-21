@@ -2708,6 +2708,33 @@ class TestHashPassword(unittest.TestCase):
         self.assertEqual(len(hashed.split('$')), 6)
 
 
+
+class TestHashBackupCode(unittest.TestCase):
+    def test_hash_backup_code_normal(self):
+        code = "1234ABCD"
+        expected_hash = hashlib.sha256(code.encode('utf-8')).hexdigest()
+        self.assertEqual(server.hash_backup_code(code), f"sha256${expected_hash}")
+
+    def test_hash_backup_code_lowercase(self):
+        code = "1234abcd"
+        expected_hash = hashlib.sha256("1234ABCD".encode('utf-8')).hexdigest()
+        self.assertEqual(server.hash_backup_code(code), f"sha256${expected_hash}")
+
+    def test_hash_backup_code_with_formatting(self):
+        code = "1234-abcd 5678"
+        expected_hash = hashlib.sha256("1234ABCD5678".encode('utf-8')).hexdigest()
+        self.assertEqual(server.hash_backup_code(code), f"sha256${expected_hash}")
+
+    def test_hash_backup_code_empty_and_none(self):
+        expected_hash = hashlib.sha256(b"").hexdigest()
+        self.assertEqual(server.hash_backup_code(""), f"sha256${expected_hash}")
+        self.assertEqual(server.hash_backup_code(None), f"sha256${expected_hash}")
+
+    def test_hash_backup_code_non_string(self):
+        expected_hash = hashlib.sha256(b"12345").hexdigest()
+        self.assertEqual(server.hash_backup_code(12345), f"sha256${expected_hash}")
+
+
 class TestVerifyPassword(unittest.TestCase):
     def test_verify_password_valid(self):
         password = "secret_password_123"
