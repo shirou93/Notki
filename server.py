@@ -360,8 +360,8 @@ def _prune_fail2ban_database(now):
             )
             # Cap the table size
             connection.execute(
-                'DELETE FROM fail2ban_attempts WHERE rowid NOT IN ('
-                '  SELECT rowid FROM fail2ban_attempts ORDER BY created_at DESC LIMIT 100000'
+                'DELETE FROM fail2ban_attempts WHERE rowid IN ('
+                '  SELECT rowid FROM fail2ban_attempts ORDER BY created_at DESC LIMIT -1 OFFSET 100000'
                 ')'
             )
     except Exception:
