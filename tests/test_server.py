@@ -2722,6 +2722,29 @@ class TestParseForwardedElements(unittest.TestCase):
                 self.assertEqual(server.parse_forwarded_elements(input_val), expected)
 
 
+class TestParseForwardedHost(unittest.TestCase):
+    def test_parse_forwarded_host(self):
+        cases = [
+            ("empty string", "", None),
+            ("none", None, None),
+            ("no host", "for=192.0.2.60;proto=http", None),
+            ("empty host", "host=", None),
+            ("empty quoted host", 'host=""', None),
+            ("single host", "host=example.com", "example.com"),
+            ("capitalized key", "Host=example.com", "example.com"),
+            ("quoted host", 'host="example.com"', "example.com"),
+            ("host with spaces", " host = example.com ", "example.com"),
+            ("multiple params", "for=192.0.2.60;host=example.com;proto=http", "example.com"),
+            ("multiple hosts (returns first)", "host=example.com, host=test.com", "example.com"),
+            ("second element has host", "for=192.0.2.60, host=example.com", "example.com"),
+            ("multiple hosts (ignores invalid first)", "host=, host=example.com", "example.com"),
+        ]
+
+        for name, input_val, expected in cases:
+            with self.subTest(msg=name):
+                self.assertEqual(server.parse_forwarded_host(input_val), expected)
+
+
 class TestParseForwardedFor(unittest.TestCase):
     def test_parse_forwarded_for(self):
         cases = [
