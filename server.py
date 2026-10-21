@@ -1110,14 +1110,19 @@ def initialize_database():
                 pass
 
         # Encrypt legacy plaintext TOTP secrets at rest.
+        legacy_secrets = []
         for user_row in connection.execute(
             "SELECT id, totp_secret FROM users WHERE totp_secret IS NOT NULL AND totp_secret != ''"
         ).fetchall():
             if not str(user_row['totp_secret']).startswith('enc:v1:'):
-                connection.execute(
-                    'UPDATE users SET totp_secret = ? WHERE id = ?',
-                    (protect_totp_secret(user_row['totp_secret']), user_row['id']),
+                legacy_secrets.append(
+                    (protect_totp_secret(user_row['totp_secret']), user_row['id'])
                 )
+        if legacy_secrets:
+            connection.executemany(
+                'UPDATE users SET totp_secret = ? WHERE id = ?',
+                legacy_secrets
+            )
 
 
 def password_needs_rehash(encoded):
