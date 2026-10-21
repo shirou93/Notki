@@ -2451,6 +2451,13 @@ class TranslateMessageTests(unittest.TestCase):
         self.assertEqual(server.translate_message('Enter a valid e-mail address.', 'de'), 'Enter a valid e-mail address.')
         self.assertEqual(server.translate_message('Enter a valid e-mail address.', 'es'), 'Enter a valid e-mail address.')
 
+    def test_translate_message_none_language(self):
+        self.assertEqual(server.translate_message('Enter a valid e-mail address.', None), 'Enter a valid e-mail address.')
+
+    def test_translate_message_invalid_message(self):
+        self.assertEqual(server.translate_message(None, 'pl'), None)
+        self.assertEqual(server.translate_message('', 'pl'), '')
+
 
 class RecordFailedAuthTests(unittest.TestCase):
     def setUp(self):
