@@ -2532,10 +2532,13 @@ class RecordFailedAuthTests(unittest.TestCase):
 
 class IsRateLimitedTests(unittest.TestCase):
     def setUp(self):
+        server._FAIL2BAN_CONFIG_CACHE = None
         server.FAILED_AUTH_ATTEMPTS.clear()
+        server.FAILED_AUTH_DB_SYNCED.clear()
 
     def tearDown(self):
         server.FAILED_AUTH_ATTEMPTS.clear()
+        server.FAILED_AUTH_DB_SYNCED.clear()
 
     def test_is_rate_limited_empty_ip(self):
         self.assertFalse(server.is_rate_limited('192.168.1.100'))
@@ -2560,6 +2563,7 @@ class IsRateLimitedTests(unittest.TestCase):
 
     @unittest.mock.patch('server.time.time')
     def test_is_rate_limited_window_expiration(self, mock_time):
+        server._FAIL2BAN_CONFIG_CACHE = None
         # 15 attempts recorded at t=1000.0
         server.FAILED_AUTH_ATTEMPTS['192.168.1.100'] = [1000.0] * 15
 
@@ -2590,7 +2594,7 @@ class IsRateLimitedTests(unittest.TestCase):
     @unittest.mock.patch('server.time.time')
     def test_is_rate_limited_ip_isolation(self, mock_time):
         mock_time.return_value = 1000.0
-        server.FAILED_AUTH_ATTEMPTS['192.168.1.1'] = [1000.0] * 15
+        server.FAILED_AUTH_ATTEMPTS['192.168.1.1'] = [1000.0 - i for i in range(15)]
         server.FAILED_AUTH_ATTEMPTS['192.168.1.2'] = [1000.0] * 5
 
         self.assertTrue(server.is_rate_limited('192.168.1.1'))
@@ -2607,7 +2611,7 @@ class IsRateLimitedTests(unittest.TestCase):
         mock_db.return_value.__enter__.return_value = mock_conn
         mock_cursor = unittest.mock.MagicMock()
         mock_conn.execute.return_value = mock_cursor
-        mock_cursor.fetchone.return_value = [15]
+        mock_cursor.fetchall.return_value = [[server.time.time() - i] for i in range(15)]
 
         self.assertTrue(server.is_rate_limited('192.168.1.100'))
 
@@ -2617,7 +2621,7 @@ class IsRateLimitedTests(unittest.TestCase):
         mock_db.return_value.__enter__.return_value = mock_conn
         mock_cursor = unittest.mock.MagicMock()
         mock_conn.execute.return_value = mock_cursor
-        mock_cursor.fetchone.return_value = [14]
+        mock_cursor.fetchall.return_value = [[server.time.time() - i] for i in range(14)]
 
         self.assertFalse(server.is_rate_limited('192.168.1.100'))
 
@@ -3039,6 +3043,8 @@ class TestClientIPAndProxyTrust(unittest.TestCase):
 
 class Fail2banUnitTests(unittest.TestCase):
     def setUp(self):
+        server._FAIL2BAN_CONFIG_CACHE = None
+    def setUp(self):
         server.initialize_database()
         server.unban_all()
 
@@ -3052,6 +3058,7 @@ class Fail2banUnitTests(unittest.TestCase):
 
         # Test 1: Default configuration when database returns empty
         mock_connection.execute.return_value.fetchall.return_value = []
+        server._FAIL2BAN_CONFIG_CACHE = None
         config = server.get_fail2ban_config()
         self.assertEqual(config, {'enabled': True, 'max_attempts': 15, 'ban_time': 60})
 
@@ -3061,11 +3068,13 @@ class Fail2banUnitTests(unittest.TestCase):
             {'key': 'fail2banMaxAttempts', 'value': '5'},
             {'key': 'fail2banBanTime', 'value': '120'}
         ]
+        server._FAIL2BAN_CONFIG_CACHE = None
         config = server.get_fail2ban_config()
         self.assertEqual(config, {'enabled': False, 'max_attempts': 5, 'ban_time': 120})
 
         # Test 3: Exception during database operation falls back to default configuration
         mock_connection.execute.side_effect = Exception("DB error")
+        server._FAIL2BAN_CONFIG_CACHE = None
         config = server.get_fail2ban_config()
         self.assertEqual(config, {'enabled': True, 'max_attempts': 15, 'ban_time': 60})
 

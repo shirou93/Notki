@@ -200,6 +200,7 @@ TEMP_2FA_LOCK = threading.Lock()
 PASSKEY_CHALLENGES = {}
 PASSKEY_CHALLENGES_LOCK = threading.Lock()
 FAILED_AUTH_ATTEMPTS = {}
+FAILED_AUTH_DB_SYNCED = set()
 UNFLUSHED_FAIL2BAN_ATTEMPTS = []
 # Failed attempts attributed to a specific (ip, account) pair. This lets a successful
 # login clear only the failures recorded for that account instead of wiping the whole
@@ -209,6 +210,7 @@ FAILED_AUTH_LOCK = threading.Lock()
 # Per-account failures aggregated across source addresses. This prevents a
 # distributed password-spraying campaign from staying under the per-IP limit.
 ACCOUNT_FAILURES = {}
+ACCOUNT_FAILURES_DB_SYNCED = set()
 FAIL2BAN_PRUNE_LOCK = threading.Lock()
 LAST_FAIL2BAN_PRUNE = 0.0
 
@@ -263,7 +265,16 @@ def parse_forwarded_host(value):
             return host.split(',')[0].strip()
     return None
 
+
+_FAIL2BAN_CONFIG_CACHE = None
+_FAIL2BAN_CONFIG_TIME = 0
+
 def get_fail2ban_config():
+    global _FAIL2BAN_CONFIG_CACHE, _FAIL2BAN_CONFIG_TIME
+    now = time.time()
+    if _FAIL2BAN_CONFIG_CACHE is not None and now - _FAIL2BAN_CONFIG_TIME < 60:
+        return _FAIL2BAN_CONFIG_CACHE
+
     enabled = True
     max_attempts = 15
     ban_time = 60
@@ -279,7 +290,11 @@ def get_fail2ban_config():
                 ban_time = int(settings_dict['fail2banBanTime'])
     except Exception:
         pass
-    return {'enabled': enabled, 'max_attempts': max_attempts, 'ban_time': ban_time}
+
+    _FAIL2BAN_CONFIG_CACHE = {'enabled': enabled, 'max_attempts': max_attempts, 'ban_time': ban_time}
+    _FAIL2BAN_CONFIG_TIME = now
+    return _FAIL2BAN_CONFIG_CACHE
+
 
 def _prune_auth_state_locked(now):
     """Bound in-memory authentication state and drop stale entries."""
@@ -292,6 +307,7 @@ def _prune_auth_state_locked(now):
             FAILED_AUTH_ATTEMPTS[ip] = attempts
         else:
             FAILED_AUTH_ATTEMPTS.pop(ip, None)
+            FAILED_AUTH_DB_SYNCED.discard(ip)
     for key in tuple(FAILED_AUTH_ACCOUNTS):
         attempts = [t for t in FAILED_AUTH_ACCOUNTS[key] if now - t < 3600]
         if len(attempts) > MAX_ATTEMPTS_PER_KEY:
@@ -308,16 +324,25 @@ def _prune_auth_state_locked(now):
             ACCOUNT_FAILURES[key] = attempts
         else:
             ACCOUNT_FAILURES.pop(key, None)
+            ACCOUNT_FAILURES_DB_SYNCED.discard(key)
 
     while len(FAILED_AUTH_ATTEMPTS) > MAX_AUTH_TRACKED_IPS:
         oldest_ip = min(FAILED_AUTH_ATTEMPTS, key=lambda item: max(FAILED_AUTH_ATTEMPTS[item]))
         FAILED_AUTH_ATTEMPTS.pop(oldest_ip, None)
+        FAILED_AUTH_DB_SYNCED.discard(oldest_ip)
+
+    while len(FAILED_AUTH_DB_SYNCED) > MAX_AUTH_TRACKED_IPS * 2:
+        FAILED_AUTH_DB_SYNCED.pop()
     while len(FAILED_AUTH_ACCOUNTS) > MAX_AUTH_TRACKED_IPS:
         oldest_key = min(FAILED_AUTH_ACCOUNTS, key=lambda item: max(FAILED_AUTH_ACCOUNTS[item]))
         FAILED_AUTH_ACCOUNTS.pop(oldest_key, None)
     while len(ACCOUNT_FAILURES) > MAX_AUTH_ACCOUNTS:
         oldest_account = min(ACCOUNT_FAILURES, key=lambda item: max(ACCOUNT_FAILURES[item]))
         ACCOUNT_FAILURES.pop(oldest_account, None)
+        ACCOUNT_FAILURES_DB_SYNCED.discard(oldest_account)
+
+    while len(ACCOUNT_FAILURES_DB_SYNCED) > MAX_AUTH_ACCOUNTS * 2:
+        ACCOUNT_FAILURES_DB_SYNCED.pop()
 
 
 
@@ -409,15 +434,24 @@ def is_rate_limited(ip, max_failed=None, window_seconds=None):
         FAILED_AUTH_ATTEMPTS[ip] = mem_attempts
         if len(mem_attempts) >= max_failed:
             return True
+        if ip in FAILED_AUTH_DB_SYNCED:
+            return False
 
     try:
         with database() as connection:
-            row = connection.execute(
-                'SELECT COUNT(*) FROM fail2ban_attempts WHERE ip = ? AND created_at > ?',
+            rows = connection.execute(
+                'SELECT created_at FROM fail2ban_attempts WHERE ip = ? AND created_at > ?',
                 (ip, cutoff)
-            ).fetchone()
-            if row and row[0] >= max_failed:
-                return True
+            ).fetchall()
+            with FAILED_AUTH_LOCK:
+                mem_attempts = FAILED_AUTH_ATTEMPTS.get(ip, [])
+                for r in rows:
+                    if r[0] not in mem_attempts:
+                        mem_attempts.append(r[0])
+                FAILED_AUTH_ATTEMPTS[ip] = sorted(mem_attempts)
+                FAILED_AUTH_DB_SYNCED.add(ip)
+                if len(FAILED_AUTH_ATTEMPTS[ip]) >= max_failed:
+                    return True
     except Exception:
         pass
 
@@ -437,7 +471,30 @@ def is_account_rate_limited(account, max_failed=None, window_seconds=3600):
     with FAILED_AUTH_LOCK:
         attempts = [t for t in ACCOUNT_FAILURES.get(key, []) if t > cutoff]
         ACCOUNT_FAILURES[key] = attempts
-        return len(attempts) >= max_failed
+        if len(attempts) >= max_failed:
+            return True
+        if key in ACCOUNT_FAILURES_DB_SYNCED:
+            return False
+
+    try:
+        with database() as connection:
+            rows = connection.execute(
+                'SELECT created_at FROM fail2ban_attempts WHERE account = ? AND created_at > ?',
+                (key, cutoff)
+            ).fetchall()
+            with FAILED_AUTH_LOCK:
+                mem_attempts = ACCOUNT_FAILURES.get(key, [])
+                for r in rows:
+                    if r[0] not in mem_attempts:
+                        mem_attempts.append(r[0])
+                ACCOUNT_FAILURES[key] = sorted(mem_attempts)
+                ACCOUNT_FAILURES_DB_SYNCED.add(key)
+                if len(ACCOUNT_FAILURES[key]) >= max_failed:
+                    return True
+    except Exception:
+        pass
+
+    return False
 
 
 def unban_ip(ip):
@@ -448,6 +505,7 @@ def unban_ip(ip):
     with FAILED_AUTH_LOCK:
         mem_found = ip in FAILED_AUTH_ATTEMPTS
         FAILED_AUTH_ATTEMPTS.pop(ip, None)
+        FAILED_AUTH_DB_SYNCED.discard(ip)
         for account_key_value in tuple(k for k in FAILED_AUTH_ACCOUNTS if k[0] == ip):
             FAILED_AUTH_ACCOUNTS.pop(account_key_value, None)
 
@@ -478,6 +536,7 @@ def clear_failed_auth(ip, account=None):
         with FAILED_AUTH_LOCK:
             FAILED_AUTH_ACCOUNTS.pop((ip, key), None)
             ACCOUNT_FAILURES.pop(key, None)
+            ACCOUNT_FAILURES_DB_SYNCED.discard(key)
         try:
             with database() as connection:
                 connection.execute(
@@ -489,6 +548,7 @@ def clear_failed_auth(ip, account=None):
 
     with FAILED_AUTH_LOCK:
         FAILED_AUTH_ATTEMPTS.pop(ip, None)
+        FAILED_AUTH_DB_SYNCED.discard(ip)
         for account_key_value in tuple(k for k in FAILED_AUTH_ACCOUNTS if k[0] == ip):
             FAILED_AUTH_ACCOUNTS.pop(account_key_value, None)
 
@@ -502,8 +562,10 @@ def unban_all():
     with FAILED_AUTH_LOCK:
         mem_count = len(FAILED_AUTH_ATTEMPTS)
         FAILED_AUTH_ATTEMPTS.clear()
+        FAILED_AUTH_DB_SYNCED.clear()
         FAILED_AUTH_ACCOUNTS.clear()
         ACCOUNT_FAILURES.clear()
+        ACCOUNT_FAILURES_DB_SYNCED.clear()
 
     db_count = 0
     try:
@@ -3635,6 +3697,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
         })
 
     def save_settings(self, payload):
+        global _FAIL2BAN_CONFIG_CACHE
+        _FAIL2BAN_CONFIG_CACHE = None
         user = self.require_user(admin=True)
         require_2fa = 'true' if payload.get('require2FA') else 'false'
         if require_2fa == 'true' and not user.get('has2FA'):
