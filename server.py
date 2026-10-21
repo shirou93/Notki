@@ -645,10 +645,16 @@ def _prune_and_store(store, key, value, max_entries):
     denial of service.
     """
     now = utc_now()
-    expired = tuple(k for k, v in store.items() if v['expiresAt'] < now)
-    for k in expired:
-        del store[k]
-    # Evict the oldest entries (dict preserves insertion order) once the cap is reached.
+    # Dict preserves insertion order, and expiresAt is monotonically increasing,
+    # so we only need to check from the oldest elements to find expired ones.
+    while store:
+        oldest_k = next(iter(store))
+        if store[oldest_k]['expiresAt'] < now:
+            del store[oldest_k]
+        else:
+            break
+
+    # Evict the oldest entries once the cap is reached.
     while len(store) >= max_entries:
         oldest = next(iter(store), None)
         if oldest is None:
