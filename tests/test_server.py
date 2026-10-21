@@ -9,6 +9,7 @@ import subprocess
 import tarfile
 import tempfile
 import threading
+from datetime import timedelta
 import unittest
 import unittest.mock
 from datetime import datetime, timedelta, timezone
@@ -1705,6 +1706,23 @@ class ServerFlowTests(unittest.TestCase):
             server.MAX_PASSKEY_CHALLENGES = original_limit
             with server.PASSKEY_CHALLENGES_LOCK:
                 server.PASSKEY_CHALLENGES.clear()
+
+    def test_create_temp_2fa_token(self):
+        with server.TEMP_2FA_LOCK:
+            server.TEMP_2FA_TOKENS.clear()
+
+        user_id = 123
+        token = server.create_temp_2fa_token(user_id)
+
+        self.assertIsNotNone(token)
+        self.assertEqual(len(token), 43)  # token_urlsafe(32) returns 43 chars
+
+        with server.TEMP_2FA_LOCK:
+            self.assertIn(token, server.TEMP_2FA_TOKENS)
+            token_data = server.TEMP_2FA_TOKENS[token]
+            self.assertEqual(token_data['userId'], user_id)
+            self.assertGreater(token_data['expiresAt'], server.utc_now())
+            self.assertLessEqual(token_data['expiresAt'], server.utc_now() + timedelta(minutes=5))
 
     def test_temp_2fa_tokens_are_bounded(self):
         original_limit = server.MAX_TEMP_2FA_TOKENS
