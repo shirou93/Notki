@@ -2749,6 +2749,24 @@ class TestHashPassword(unittest.TestCase):
         self.assertTrue(hashed.startswith(f'scrypt${server.SCRYPT_N}${server.SCRYPT_R}${server.SCRYPT_P}$'))
         self.assertEqual(len(hashed.split('$')), 6)
 
+    @unittest.mock.patch('secrets.token_bytes')
+    def test_deterministic_hash(self, mock_token_bytes):
+        # Provide a known fixed salt (must be 16 bytes)
+        mock_token_bytes.return_value = b'1234567890123456'
+        password = "known_password"
+
+        hashed = server.hash_password(password)
+
+        # This exact hash output is generated deterministically given the fixed salt above
+        expected_hash = (
+            f"scrypt${server.SCRYPT_N}${server.SCRYPT_R}${server.SCRYPT_P}$"
+            f"31323334353637383930313233343536$"
+            f"ee72049a0f3bf77f0a0f07464eee4100249a418f983e3034275bb815fc8eb616"
+            f"cfb4128519253968989d517b0a3a7763e1282b82c93d340d0fdfb1cc65b46cbf"
+        )
+        self.assertEqual(hashed, expected_hash)
+        mock_token_bytes.assert_called_once_with(16)
+
 
 
 class TestHashBackupCode(unittest.TestCase):
