@@ -2477,7 +2477,33 @@ class NotkiHandler(BaseHTTPRequestHandler):
         if hasattr(tarfile, 'data_filter'):
             archive.extractall(path=path, members=safe_members, filter='data')
         else:
-            archive.extractall(path=path, members=safe_members)
+            import shutil
+            for member in safe_members:
+                member_path = os.path.realpath(os.path.join(base_path, member.name))
+                if os.path.commonpath([base_path, member_path]) != base_path:
+                    continue
+                if member.isdir():
+                    os.makedirs(member_path, exist_ok=True)
+                elif member.isreg():
+                    os.makedirs(os.path.dirname(member_path), exist_ok=True)
+                    try:
+                        src = archive.extractfile(member)
+                    except Exception:
+                        continue
+                    if src:
+                        try:
+                            with open(member_path, 'wb') as dst:
+                                shutil.copyfileobj(src, dst)
+                        finally:
+                            src.close()
+                        try:
+                            os.chmod(member_path, member.mode)
+                        except OSError:
+                            pass
+                elif member.issym() or member.islnk():
+                    # Safely handle symlinks if needed, or explicitly skip
+                    # We explicitly skip symlinks and links in safe_members filtering above
+                    pass
 
     def _extract_update_archive(self, archive, members):
         valid_members = []
