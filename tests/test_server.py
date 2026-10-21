@@ -2840,6 +2840,30 @@ class TestHashPassword(unittest.TestCase):
 
 
 
+class TestGenerateBackupCodes(unittest.TestCase):
+    def test_generate_default_count(self):
+        codes = server.generate_backup_codes()
+        self.assertEqual(len(codes), 8)
+
+    def test_generate_custom_count(self):
+        codes = server.generate_backup_codes(count=5)
+        self.assertEqual(len(codes), 5)
+
+        codes_zero = server.generate_backup_codes(count=0)
+        self.assertEqual(len(codes_zero), 0)
+
+    def test_generate_backup_codes_format(self):
+        import re
+        codes = server.generate_backup_codes(count=10)
+        pattern = re.compile(r'^[0-9A-F]{4}(-[0-9A-F]{4}){5}$')
+        for code in codes:
+            self.assertEqual(len(code), 29)
+            self.assertTrue(pattern.match(code))
+
+    def test_generate_backup_codes_unique(self):
+        codes = server.generate_backup_codes(count=100)
+        self.assertEqual(len(codes), len(set(codes)))
+
 class TestNormalizeBackupCode(unittest.TestCase):
     def test_normalize_backup_code_normal(self):
         self.assertEqual(server.normalize_backup_code("1234ABCD"), "1234ABCD")
