@@ -2673,10 +2673,13 @@ class NotkiHandler(BaseHTTPRequestHandler):
             try:
                 with tarfile.open(fileobj=io.BytesIO(raw_bytes), mode='r:*') as archive:
                     members = archive.getmembers()
-                    valid_members = [
-                        m for m in members
-                        if m.isfile() and Path(m.name).name == 'snapshot.json' and not Path(m.name).name.startswith('._')
-                    ]
+                    valid_members = []
+                    for m in members:
+                        if m.isfile() and Path(m.name).name == 'snapshot.json' and not Path(m.name).name.startswith('._'):
+                            member_path = Path(m.name)
+                            if not member_path.is_absolute() and '..' not in member_path.parts:
+                                valid_members.append(m)
+
                     if len(valid_members) == 1:
                         snapshot_member = valid_members[0]
                         snapshot_file = archive.extractfile(snapshot_member)
