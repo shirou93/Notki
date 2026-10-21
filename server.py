@@ -914,9 +914,14 @@ def totp_master_key():
         return key
 
 
+_TOTP_KEY_CACHE = None
+
 def _totp_encryption_key():
-    material = ('notki-totp-secret:' + totp_master_key()).encode('utf-8')
-    return hashlib.sha256(material).digest()
+    global _TOTP_KEY_CACHE
+    if _TOTP_KEY_CACHE is None:
+        material = ('notki-totp-secret:' + totp_master_key()).encode('utf-8')
+        _TOTP_KEY_CACHE = hashlib.sha256(material).digest()
+    return _TOTP_KEY_CACHE
 
 
 def protect_totp_secret(value):
