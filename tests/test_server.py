@@ -23,6 +23,9 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener, urlopen
 import server
 
 
+BACKUP_PASSWORD = 'test-backup-password-123'
+
+
 def with_same_origin(base_url, headers=None):
     headers = dict(headers or {})
     if getattr(server, 'GENERATED_SETUP_TOKEN', None) and 'X-Setup-Token' not in headers:
@@ -215,11 +218,11 @@ class ServerFlowTests(unittest.TestCase):
     def new_client():
         return build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
-    def request_raw_client(self, client, method, path, body, content_type='application/gzip'):
+    def request_raw_client(self, client, method, path, body, content_type='application/gzip', headers=None):
         request = Request(
             self.base_url + path,
             data=body,
-            headers=with_same_origin(self.base_url, {'Content-Type': content_type}),
+            headers=with_same_origin(self.base_url, {'Content-Type': content_type, **(headers or {})}),
             method=method,
         )
         try:
@@ -405,14 +408,17 @@ class ServerFlowTests(unittest.TestCase):
         self.request(owner, 'PUT', '/api/notes', {'notes': [self.note_payload('backup-1', 'Kopia')]})
         self.request(owner, 'POST', '/api/notes/backup-1/shares', {'email': 'reader3@example.com', 'permission': 'write'})
 
-        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {}, {'X-Backup-Password': BACKUP_PASSWORD})
         self.assertEqual(status, 201)
 
         status, backup_list = self.request(self.admin, 'GET', '/api/admin/backups')
         self.assertEqual(status, 200)
         matching_backup = next(b for b in backup_list['backups'] if b['filename'] == backup['filename'])
 
-        status, result = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {})
+        status, result = self.request(
+            self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {},
+            {'X-Backup-Password': BACKUP_PASSWORD},
+        )
         self.assertEqual(status, 200)
         self.assertEqual(result['shares'], 1)
 
@@ -449,7 +455,7 @@ class ServerFlowTests(unittest.TestCase):
         }
         status, _ = self.request(user_client, 'PUT', '/api/notes', {'notes': [note]})
         self.assertEqual(status, 200)
-        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {}, {'X-Backup-Password': BACKUP_PASSWORD})
         self.assertEqual(status, 201)
         self.assertRegex(backup['filename'], r'^notki-backup-\d{8}-\d{6}Z-[a-f0-9]{8}\.enc$')
         status, backups = self.request(self.admin, 'GET', '/api/admin/backups')
@@ -655,14 +661,17 @@ class ServerFlowTests(unittest.TestCase):
         status, _ = self.request(self.admin, 'POST', '/api/account/avatar', {'avatar': self.avatar_data})
         self.assertEqual(status, 200)
 
-        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {}, {'X-Backup-Password': BACKUP_PASSWORD})
         self.assertEqual(status, 201)
         filename = backup['filename']
 
         status, _ = self.request(self.admin, 'POST', '/api/account/avatar', {'avatar': None})
         self.assertEqual(status, 200)
 
-        status, _ = self.request(self.admin, 'POST', f'/api/admin/backups/{filename}/restore', {})
+        status, _ = self.request(
+            self.admin, 'POST', f'/api/admin/backups/{filename}/restore', {},
+            {'X-Backup-Password': BACKUP_PASSWORD},
+        )
         self.assertEqual(status, 200)
 
         restored = self.new_client()
@@ -1006,7 +1015,7 @@ class ServerFlowTests(unittest.TestCase):
     def test_upload_restore_server_backup(self):
         created_at = server.iso_time()
         snapshot = {
-            'format': 'notki-server-snapshot', 'version': 1, 'createdAt': created_at,
+            'format': 'notki-server-snapshot', 'version': 2, 'createdAt': created_at,
             'users': [{
                 'id': 1, 'email': 'uploaded-admin@example.com',
                 'passwordHash': server.hash_password('uploaded-admin-password'),
@@ -1019,10 +1028,14 @@ class ServerFlowTests(unittest.TestCase):
                 'createdAt': created_at, 'updatedAt': created_at, 'order': 1,
             }], 'invites': [], 'shares': [],
         }
-        snapshot_bytes = json.dumps(snapshot).encode('utf-8')
+        snapshot_bytes = server.encrypt_backup(snapshot, BACKUP_PASSWORD)
 
-        # Admin restores from uploaded file
-        status, result = self.request_raw_client(self.admin, 'POST', '/api/admin/backups/upload-restore', snapshot_bytes)
+        # Admin restores from an uploaded encrypted file
+        status, result = self.request_raw_client(
+            self.admin, 'POST', '/api/admin/backups/upload-restore', snapshot_bytes,
+            content_type='application/octet-stream',
+            headers={'X-Backup-Password': BACKUP_PASSWORD},
+        )
         self.assertEqual(status, 200)
         self.assertTrue(result['restored'])
 
@@ -1045,7 +1058,7 @@ class ServerFlowTests(unittest.TestCase):
         }
         status, _ = self.request(self.admin, 'PUT', '/api/notes', {'notes': [original_note]})
         self.assertEqual(status, 200)
-        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {}, {'X-Backup-Password': BACKUP_PASSWORD})
         self.assertEqual(status, 201)
 
         changed_note = {**original_note, 'id': 'later-note', 'title': 'Nowszy stan'}
@@ -1053,6 +1066,7 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         status, restored = self.request(
             self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {},
+            {'X-Backup-Password': BACKUP_PASSWORD},
         )
         self.assertEqual(status, 200)
         self.assertTrue(restored['restored'])
@@ -1441,11 +1455,14 @@ class ServerFlowTests(unittest.TestCase):
         self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': False, 'logLevel': 'DEBUG'})
 
         # Create backup
-        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {}, {'X-Backup-Password': BACKUP_PASSWORD})
         self.assertEqual(status, 201)
 
         # Restore backup
-        status, restored = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {})
+        status, restored = self.request(
+            self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {},
+            {'X-Backup-Password': BACKUP_PASSWORD},
+        )
         self.assertEqual(status, 200)
         self.assertEqual(restored.get('passkeys'), 1)
         self.assertEqual(restored.get('settings'), 4)
@@ -1458,12 +1475,19 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(settings['logLevel'], 'DEBUG')
 
-        # Verify user passkeys and TOTP survived backup/restore
+        # Verify user passkeys and TOTP survived backup/restore. The counter used
+        # during enrolment is preserved, so use a later deterministic time step
+        # instead of replaying the earlier code.
         status, res = self.request(user_client, 'POST', '/api/login', {'email': 'user2fa2@example.com', 'password': 'user-passphrase-123'})
         self.assertEqual(status, 200)
         temp_token = res['tempToken']
-        totp_code = server.compute_totp_code(secret)
-        status, res = self.request(user_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': totp_code})
+        future_counter = int(server.time.time() // server.TOTP_PERIOD_SECONDS) + 2
+        totp_code = server.compute_totp_code(secret, counter=future_counter)
+        with unittest.mock.patch('server.time.time', return_value=future_counter * server.TOTP_PERIOD_SECONDS + 5):
+            status, res = self.request(
+                user_client, 'POST', '/api/login/2fa',
+                {'tempToken': temp_token, 'totpCode': totp_code},
+            )
         self.assertEqual(status, 200)
 
         status, twofa_info = self.request(user_client, 'GET', '/api/account/2fa')
@@ -1862,11 +1886,11 @@ class FirstRunSetupTests(unittest.TestCase):
             error.close()
             return status, payload
 
-    def request_raw(self, method, path, body, content_type='application/gzip'):
+    def request_raw(self, method, path, body, content_type='application/gzip', headers=None):
         request = Request(
             self.base_url + path,
             data=body,
-            headers=with_same_origin(self.base_url, {'Content-Type': content_type}),
+            headers=with_same_origin(self.base_url, {'Content-Type': content_type, **(headers or {})}),
             method=method,
         )
         try:
@@ -1939,12 +1963,12 @@ class FirstRunSetupTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertTrue(result['user']['isAdmin'])
 
-    def test_server_snapshot_import_restores_accounts_notes_and_invites(self):
+    def test_encrypted_backup_import_restores_accounts_notes_and_invites(self):
         created_at = server.iso_time()
         invite_token = 'invitation-token-from-snapshot'
         snapshot = {
             'format': 'notki-server-snapshot',
-            'version': 1,
+            'version': 2,
             'createdAt': created_at,
             'users': [{
                 'id': 7, 'email': 'restored-admin@example.com',
@@ -1963,10 +1987,21 @@ class FirstRunSetupTests(unittest.TestCase):
                 'usedAt': None,
             }],
         }
-        status, _ = self.request('POST', '/api/setup/import', {'snapshot': snapshot}, {'Host': 'external.example'})
+        backup_bytes = server.encrypt_backup(snapshot, BACKUP_PASSWORD)
+
+        # The setup token is required even for the encrypted import endpoint.
+        status, _ = self.request_raw(
+            'POST', '/api/setup/import-backup', backup_bytes,
+            content_type='application/octet-stream',
+            headers={'Host': 'external.example', 'X-Setup-Token': ''},
+        )
         self.assertEqual(status, 403)
 
-        status, result = self.request('POST', '/api/setup/import', {'snapshot': snapshot})
+        status, result = self.request_raw(
+            'POST', '/api/setup/import-backup', backup_bytes,
+            content_type='application/octet-stream',
+            headers={'X-Backup-Password': BACKUP_PASSWORD},
+        )
         self.assertEqual(status, 201)
         self.assertEqual(result, {'imported': True, 'users': 1, 'notes': 1, 'invites': 1, 'shares': 0})
 
@@ -1983,13 +2018,18 @@ class FirstRunSetupTests(unittest.TestCase):
         })
         self.assertEqual(status, 201)
 
-        status, _ = self.request('POST', '/api/setup/import', {'snapshot': snapshot})
+        # A second import into a non-empty database is rejected.
+        status, _ = self.request_raw(
+            'POST', '/api/setup/import-backup', backup_bytes,
+            content_type='application/octet-stream',
+            headers={'X-Backup-Password': BACKUP_PASSWORD},
+        )
         self.assertEqual(status, 409)
 
-    def test_tgz_backup_import_is_available_on_fresh_server(self):
+    def test_plaintext_and_legacy_archive_import_are_rejected(self):
         created_at = server.iso_time()
         snapshot = {
-            'format': 'notki-server-snapshot', 'version': 1, 'createdAt': created_at,
+            'format': 'notki-server-snapshot', 'version': 2, 'createdAt': created_at,
             'users': [{
                 'id': 1, 'email': 'archive-admin@example.com',
                 'passwordHash': server.hash_password('archive-admin-password'),
@@ -1998,47 +2038,29 @@ class FirstRunSetupTests(unittest.TestCase):
             'notes': [], 'invites': [],
         }
         snapshot_bytes = json.dumps(snapshot).encode('utf-8')
+
+        # A bare plaintext snapshot is never accepted.
+        status, _ = self.request('POST', '/api/setup/import', {'snapshot': snapshot})
+        self.assertEqual(status, 400)
+        status, _ = self.request_raw(
+            'POST', '/api/setup/import-backup', snapshot_bytes,
+            content_type='application/json',
+            headers={'X-Backup-Password': BACKUP_PASSWORD},
+        )
+        self.assertEqual(status, 400)
+
+        # Legacy plaintext tar archives are rejected as well.
         archive_bytes = io.BytesIO()
         with tarfile.open(fileobj=archive_bytes, mode='w:gz') as archive:
             member = tarfile.TarInfo('snapshot.json')
             member.size = len(snapshot_bytes)
             archive.addfile(member, io.BytesIO(snapshot_bytes))
-
-        status, result = self.request_raw('POST', '/api/setup/import-backup', archive_bytes.getvalue())
-        self.assertEqual(status, 201)
-        self.assertTrue(result['imported'])
-        status, login = self.request('POST', '/api/login', {
-            'email': 'archive-admin@example.com', 'password': 'archive-admin-password',
-        })
-        self.assertEqual(status, 200)
-        self.assertTrue(login['user']['isAdmin'])
-
-    def test_snapshot_import_with_subpath_or_mac_metadata(self):
-        created_at = server.iso_time()
-        snapshot = {
-            'format': 'notki-server-snapshot', 'version': 1, 'createdAt': created_at,
-            'users': [{
-                'id': 1, 'email': 'mac-admin@example.com',
-                'passwordHash': server.hash_password('mac-admin-password'),
-                'role': 'admin', 'createdAt': created_at,
-            }],
-            'notes': [], 'invites': [],
-        }
-        snapshot_bytes = json.dumps(snapshot).encode('utf-8')
-        archive_bytes = io.BytesIO()
-        with tarfile.open(fileobj=archive_bytes, mode='w:gz') as archive:
-            # Add macOS hidden file
-            mac_meta = tarfile.TarInfo('._snapshot.json')
-            mac_meta.size = 10
-            archive.addfile(mac_meta, io.BytesIO(b'apple-meta'))
-            # Add snapshot file with leading ./
-            member = tarfile.TarInfo('./snapshot.json')
-            member.size = len(snapshot_bytes)
-            archive.addfile(member, io.BytesIO(snapshot_bytes))
-
-        status, result = self.request_raw('POST', '/api/setup/import-backup', archive_bytes.getvalue())
-        self.assertEqual(status, 201)
-        self.assertTrue(result['imported'])
+        status, _ = self.request_raw(
+            'POST', '/api/setup/import-backup', archive_bytes.getvalue(),
+            content_type='application/gzip',
+            headers={'X-Backup-Password': BACKUP_PASSWORD},
+        )
+        self.assertEqual(status, 400)
 
     def test_invalid_backup_archive_returns_bad_request(self):
         status, error = self.request_raw('POST', '/api/setup/import-backup', b'not a valid snapshot json')
@@ -2293,7 +2315,7 @@ class ParseMultipartDataTests(unittest.TestCase):
 
         headers = {
             'Content-Type': 'multipart/form-data; boundary=boundary',
-            'Content-Length': str(server.MAX_SNAPSHOT_BYTES + 1)
+            'Content-Length': str(server.MAX_BACKUP_FILE_BYTES + 1)
         }
         rfile = io.BytesIO(b'')
         handler = DummyHandler(headers, rfile)
@@ -3257,10 +3279,11 @@ class TestCreateServerBackupTemporaryFile(unittest.TestCase):
         self.db_path_patch.stop()
         self.temp_dir.cleanup()
 
-    def test_create_server_backup_uses_named_temp_file(self):
+    def test_create_server_backup_uses_secure_temporary_file(self):
         class DummyHandler(server.NotkiHandler):
             def __init__(self):
                 self.user = {'id': 1, 'role': 'admin', 'isAdmin': True}
+                self.headers = {'X-Backup-Password': BACKUP_PASSWORD}
                 self.response_body = None
                 self.response_status = None
 
@@ -3273,22 +3296,17 @@ class TestCreateServerBackupTemporaryFile(unittest.TestCase):
 
         handler = DummyHandler()
         handler.require_step_up = lambda user: None
-        original_named_temp_file = tempfile.NamedTemporaryFile
-        temp_files_created = []
-
-        def mock_named_temp_file(*args, **kwargs):
-            tf = original_named_temp_file(*args, **kwargs)
-            temp_files_created.append(tf.name)
-            return tf
-
-        with unittest.mock.patch('tempfile.NamedTemporaryFile', side_effect=mock_named_temp_file):
-            handler.create_server_backup()
+        handler.create_server_backup()
 
         self.assertEqual(handler.response_status, 201)
-        self.assertEqual(len(temp_files_created), 1)
+        self.assertTrue(handler.response_body['encrypted'])
+        self.assertEqual(handler.response_body['formatVersion'], 2)
         created_backup = self.backup_dir / handler.response_body['filename']
         self.assertTrue(created_backup.exists())
-        self.assertFalse(os.path.exists(temp_files_created[0]))
+        leftovers = [path.name for path in self.backup_dir.iterdir() if path.name.startswith('.tmp-')]
+        self.assertEqual(leftovers, [])
+        if os.name != 'nt':
+            self.assertEqual(created_backup.stat().st_mode & 0o777, 0o600)
 
 
 class TestClientIPAndProxyTrust(unittest.TestCase):

@@ -861,11 +861,16 @@
     if (!confirmed) return;
 
     const password = window.prompt(t('admin.backups.passwordPrompt'), '') || '';
+    if (!password) {
+      setBackupMessage(t('admin.backups.passwordRequired'), true);
+      return;
+    }
     setBackupMessage(t('admin.backups.restoring'));
     try {
       await apiRequest(`/api/admin/backups/${encodeURIComponent(filename)}/restore`, {
         method: 'POST',
-        body: JSON.stringify(password ? { encryptionPassword: password } : {})
+        body: '{}',
+        headers: { 'X-Backup-Password': password },
       });
       setBackupMessage(t('admin.backups.restored'));
       setTimeout(() => window.location.reload(), 1000);
@@ -4308,13 +4313,24 @@
 
   const handleCreateBackup = async event => {
     if (event) event.preventDefault();
+    const password = window.prompt(t('admin.backups.passwordPromptCreate'), '') || '';
+    if (password.length < 12) {
+      setBackupMessage(t('admin.backups.passwordTooShort'), true);
+      return;
+    }
+    const confirmation = window.prompt(t('admin.backups.passwordConfirmPrompt'), '') || '';
+    if (password !== confirmation) {
+      setBackupMessage(t('admin.backups.passwordMismatch'), true);
+      return;
+    }
     const button = document.querySelector('#create-backup');
     if (button) button.disabled = true;
     setBackupMessage(t('admin.backups.creating'));
     try {
       const backup = await apiRequest('/api/admin/backups', {
         method: 'POST',
-        body: '{}'
+        body: '{}',
+        headers: { 'X-Backup-Password': password },
       });
       setBackupMessage(t('admin.backups.created', { filename: backup.filename }));
       await refreshAdmin();
@@ -4337,27 +4353,24 @@
     const confirmed = window.confirm(t('admin.backups.confirmRestoreFile'));
     if (!confirmed) return;
 
+    const password = window.prompt(t('admin.backups.passwordPrompt'), '') || '';
+    if (!password) {
+      setBackupMessage(t('admin.backups.passwordRequired'), true);
+      return;
+    }
+
     setBackupMessage(t('admin.backups.restoring'));
 
     try {
-      if (file.name.endsWith('.json') || file.type.includes('json')) {
-        const text = await file.text();
-        const snapshot = JSON.parse(text);
-        await apiRequest('/api/admin/backups/upload-restore', {
-          method: 'POST',
-          body: JSON.stringify({ snapshot })
-        });
-      } else {
-        const password = window.prompt(t('admin.backups.passwordPrompt'), '') || '';
-        const buffer = await file.arrayBuffer();
-        const headers = { 'Content-Type': 'application/octet-stream' };
-        if (password) headers['X-Backup-Password'] = password;
-        await apiRequest('/api/admin/backups/upload-restore', {
-          method: 'POST',
-          body: buffer,
-          headers,
-        });
-      }
+      const buffer = await file.arrayBuffer();
+      await apiRequest('/api/admin/backups/upload-restore', {
+        method: 'POST',
+        body: buffer,
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'X-Backup-Password': password,
+        },
+      });
       setBackupMessage(t('admin.backups.restored'));
       fileInput.value = '';
       setTimeout(() => window.location.reload(), 1200);

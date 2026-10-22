@@ -138,9 +138,18 @@ describe('admin panel translation keys', () => {
   const requiredAdminKeys = [
     'admin.security.apply',
     'admin.backups.restoreFailed',
+    'admin.backups.passwordPrompt',
+    'admin.backups.passwordPromptCreate',
+    'admin.backups.passwordConfirmPrompt',
+    'admin.backups.passwordRequired',
+    'admin.backups.passwordTooShort',
+    'admin.backups.passwordMismatch',
     'admin.invites.validityDays',
     'admin.security.sessionDays',
-    'admin.update.betaChannel'
+    'admin.update.betaChannel',
+    'setup.backupPasswordLabel',
+    'setup.backupPasswordHint',
+    'setup.backupPasswordRequired'
   ];
 
   languages.forEach(lang => {

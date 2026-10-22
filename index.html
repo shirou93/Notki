@@ -257,14 +257,14 @@
 
     <section class="admin-section">
       <header class="admin-section-header">
-        <div><h2 data-i18n="admin.backups.title">Server-wide backups</h2><p data-i18n="admin.backups.description">Archives contain accounts, notes, and invitations. Sessions are not saved.</p></div>
+        <div><h2 data-i18n="admin.backups.title">Server-wide backups</h2><p data-i18n="admin.backups.description">Encrypted archives contain accounts, notes, and invitations. Sessions are not saved.</p></div>
       </header>
       <form id="backup-form" class="backup-form-wrap">
-        <button class="button-primary" id="create-backup" type="submit" data-i18n="admin.backups.create">+ Create backup (.json)</button>
+        <button class="button-primary" id="create-backup" type="submit" data-i18n="admin.backups.create">+ Create encrypted backup (.enc)</button>
       </form>
       <div id="backup-restore-file-wrap" class="backup-form-wrap" style="margin-top: 12px;">
-        <input class="auth-input" id="restore-file-input" type="file" accept=".json,.tgz,application/json,application/gzip" style="height: auto; min-height: 42px; padding: 8px; font-size: 11px; text-align: left; text-align-last: left;">
-        <button class="button-secondary" id="restore-file-btn" type="button" data-i18n="admin.backups.restoreFromFile">Restore from file (.json)</button>
+        <input class="auth-input" id="restore-file-input" type="file" accept=".enc,application/json,application/octet-stream" style="height: auto; min-height: 42px; padding: 8px; font-size: 11px; text-align: left; text-align-last: left;">
+        <button class="button-secondary" id="restore-file-btn" type="button" data-i18n="admin.backups.restoreFromFile">Restore from encrypted file (.enc)</button>
       </div>
       <p class="admin-message" id="backup-message" role="status" hidden></p>
       <div class="admin-table-wrap">

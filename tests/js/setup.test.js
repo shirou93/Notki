@@ -172,7 +172,7 @@ describe('setup.js', () => {
 
       // Define a dummy file list
       Object.defineProperty(fileInput, 'files', {
-        value: [{ name: 'backup.json' }],
+        value: [{ name: 'backup.enc' }],
         writable: false
       });
 
@@ -182,14 +182,14 @@ describe('setup.js', () => {
       expect(document.querySelector('#snapshot-message').hidden).toBe(true);
     });
 
-    it('prevents import if file is larger than 100MB', async () => {
+    it('prevents import if file is larger than 140MB', async () => {
       await loadModule();
 
       const fileInput = document.querySelector('#snapshot-file');
       const importButton = document.querySelector('#import-snapshot');
 
       Object.defineProperty(fileInput, 'files', {
-        value: [{ name: 'backup.json', size: 101 * 1024 * 1024 }],
+        value: [{ name: 'backup.enc', size: 141 * 1024 * 1024 }],
         writable: false
       });
 
@@ -201,14 +201,36 @@ describe('setup.js', () => {
       expect(message.hidden).toBe(false);
     });
 
-    it('successfully imports a .tgz file', async () => {
+    it('requires a backup password before uploading', async () => {
       await loadModule();
       document.querySelector('#setup-token').value = 'test-setup-token';
 
       const fileInput = document.querySelector('#snapshot-file');
       const importButton = document.querySelector('#import-snapshot');
 
-      const dummyFile = { name: 'backup.tgz', size: 1000 };
+      Object.defineProperty(fileInput, 'files', {
+        value: [{ name: 'backup.enc', size: 1000 }],
+        writable: false
+      });
+
+      importButton.dispatchEvent(new Event('click'));
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      const message = document.querySelector('#snapshot-message');
+      expect(message.textContent).toBe('setup.backupPasswordRequired');
+      expect(message.hidden).toBe(false);
+      expect(global.fetch).toHaveBeenCalledTimes(1); // only the setup status check
+    });
+
+    it('successfully imports an encrypted .enc file', async () => {
+      await loadModule();
+      document.querySelector('#setup-token').value = 'test-setup-token';
+      document.querySelector('#setup-backup-password').value = 'correct horse battery staple';
+
+      const fileInput = document.querySelector('#snapshot-file');
+      const importButton = document.querySelector('#import-snapshot');
+
+      const dummyFile = { name: 'backup.enc', size: 1000 };
       Object.defineProperty(fileInput, 'files', {
         value: [dummyFile],
         writable: false
@@ -221,57 +243,56 @@ describe('setup.js', () => {
       expect(global.fetch).toHaveBeenCalledWith('/api/setup/import-backup', expect.objectContaining({
         method: 'POST',
         body: expect.any(FormData),
-        credentials: 'same-origin'
+        credentials: 'same-origin',
+        headers: expect.objectContaining({
+          'X-Setup-Token': 'test-setup-token',
+          'X-Backup-Password': 'correct horse battery staple'
+        })
       }));
+      const importCall = global.fetch.mock.calls.find(([url]) => url === '/api/setup/import-backup');
+      expect(importCall[1].body.archive).toBe(dummyFile);
       expect(window.location.replace).toHaveBeenCalledWith('/');
     });
 
-    it('successfully imports a .json file', async () => {
+    it('never sends a plaintext snapshot even when a .json file is selected', async () => {
       await loadModule();
       document.querySelector('#setup-token').value = 'test-setup-token';
+      document.querySelector('#setup-backup-password').value = 'correct horse battery staple';
 
       const fileInput = document.querySelector('#snapshot-file');
       const importButton = document.querySelector('#import-snapshot');
 
-      const snapshotData = { users: [], notes: [] };
-      const dummyFile = {
-        name: 'backup.json',
-        size: 1000,
-        text: async () => JSON.stringify(snapshotData)
-      };
-
       Object.defineProperty(fileInput, 'files', {
-        value: [dummyFile],
+        value: [{ name: 'backup.json', size: 1000 }],
         writable: false
       });
 
       importButton.dispatchEvent(new Event('click'));
       await new Promise(resolve => setTimeout(resolve, 0));
       await new Promise(resolve => setTimeout(resolve, 0));
-      await new Promise(resolve => setTimeout(resolve, 0));
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/setup/import', expect.objectContaining({
+      expect(global.fetch).not.toHaveBeenCalledWith('/api/setup/import', expect.anything());
+      expect(global.fetch).toHaveBeenCalledWith('/api/setup/import-backup', expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ snapshot: snapshotData })
+        body: expect.any(FormData)
       }));
-      expect(window.location.replace).toHaveBeenCalledWith('/');
     });
 
-    it('handles JSON parsing errors for .json files', async () => {
+    it('shows the server error when an encrypted import fails', async () => {
       await loadModule();
       document.querySelector('#setup-token').value = 'test-setup-token';
+      document.querySelector('#setup-backup-password').value = 'wrong password';
+
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: 'Invalid backup password or corrupt backup.' })
+      });
 
       const fileInput = document.querySelector('#snapshot-file');
       const importButton = document.querySelector('#import-snapshot');
 
-      const dummyFile = {
-        name: 'backup.json',
-        size: 1000,
-        text: async () => 'invalid json{'
-      };
-
       Object.defineProperty(fileInput, 'files', {
-        value: [dummyFile],
+        value: [{ name: 'backup.enc', size: 1000 }],
         writable: false
       });
 
@@ -280,7 +301,7 @@ describe('setup.js', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
 
       const message = document.querySelector('#snapshot-message');
-      expect(message.textContent).toBe('setup.importInvalidJson');
+      expect(message.textContent).toBe('Invalid backup password or corrupt backup.');
       expect(message.hidden).toBe(false);
       expect(importButton.disabled).toBe(false);
     });

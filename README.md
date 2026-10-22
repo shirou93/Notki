@@ -1,172 +1,266 @@
-# Notki
+# notki
 
-A fast, lightweight, and private web-based note-taking application written in Python 3.9+. Runtime dependencies are pinned in `requirements.txt` (`webauthn` for passkeys and `cryptography` for encrypted backups).
-
-![Main notes view](docs/desktop_notes_light.png)
-
---------------------------------------------------------------------------------
-
-## Key Features
-
-* Note Creation & Rich Formatting
-  Rich text formatting (bold, italic, underline, font sizing), bulleted/numbered lists, and interactive checklists with real-time progress indicators and drag-and-drop task handles.
-
-* Due Dates & Daily Plan
-  Schedule notes with due dates, view timeline sections (overdue, today, tomorrow, this week, later), and export events to iCalendar (`.ics`).
-
-* Labels & Flexible Organization
-  Categorize with custom labels/tags, pin essential notes to the top, archive inactive items, manage trash, and personalize cards with adaptive pastel colors.
-
-* Note Sharing & Collaboration
-  Securely share notes with other users on your server using configurable read-only or read-write permissions.
-
-* Offline First & Auto-Sync
-  Work seamlessly offline thanks to browser caching and background sync when connection is restored.
-
-* User Profiles & Avatars
-  Profile customization, password management, and custom avatar upload support.
-
-* Advanced Security & Authentication
-  - Two-Factor Authentication (2FA) supporting both TOTP (Authenticator Apps) and WebAuthn Passkeys / Hardware Security Keys (FIDO2/Touch ID/Face ID).
-  - Emergency 2FA recovery backup codes.
-  - Option to enforce 2FA server-wide via administrative settings.
-  - Fail2ban rate limiting on login and 2FA endpoints to prevent brute-force attempts, with configurable ban thresholds and duration in the Admin Panel.
-
-* Encrypted Backups
-  Full server state backup, download, upload, and restore. Backups are encrypted with AES-GCM using a server key or an explicit password, with import support during first-run setup.
-
-* Comprehensive Admin Panel
-  User account management, single-use invitation link generation with custom expiration, server system stats, pinned server announcements, and direct update checks via GitHub releases.
-
-* Themes & Multi-Language Support (i18n)
-  Native Light, Dark, and System theme integration, with built-in translations for English, Polish, German, French, Japanese, Korean, Italian, and Spanish.
-
---------------------------------------------------------------------------------
-
-## Screenshots
-
-| View | Desktop (Light) | Desktop (Dark) | Mobile (Light) | Mobile (Dark) |
-|---|---|---|---|---|
-| Notes View | ![Notes on Desktop Light](docs/desktop_notes_light.png) | ![Notes on Desktop Dark](docs/desktop_notes_dark.png) | ![Notes on Mobile Light](docs/mobile_notes_light.png) | ![Notes on Mobile Dark](docs/mobile_notes_dark.png) |
-| Admin Panel | ![Admin Panel on Desktop Light](docs/desktop_admin_light.png) | ![Admin Panel on Desktop Dark](docs/desktop_admin_dark.png) | ![Admin Panel on Mobile Light](docs/mobile_admin_light.png) | ![Admin Panel on Mobile Dark](docs/mobile_admin_dark.png) |
-
---------------------------------------------------------------------------------
-
-## Recommended Installation (Docker Compose)
-
-The easiest and recommended way to deploy Notki is using Docker Compose.
-
-1. Download the source (or clone the pinned release) and start the locally built image:
-   ```bash
-   git clone --branch v0.1.6.2 --depth 1 https://github.com/shirou93/Notki.git notki
-   cd notki
-   docker compose up -d --build
-   ```
-
-2. Read the one-time setup token from the container log:
-   ```bash
-   docker compose logs notki | grep "SETUP TOKEN"
-   ```
-
-3. Open `http://localhost:8000/setup`, paste the token, and create the administrator.
-
-> Security Warning (First-run setup):
-> The setup API always requires the one-time `X-Setup-Token`, regardless of the client address. The setup page asks for that token before it can create an administrator or import a backup. Set `NOTKI_SETUP_TOKEN` to a strong value before the first start if you want to choose the token yourself. Do not expose the setup page publicly without TLS.
-
---------------------------------------------------------------------------------
-
-## Command-Line Interface (CLI Options)
-
-Notki provides administrative CLI flags for command-line management and disaster recovery:
-
-```bash
-# Create initial administrator account
-python3 server.py --create-admin
-
-# Disable 2FA for a specific user (by email or user ID)
-python3 server.py --disable-2fa user@example.com
-
-# Completely disable 2FA server-wide for all users
-python3 server.py --disable-all-2fa
-
-# Unban a specific IP address from Fail2ban
-python3 server.py --unban 192.168.1.100
-
-# Unban all banned IP addresses from Fail2ban
-python3 server.py --unban-all
-
-# Run server with custom host or port
-python3 server.py --host 0.0.0.0 --port 8000
+```text
++------------------------------------------------------------------+
+|  n o t k i                                                       |
+|  private notes. your server. no telemetry.                       |
+|  v0.1.6.2  |  python 3.9+  |  sqlite  |  mit                     |
++------------------------------------------------------------------+
 ```
 
---------------------------------------------------------------------------------
+Notki is a small, self-hosted notebook for people who want their notes to stay
+on their own machine. It combines a fast browser UI with a single-file SQLite
+database, optional note sharing, passkeys and TOTP, and password-encrypted
+backups.
 
-## Alternative Installation Methods
+No external database. No third-party cloud. No analytics.
 
-### 1. Direct Execution (Python 3.9+)
+```text
+$ cat stack.txt
+python 3.9+ | sqlite | vanilla js | webauthn | cryptography
+```
 
-Notki requires the pinned packages in `requirements.txt`.
+## `$` quickstart
+
+### Docker Compose (recommended)
 
 ```bash
-git clone --branch v0.1.6.2 --depth 1 https://github.com/shirou93/Notki.git
+git clone --branch v0.1.6.2 --depth 1 https://github.com/shirou93/Notki.git notki
+cd notki
+docker compose up -d --build
+docker compose logs notki | grep "SETUP TOKEN"
+```
+
+```text
+SETUP TOKEN: <generated on first run>
+
+-> open http://localhost:8000/setup
+```
+
+Paste the token into the setup page and create the administrator account. The
+setup API always requires the one-time token; there is no localhost bypass.
+
+To choose your own token, set `NOTKI_SETUP_TOKEN` in `.env` before the first
+start. To publish a different host port, set `NOTKI_HTTP_PORT` in `.env`. Keep
+the token out of shell history and logs.
+
+### Python (no container)
+
+```bash
+git clone --branch v0.1.6.2 --depth 1 https://github.com/shirou93/Notki.git Notki
 cd Notki
 python3 -m pip install --only-binary=:all: -r requirements.txt
 python3 server.py
 ```
-The application will be accessible at `http://localhost:8000`.
 
-### 2. Native Linux Installation (Systemd)
+```text
+Notki running at http://127.0.0.1:8000
+SETUP TOKEN: <generated on first run>
+Initial admin setup: http://127.0.0.1:8000/setup
+```
 
-On Linux distributions (Debian, Ubuntu, Arch, Fedora, Alpine, etc.), you can run the automated installer script:
+If `NOTKI_SETUP_TOKEN` is set, Notki uses that value instead of generating one.
+
+### Linux systemd installer
 
 ```bash
 sudo ./install.sh
+journalctl -u notki | grep "SETUP TOKEN"
 ```
-The script creates a dedicated system user `notki`, installs the application into `/opt/notki`, and configures a systemd service.
 
---------------------------------------------------------------------------------
+The installer creates the `notki` system user, installs the pinned release in
+`/opt/notki`, and configures a sandboxed `notki.service`. Use a reverse proxy
+with TLS for anything reachable from the public internet.
 
-## Server Backups (Encrypted)
+## `$` features
 
-From the Admin Panel under Server Backups, you can manage server data:
-- Backups include all user accounts, notes, labels, invitations, and system settings, but never active sessions.
-- Backups are always encrypted with AES-256-GCM and use timestamped `.enc` filenames. TOTP secrets are also encrypted at rest in SQLite.
-- By default the server derives the encryption key from `NOTKI_BACKUP_KEY` or from a generated file. To protect against directory dumps compromising both ciphertext and keys, it is highly recommended to supply keys via environment variables or mount a separate `NOTKI_KEY_DIR` outside the data volume.
-- When creating a backup you may supply a separate `encryptionPassword`; restoring it then requires that password.
-- You can download backups, restore archives on the server, upload `.enc`/`.tgz`/`.json` backups, or import one during first-run setup.
-- Legacy plaintext `.json` snapshots remain importable; plaintext backup codes are re-hashed during import.
+| Area | What it does |
+| --- | --- |
+| **Notes** | Rich text, checklists with progress, drag-and-drop tasks, note colors, pinning, archive and trash. |
+| **Planning** | Due dates, a daily plan grouped by urgency, and iCalendar (`.ics`) export. |
+| **Organization** | Custom labels, search, flexible sorting, and a quick-note capture row. |
+| **Sharing** | Share notes with other users on the same server as read-only or read-write. |
+| **Offline** | Browser caching and automatic sync when the connection returns. |
+| **Accounts** | Profiles, avatars, password changes, and per-user labels. |
+| **Authentication** | TOTP apps, WebAuthn passkeys / hardware keys, recovery codes, optional server-wide 2FA enforcement, and fail2ban. |
+| **Backups** | Mandatory AES-256-GCM `.enc` backups, authenticated metadata, full validation, atomic restore, and a CLI path for large archives. |
+| **Administration** | User management, single-use invitations, server stats, announcements, update checks, and checksum/signature verification for installs. |
+| **Interface** | Light, dark, and system themes; English, Polish, German, French, Japanese, Korean, Italian, and Spanish. |
 
---------------------------------------------------------------------------------
+## `$` screenshots
 
-## Environment Variables
+Captured from a demo instance running the current code.
 
-| Variable | Description | Default Value |
-|---|---|---|
-| `NOTKI_HOST` | Network interface IP for server binding | `127.0.0.1` (`0.0.0.0` in Docker) |
-| `NOTKI_PORT` | HTTP server port | `8000` |
-| `NOTKI_DB_PATH` | Path to the SQLite3 database file | `./data/notki.sqlite3` |
-| `NOTKI_BACKUP_DIR` | Directory for encrypted backups | `./data/backups` |
-| `NOTKI_KEY_DIR` | Directory for storing generated `backup.key` and `totp.key` | `./.keys` |
-| `NOTKI_BACKUP_KEY` | Master key for server-created encrypted backups | Key file in `NOTKI_KEY_DIR` |
-| `NOTKI_TOTP_KEY` | Key for TOTP secrets encrypted at rest | Key file in `NOTKI_KEY_DIR` |
-| `NOTKI_SETUP_TOKEN` | One-time token required by every setup/import API call | Auto-generated and printed |
-| `NOTKI_TRUST_PROXY` | Proxy peers whose forwarding headers are trusted (`1`/`true`/`all` or IP/CIDR list) | Loopback only |
-| `NOTKI_ALLOWED_HOSTS` | Optional allowlist for forwarded/host names | Empty |
-| `NOTKI_PUBLIC_HOST` | Canonical public host (or full URL) used for links and Origin checks | Empty |
-| `NOTKI_COOKIE_SECURE` | Force `Secure` + `__Host-` session cookies (`1`) or automatic (`0`/unset) | Automatic |
+### Notes
+
+| Light | Dark |
+|:---:|:---:|
+| ![Notki notes view in light mode](docs/screens/notes-light.png) | ![Notki notes view in dark mode](docs/screens/notes-dark.png) |
+
+### Admin panel
+
+| Light | Dark |
+|:---:|:---:|
+| ![Notki admin panel in light mode](docs/screens/admin-light.png) | ![Notki admin panel in dark mode](docs/screens/admin-dark.png) |
+
+![Notki user and invitation management](docs/screens/admin-users-light.png)
+
+### Encrypted backups
+
+![Encrypted server backups in light mode](docs/screens/backups-light.png)
+
+![Encrypted server backups in dark mode](docs/screens/backups-dark.png)
+
+## `$` backups
+
+Create and restore backups from **Admin panel -> Server-wide backups**. Every
+backup is a single `.enc` file protected by a password you choose.
+
+```text
+[admin] -> Server-wide backups -> Create encrypted backup
+```
+
+The archive contains accounts, notes, labels, invitations, note shares,
+passkeys (public keys only), TOTP secrets, MFA recovery codes, and server
+settings. Active sessions are never included. Restoring a backup signs every
+user out.
+
+Security properties:
+
+- **Always encrypted.** There is no plaintext export path.
+- **AES-256-GCM** with a unique 96-bit nonce for every backup.
+- **scrypt** key derivation with `n=65536`, `r=8`, `p=1`, a random 16-byte salt,
+  and a 32-byte key.
+- The JSON header (format, version, creation time, KDF, and cipher parameters)
+  is authenticated as AES-GCM additional data. Tampering is detected.
+- The backup password is the only decryption key. Notki does not store it and
+  has no server-side key fallback.
+- **Fail closed.** If a stored TOTP secret cannot be decrypted, backup creation
+  aborts instead of silently dropping MFA data.
+- Restores are validated in full and applied inside one transaction. A failed
+  restore changes no data.
+
+Only `notki-backup` **version 2** and `notki-server-snapshot` **version 2** are
+accepted. Version 1 encrypted backups, version 1 snapshots, plaintext `.json`,
+and `.tgz` archives are rejected rather than silently downgraded.
+
+### Restore from the CLI (large backups)
+
+The web upload limit is 140 MB, and the decrypted snapshot is capped at 100 MB.
+For larger archives, stop Notki and restore the file locally on the server host:
+
+```bash
+python3 server.py --restore-backup /path/to/notki-backup-YYYYMMDD-HHMMSSZ-xxxx.enc
+```
+
+The password prompt is hidden, and the command requires typing `RESTORE` to
+confirm that all existing data will be replaced. For automation, provide the
+password through a protected file and skip the prompt:
+
+```bash
+python3 server.py \
+  --restore-backup /path/to/notki-backup-YYYYMMDD-HHMMSSZ-xxxx.enc \
+  --backup-password-file /run/secrets/notki-backup-password \
+  --yes
+```
+
+You can also set `NOTKI_BACKUP_PASSWORD` in the environment. An explicit
+`--backup-password-file` takes precedence. Never pass the password as a command
+line argument, because process listings may expose it.
+
+The CLI uses the same authenticated decryption, KDF bounds, snapshot validation,
+and transaction as the web endpoint. Its default file limit is 2048 MiB and can
+be changed with `--max-backup-size-mb` up to 16384 MiB. The archive is read and
+decrypted in memory, so the host needs enough RAM for the file plus its decoded
+JSON.
+
+Backups are not a substitute for TLS. Store the password separately from the
+backup, keep backups on protected storage, and test a restore on a staging
+instance periodically.
+
+Full details, API examples, and migration notes: [docs/backup.md](docs/backup.md).
+
+## `$` administration CLI
+
+Run administrative commands locally on the host. For a restore, stop the server
+first so only one process touches the SQLite database.
+
+| Command | Purpose |
+| --- | --- |
+| `python3 server.py --create-admin` | Create the initial administrator account. |
+| `python3 server.py --disable-2fa user@example.com` | Disable 2FA for one user by e-mail or user ID. |
+| `python3 server.py --disable-all-2fa` | Disable 2FA for every user on the server. |
+| `python3 server.py --unban 192.168.1.100` | Remove one IP address from the fail2ban list. |
+| `python3 server.py --unban-all` | Remove every fail2ban ban. |
+| `python3 server.py --host 0.0.0.0 --port 8000` | Override the bind address and port. |
+| `python3 server.py --restore-backup FILE` | Restore an encrypted backup offline and exit. |
+
+## `$` configuration
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `NOTKI_HOST` | Bind address | `127.0.0.1` (`0.0.0.0` in Docker) |
+| `NOTKI_PORT` | HTTP port | `8000` |
+| `NOTKI_DB_PATH` | SQLite database path | `./data/notki.sqlite3` |
+| `NOTKI_BACKUP_DIR` | Directory for encrypted `.enc` backups | `./data/backups` |
+| `NOTKI_KEY_DIR` | Directory containing the generated TOTP key file | `./.keys` |
+| `NOTKI_TOTP_KEY` | Optional TOTP key material; takes precedence over the key file | Key file in `NOTKI_KEY_DIR` |
+| `NOTKI_SETUP_TOKEN` | One-time token required by setup and import APIs | Generated and printed |
+| `NOTKI_TRUST_PROXY` | Proxy peers whose forwarding headers are trusted (`1`, `true`, `all`, or an IP/CIDR list) | Loopback only |
+| `NOTKI_ALLOWED_HOSTS` | Optional hostname allowlist for forwarded hosts | Empty |
+| `NOTKI_PUBLIC_HOST` | Canonical public host or full URL used for links and Origin checks | Empty |
+| `NOTKI_COOKIE_SECURE` | Force `Secure` + `__Host-` session cookies (`1`) or detect automatically | Automatic |
 | `NOTKI_PUBLIC_HTTPS` | Emit HTTPS links when TLS terminates at a proxy | `0` |
-| `NOTKI_ALLOW_BETA_UPDATES` | Allow installing the moving `main` tarball (not recommended) | `0` |
+| `NOTKI_ALLOW_BETA_UPDATES` | Allow the moving `main` tarball, not recommended | `0` |
 | `NOTKI_UPDATE_SHA256` | Expected SHA-256 of an update tarball | Empty |
-| `NOTKI_UPDATE_PUBLIC_KEY` | Ed25519 public key (raw base64 or PEM) required to sign updates | Empty |
-| `NOTKI_ALLOW_UNVERIFIED_UPDATES` | Allow updates without a checksum (dangerous) | `0` |
+| `NOTKI_UPDATE_PUBLIC_KEY` | Optional Ed25519 public key that verifies update signatures | Empty |
+| `NOTKI_ALLOW_UNVERIFIED_UPDATES` | Allow updates without a checksum, dangerous | `0` |
+| `NOTKI_BACKUP_PASSWORD` | Backup password for CLI restore only; never put it in argv | Empty |
 
-> Reverse Proxies & HTTPS (Cloudflare Tunnel, Nginx, Caddy, Traefik, NPM):
-> Notki validates `Origin`/`Referer` scheme, host, and port for every mutating request, and only accepts `X-Forwarded-*` headers from peers allowed by `NOTKI_TRUST_PROXY`. Configure your proxy to overwrite (not append untrusted) forwarding headers and set `NOTKI_PUBLIC_HOST`.
->
-> Security notes: see `SECURITY.md` for the 0.1.6.2 hardening changelog and deployment checklist.
+### Reverse proxy and HTTPS
 
---------------------------------------------------------------------------------
+Notki validates the `Origin` and `Referer` scheme, host, and port on every
+mutating request. `X-Forwarded-*` headers are only accepted from peers allowed
+by `NOTKI_TRUST_PROXY`.
 
-## License
+- Set `NOTKI_PUBLIC_HOST` to the canonical public URL.
+- Configure the proxy to overwrite forwarding headers rather than append
+  untrusted values.
+- Trust only your proxy's address or CIDR range.
+- Keep the setup page off the public internet until the administrator exists.
 
-This open-source project is distributed under the terms of the MIT License.
+## `$` security notes
+
+- First-run setup requires the setup token for every setup and import API call.
+- Mutating requests reject cross-origin attempts by default.
+- TOTP secrets are encrypted at rest. A stored but undecryptable secret still
+  requires a second factor; password-only login remains blocked.
+- Passkey private keys never leave the client. Backups contain only public keys,
+  names, and signature counters.
+- Backup metadata is authenticated, and plaintext or legacy backup paths do not
+  exist.
+- Restoring a backup is a destructive administrative operation. It replaces all
+  data and invalidates sessions.
+- Use HTTPS in production, protect the setup token and TOTP key material, and
+  keep backup passwords outside the backup directory.
+- Run one Notki process per SQLite database. The backup/restore lock is
+  process-local.
+
+## `$` development
+
+```bash
+python3 -m pip install --only-binary=:all: -r requirements.txt
+python3 -m unittest discover -s tests -v
+python3 -m py_compile server.py
+```
+
+Runtime dependencies are pinned in [requirements.txt](requirements.txt)
+(`webauthn` for passkeys and `cryptography` for encrypted backups).
+
+The suite includes security-focused backup tests for wrong passwords, tampered
+ciphertext and metadata, malformed snapshots, oversized input, path traversal,
+and undecryptable MFA secrets.
+
+## `$` license
+
+MIT. See [LICENSE](LICENSE).

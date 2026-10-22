@@ -71,7 +71,32 @@ SESSION_IDLE_HOURS = 24
 STEP_UP_WINDOW_MINUTES = 5
 INVITE_DAYS = 7
 PASSWORD_ITERATIONS = 310_000
-BACKUP_PASSWORD_ITERATIONS = 200_000
+# Backup encryption is mandatory. The key is always derived from a password with
+# scrypt; there is no server-side key fallback because that would make a backup
+# dependent on files outside the single backup archive.
+BACKUP_FORMAT = 'notki-backup'
+BACKUP_FORMAT_VERSION = 2
+SNAPSHOT_FORMAT = 'notki-server-snapshot'
+SNAPSHOT_VERSION = 2
+SUPPORTED_SNAPSHOT_VERSIONS = (SNAPSHOT_VERSION,)
+BACKUP_KDF_ALGORITHM = 'scrypt'
+BACKUP_KDF_N = 65536
+BACKUP_KDF_R = 8
+BACKUP_KDF_P = 1
+BACKUP_KDF_MIN_N = 16384
+BACKUP_KDF_MAX_N = 262144
+BACKUP_KDF_MAX_R = 32
+BACKUP_KDF_MAX_P = 4
+BACKUP_KDF_MAXMEM = 256 * 1024 * 1024
+BACKUP_SALT_BYTES = 16
+BACKUP_NONCE_BYTES = 12
+BACKUP_KEY_BYTES = 32
+BACKUP_PASSWORD_MIN_LENGTH = 12
+BACKUP_PASSWORD_MAX_LENGTH = 1024
+TOTP_DIGITS = 6
+TOTP_PERIOD_SECONDS = 30
+TOTP_CLOCK_WINDOW = 1
+TOTP_ALGORITHM = 'SHA256'
 SCRYPT_N = 65536
 SCRYPT_R = 8
 SCRYPT_P = 1
@@ -94,8 +119,16 @@ def hash_password(password):
 DUMMY_PASSWORD_HASH = hash_password('')
 
 MAX_REQUEST_BYTES = 3 * 1024 * 1024
+# Maximum size of the decrypted snapshot payload.
 MAX_SNAPSHOT_BYTES = 100 * 1024 * 1024
-BACKUP_FILENAME_PATTERN = re.compile(r'^notki-[A-Za-z0-9_-]+\.(?:json|enc)$')
+# Base64 encoding and the JSON envelope add overhead on top of the payload.
+MAX_BACKUP_FILE_BYTES = 140 * 1024 * 1024
+# CLI restores read a local file chosen by an administrator and are not subject to
+# the HTTP upload limit. The limit remains bounded so a mistyped path or a corrupted
+# file cannot exhaust memory unexpectedly.
+MAX_CLI_BACKUP_BYTES = 2 * 1024 * 1024 * 1024
+MAX_CLI_BACKUP_LIMIT = 16 * 1024 * 1024 * 1024
+BACKUP_FILENAME_PATTERN = re.compile(r'^notki-[A-Za-z0-9_-]+\.enc$')
 NOTE_COLORS = {'default', 'mint', 'lemon', 'peach', 'lilac', 'sky', 'rose', 'sand', 'sage', 'plum'}
 AVATAR_PATTERN = re.compile(r'^data:image/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$')
 MAX_AVATAR_CHARS = 2_900_000
@@ -155,6 +188,7 @@ POLISH_MESSAGES = {
     'Registration requires a valid invitation.': 'Rejestracja wymaga ważnego zaproszenia.',
     'The invitation is invalid or has expired.': 'Zaproszenie jest nieprawidłowe lub wygasło.',
     'The snapshot exceeds the 100 MB limit.': 'Snapshot przekracza limit 100 MB.',
+    'The snapshot exceeds the size limit.': 'Snapshot przekracza limit rozmiaru.',
     'Could not save the backup on the server.': 'Nie udało się zapisać backupu na serwerze.',
     'Backup not found.': 'Nie znaleziono backupu.',
     'The backup file exceeds the size limit.': 'Plik backupu przekracza limit rozmiaru.',
@@ -211,6 +245,25 @@ POLISH_MESSAGES = {
     'You cannot delete your own account from the admin panel.': 'Nie możesz usunąć własnego konta z panelu administratora.',
     'No backup archive provided in request.': 'Brak archiwum w żądaniu.',
     'Expected .json, .tgz, or multipart/form-data file.': 'Oczekiwano pliku .json, .tgz lub multipart/form-data.',
+    'A backup password is required.': 'Wymagane jest hasło backupu.',
+    'The backup password must be at least 12 characters long.': 'Hasło backupu musi mieć co najmniej 12 znaków.',
+    'The backup password is too long.': 'Hasło backupu jest zbyt długie.',
+    'Invalid backup password or corrupt backup.': 'Nieprawidłowe hasło backupu lub uszkodzony backup.',
+    'The file is not a valid Notki backup.': 'Plik nie jest prawidłowym backupem Notki.',
+    'The backup file has an invalid structure.': 'Plik backupu ma nieprawidłową strukturę.',
+    'The backup file has invalid key-derivation parameters.': 'Plik backupu ma nieprawidłowe parametry wyprowadzania klucza.',
+    'The backup file uses an unsupported key-derivation algorithm.': 'Plik backupu używa nieobsługiwanego algorytmu wyprowadzania klucza.',
+    'The backup file uses an unsupported cipher.': 'Plik backupu używa nieobsługiwanego szyfru.',
+    'Unsupported backup format version.': 'Nieobsługiwana wersja formatu backupu.',
+    'Could not decrypt a stored two-factor secret; backup aborted to avoid losing MFA data.': 'Nie można odszyfrować zapisanego sekretu dwuskładnikowego; backup przerwano, aby nie utracić danych MFA.',
+    'Another backup or restore operation is already running.': 'Inna operacja backupu lub odtwarzania jest już w toku.',
+    'Could not restore the backup. No data was changed.': 'Nie udało się odtworzyć backupu. Żadne dane nie zostały zmienione.',
+    'The snapshot contains invalid two-factor data.': 'Snapshot zawiera nieprawidłowe dane dwuskładnikowego uwierzytelniania.',
+    'The snapshot contains invalid settings.': 'Snapshot zawiera nieprawidłowe ustawienia.',
+    'The snapshot contains invalid security keys.': 'Snapshot zawiera nieprawidłowe klucze zabezpieczeń.',
+    'The snapshot contains an invalid sharing entry.': 'Snapshot zawiera nieprawidłowe udostępnienie.',
+    'The snapshot contains invalid account metadata.': 'Snapshot zawiera nieprawidłowe metadane konta.',
+    'Plaintext backups are not supported. Create an encrypted backup with a password.': 'Backupy w postaci jawnej nie są obsługiwane. Utwórz zaszyfrowany backup z hasłem.',
 }
 
 
@@ -713,7 +766,7 @@ def generate_totp_secret():
     alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
     return ''.join(secrets.choice(alphabet) for _ in range(16))
 
-def compute_totp_code(secret_b32, time_step=30, counter=None):
+def compute_totp_code(secret_b32, time_step=TOTP_PERIOD_SECONDS, counter=None):
     if counter is None:
         counter = int(time.time() // time_step)
     secret_b32 = str(secret_b32 or '').strip().upper()
@@ -725,8 +778,8 @@ def compute_totp_code(secret_b32, time_step=30, counter=None):
     hmac_hash = hmac.new(key, msg, hashlib.sha256).digest()
     offset = hmac_hash[-1] & 0x0f
     binary = struct.unpack('>I', hmac_hash[offset:offset+4])[0] & 0x7fffffff
-    code = binary % 1_000_000
-    return f'{code:06d}'
+    code = binary % (10 ** TOTP_DIGITS)
+    return f'{code:0{TOTP_DIGITS}d}'
 
 def safe_b64decode(val):
     if not val:
@@ -758,14 +811,14 @@ def extract_spki_der(pub_bytes):
             return SPKI_P256_HEADER + x + y
     return None
 
-def verify_totp_counter(secret_b32, code, time_step=30, window=1):
+def verify_totp_counter(secret_b32, code, time_step=TOTP_PERIOD_SECONDS, window=TOTP_CLOCK_WINDOW):
     """Return the matched TOTP counter, or None when the code is invalid.
 
     Returning the counter lets callers persist it and reject a replay of the same
     code, including a code from an adjacent accepted time window.
     """
     code = str(code or '').strip()
-    if not code.isdigit() or len(code) != 6:
+    if not code.isdigit() or len(code) != TOTP_DIGITS:
         return None
     current_counter = int(time.time() // time_step)
 
@@ -903,30 +956,6 @@ def _get_key_path(filename):
     return ROOT / '.keys' / filename
 
 
-def server_backup_key():
-    """Return the server-managed backup key, creating a private key file once.
-
-    Notki always encrypts server backups. A deployment can supply
-    ``NOTKI_BACKUP_KEY`` instead; otherwise a random 256-bit key is stored.
-    """
-    configured = os.environ.get('NOTKI_BACKUP_KEY', '')
-    if configured:
-        return configured
-    key_path = _get_key_path('backup.key')
-    key_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        return key_path.read_text(encoding='utf-8').strip()
-    except FileNotFoundError:
-        key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('ascii')
-        try:
-            descriptor = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
-                stream.write(key)
-        except FileExistsError:
-            return key_path.read_text(encoding='utf-8').strip()
-        return key
-
-
 def totp_master_key():
     """Return a stable key used only for TOTP secrets at rest."""
     configured = os.environ.get('NOTKI_TOTP_KEY', '')
@@ -994,8 +1023,286 @@ def reveal_totp_secret(value):
 
 
 def totp_is_active(value):
+    """Return whether a user has an active TOTP factor.
+
+    If a stored secret exists but cannot be decrypted we fail closed: the account
+    is still treated as MFA-protected rather than silently downgrading to a
+    password-only login.
+    """
+    if not value:
+        return False
     secret = reveal_totp_secret(value)
-    return bool(secret and not secret.startswith('pending:'))
+    if secret is None:
+        return True
+    return not secret.startswith('pending:')
+
+
+def validate_totp_secret(value):
+    """Validate a Base32 TOTP secret before it is stored or restored.
+
+    Returns the normalized secret (without the internal ``pending:`` marker) or
+    raises ``ValueError``. This prevents malformed or unbounded values from being
+    written into the database through a backup import.
+    """
+    if not isinstance(value, str):
+        raise ValueError('invalid TOTP secret')
+    secret = value.strip().upper()
+    if len(secret) < 16 or len(secret) > 128:
+        raise ValueError('invalid TOTP secret length')
+    if any(character not in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567=' for character in secret):
+        raise ValueError('invalid TOTP secret alphabet')
+    padded = secret + '=' * ((8 - len(secret) % 8) % 8)
+    try:
+        raw = base64.b32decode(padded, casefold=True)
+    except Exception as error:  # binascii.Error / ValueError
+        raise ValueError('invalid TOTP secret encoding') from error
+    if len(raw) < 10:
+        raise ValueError('TOTP secret is too short')
+    return secret.rstrip('=')
+
+
+_BACKUP_OPERATION_LOCK = threading.Lock()
+
+
+@contextmanager
+def backup_operation():
+    """Serialize backup creation and restore.
+
+    Concurrent export/restore operations could otherwise capture or apply
+    partially-updated state. A non-blocking lock fails fast with a safe response
+    instead of piling up admin requests.
+    """
+    if not _BACKUP_OPERATION_LOCK.acquire(blocking=False):
+        raise APIError('Another backup or restore operation is already running.', 409)
+    try:
+        yield
+    finally:
+        _BACKUP_OPERATION_LOCK.release()
+
+
+def _b64encode(value):
+    return base64.b64encode(value).decode('ascii')
+
+
+def _b64decode(value, field):
+    if not isinstance(value, str) or not value:
+        raise APIError('The backup file has an invalid structure.')
+    try:
+        return base64.b64decode(value.encode('ascii'), validate=True)
+    except Exception as error:
+        raise APIError('The backup file has an invalid structure.') from error
+
+
+def derive_backup_key(password, salt, n, r, p):
+    """Derive a 256-bit backup key with scrypt using bounded parameters."""
+    if not isinstance(password, str) or not password:
+        raise APIError('A backup password is required.', 400)
+    if len(password) > BACKUP_PASSWORD_MAX_LENGTH:
+        raise APIError('The backup password is too long.')
+    if (not isinstance(n, int) or isinstance(n, bool) or not isinstance(r, int)
+            or isinstance(r, bool) or not isinstance(p, int) or isinstance(p, bool)):
+        raise APIError('The backup file has invalid key-derivation parameters.')
+    if n < BACKUP_KDF_MIN_N or n > BACKUP_KDF_MAX_N or n & (n - 1):
+        raise APIError('The backup file has invalid key-derivation parameters.')
+    if r < 1 or r > BACKUP_KDF_MAX_R or p < 1 or p > BACKUP_KDF_MAX_P:
+        raise APIError('The backup file has invalid key-derivation parameters.')
+    # Reject expensive parameters before allocating memory (DoS protection).
+    if 128 * n * r + 128 * r * p > BACKUP_KDF_MAXMEM:
+        raise APIError('The backup file has invalid key-derivation parameters.')
+    try:
+        password_bytes = bytearray(password.encode('utf-8'))
+    except UnicodeEncodeError as error:
+        raise APIError('The backup password is invalid.') from error
+    try:
+        return hashlib.scrypt(
+            bytes(password_bytes), salt=salt, n=n, r=r, p=p,
+            dklen=BACKUP_KEY_BYTES, maxmem=BACKUP_KDF_MAXMEM,
+        )
+    except (ValueError, MemoryError, OSError) as error:
+        raise APIError('The backup file has invalid key-derivation parameters.') from error
+    finally:
+        for index in range(len(password_bytes)):
+            password_bytes[index] = 0
+
+
+def _backup_header_aad(header):
+    return json.dumps(header, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
+
+
+def encrypt_backup(snapshot, password):
+    """Serialize, encrypt, and authenticate a snapshot into one backup file.
+
+    The returned bytes are a self-contained JSON document. All cryptographic
+    parameters are authenticated as AES-GCM additional authenticated data, so
+    modifying the header invalidates the tag as well.
+    """
+    if not isinstance(password, str) or not password:
+        raise APIError('A backup password is required.', 400)
+    if len(password) < BACKUP_PASSWORD_MIN_LENGTH:
+        raise APIError('The backup password must be at least 12 characters long.')
+    if len(password) > BACKUP_PASSWORD_MAX_LENGTH:
+        raise APIError('The backup password is too long.')
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except Exception as error:
+        raise APIError('Backup encryption is unavailable.', 500) from error
+
+    plaintext = json.dumps(snapshot, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+    if len(plaintext) > MAX_SNAPSHOT_BYTES:
+        raise APIError('The snapshot exceeds the 100 MB limit.', 413)
+
+    salt = secrets.token_bytes(BACKUP_SALT_BYTES)
+    nonce = secrets.token_bytes(BACKUP_NONCE_BYTES)
+    header = {
+        'format': BACKUP_FORMAT,
+        'version': BACKUP_FORMAT_VERSION,
+        'createdAt': iso_time(),
+        'kdf': {
+            'algorithm': BACKUP_KDF_ALGORITHM,
+            'salt': _b64encode(salt),
+            'n': BACKUP_KDF_N,
+            'r': BACKUP_KDF_R,
+            'p': BACKUP_KDF_P,
+        },
+        'cipher': {
+            'algorithm': 'AES-256-GCM',
+            'nonce': _b64encode(nonce),
+        },
+    }
+    key = derive_backup_key(password, salt, BACKUP_KDF_N, BACKUP_KDF_R, BACKUP_KDF_P)
+    ciphertext = AESGCM(key).encrypt(nonce, plaintext, _backup_header_aad(header))
+    document = dict(header)
+    document['ciphertext'] = _b64encode(ciphertext)
+    encoded = json.dumps(document, ensure_ascii=False, indent=2).encode('utf-8')
+    if len(encoded) > MAX_BACKUP_FILE_BYTES:
+        raise APIError('The backup file exceeds the size limit.', 413)
+    return encoded
+
+
+def _parse_backup_document(raw_bytes, max_file_bytes=None):
+    if max_file_bytes is None:
+        max_file_bytes = MAX_BACKUP_FILE_BYTES
+    if not isinstance(raw_bytes, (bytes, bytearray)):
+        raise APIError('The backup file has an invalid structure.')
+    if not raw_bytes:
+        raise APIError('The backup archive cannot be read.')
+    if len(raw_bytes) > max_file_bytes:
+        raise APIError('The backup file exceeds the size limit.', 413)
+    try:
+        document = json.loads(bytes(raw_bytes).decode('utf-8-sig'))
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, MemoryError) as error:
+        raise APIError('The backup archive cannot be read.') from error
+    if not isinstance(document, dict):
+        raise APIError('The backup file has an invalid structure.')
+    return document
+
+
+def decrypt_backup(raw_bytes, password, *, max_file_bytes=None,
+                   max_snapshot_bytes=None):
+    """Decrypt and authenticate a version-2 backup file.
+
+    ``max_file_bytes`` and ``max_snapshot_bytes`` let the offline CLI restore accept
+    archives larger than the HTTP upload limit without weakening web endpoints.
+    """
+    if max_file_bytes is None:
+        max_file_bytes = MAX_BACKUP_FILE_BYTES
+    if max_snapshot_bytes is None:
+        max_snapshot_bytes = MAX_SNAPSHOT_BYTES
+    if not isinstance(password, str) or not password:
+        raise APIError('A backup password is required.', 400)
+    if len(password) > BACKUP_PASSWORD_MAX_LENGTH:
+        raise APIError('The backup password is too long.')
+    document = _parse_backup_document(raw_bytes, max_file_bytes=max_file_bytes)
+    backup_format = document.get('format')
+    if backup_format != BACKUP_FORMAT:
+        raise APIError('The file is not a valid Notki backup.')
+    version = document.get('version')
+    if (isinstance(version, bool) or not isinstance(version, int)
+            or version != BACKUP_FORMAT_VERSION):
+        raise APIError('Unsupported backup format version.')
+    expected = {'format', 'version', 'createdAt', 'kdf', 'cipher', 'ciphertext'}
+    if set(document) != expected:
+        raise APIError('The backup file has an invalid structure.')
+    kdf = document.get('kdf')
+    cipher = document.get('cipher')
+    if not isinstance(kdf, dict) or set(kdf) != {'algorithm', 'salt', 'n', 'r', 'p'}:
+        raise APIError('The backup file has invalid key-derivation parameters.')
+    if kdf.get('algorithm') != BACKUP_KDF_ALGORITHM:
+        raise APIError('The backup file uses an unsupported key-derivation algorithm.')
+    if not isinstance(cipher, dict) or set(cipher) != {'algorithm', 'nonce'}:
+        raise APIError('The backup file has an invalid structure.')
+    if cipher.get('algorithm') != 'AES-256-GCM':
+        raise APIError('The backup file uses an unsupported cipher.')
+    created_at = document.get('createdAt')
+    if not isinstance(created_at, str) or len(created_at) > 64:
+        raise APIError('The backup file has an invalid structure.')
+
+    salt = _b64decode(kdf.get('salt'), 'salt')
+    nonce = _b64decode(cipher.get('nonce'), 'nonce')
+    ciphertext = _b64decode(document.get('ciphertext'), 'ciphertext')
+    if len(salt) != BACKUP_SALT_BYTES or len(nonce) != BACKUP_NONCE_BYTES or not ciphertext:
+        raise APIError('The backup file has an invalid structure.')
+    if len(ciphertext) > max_file_bytes:
+        raise APIError('The backup file exceeds the size limit.', 413)
+
+    key = derive_backup_key(password, salt, kdf.get('n'), kdf.get('r'), kdf.get('p'))
+    header = {
+        'format': document['format'],
+        'version': document['version'],
+        'createdAt': document['createdAt'],
+        'kdf': kdf,
+        'cipher': cipher,
+    }
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        plaintext = AESGCM(key).decrypt(nonce, ciphertext, _backup_header_aad(header))
+    except Exception as error:
+        # Wrong password, modified ciphertext, bad tag and altered metadata all
+        # produce the same safe response.
+        raise APIError('Invalid backup password or corrupt backup.', 400) from error
+    if len(plaintext) > max_snapshot_bytes:
+        raise APIError('The snapshot exceeds the size limit.', 413)
+    try:
+        snapshot = json.loads(plaintext.decode('utf-8-sig'))
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError, MemoryError) as error:
+        raise APIError('The backup archive cannot be read.') from error
+    if not isinstance(snapshot, dict):
+        raise APIError('The file is not a valid Notki server snapshot.')
+    return snapshot
+
+
+def write_backup_file(data):
+    """Atomically write an encrypted backup with restrictive permissions."""
+    created_at = utc_now()
+    filename = f"notki-backup-{created_at.strftime('%Y%m%d-%H%M%SZ')}-{secrets.token_hex(4)}.enc"
+    backup_dir = backup_directory()
+    try:
+        backup_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:
+            os.chmod(backup_dir, 0o700)
+        except OSError:
+            pass
+        descriptor, temporary_path = tempfile.mkstemp(dir=backup_dir, prefix='.tmp-', suffix='.tmp')
+        try:
+            with os.fdopen(descriptor, 'wb') as stream:
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+            try:
+                os.chmod(temporary_path, 0o600)
+            except OSError:
+                pass
+            backup_path = backup_dir / filename
+            os.replace(temporary_path, backup_path)
+        except Exception:
+            try:
+                os.unlink(temporary_path)
+            except OSError:
+                pass
+            raise
+    except OSError as error:
+        raise APIError('Could not save the backup on the server.', 500) from error
+    return filename, created_at, backup_path
 
 
 def token_hash(token):
@@ -1253,7 +1560,9 @@ def public_user(row, connection=None):
         nonlocal has_totp, has_passkey, require_2fa
         if has_totp_col:
             ts = reveal_totp_secret(totp_secret)
-            has_totp = bool(ts and not ts.startswith('pending:'))
+            # A stored but undecryptable secret must not downgrade the account to
+            # password-only authentication.
+            has_totp = bool(ts and not ts.startswith('pending:')) or bool(totp_secret and ts is None)
             res = conn.execute(
                 "SELECT EXISTS(SELECT 1 FROM passkeys WHERE user_id = ?), "
                 "(SELECT value FROM settings WHERE key = 'require2FA')",
@@ -1272,7 +1581,7 @@ def public_user(row, connection=None):
             ).fetchone()
             if res:
                 ts = reveal_totp_secret(res['totp_secret'])
-                has_totp = bool(ts and not ts.startswith('pending:'))
+                has_totp = bool(ts and not ts.startswith('pending:')) or bool(res['totp_secret'] and ts is None)
                 has_passkey = bool(res[1])
                 require_2fa = bool(res[2] and res[2] == 'true')
 
@@ -1726,23 +2035,27 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('Re-authentication required. Provide your password and second factor.', 403)
         with database() as connection:
             row = connection.execute(
-                'SELECT password_hash, totp_secret, backup_codes_json FROM users WHERE id = ?',
+                'SELECT password_hash, totp_secret, backup_codes_json, totp_last_used_step '
+                'FROM users WHERE id = ?',
                 (user['id'],),
             ).fetchone()
             password_valid = bool(row and verify_password(password, row['password_hash']))
-            secret = reveal_totp_secret(row['totp_secret']) if row else None
-            has_totp = bool(secret and not secret.startswith('pending:'))
+            stored_secret = row['totp_secret'] if row else None
+            secret = reveal_totp_secret(stored_secret) if row else None
+            # Fail closed if a configured secret cannot be decrypted.
+            has_totp = bool(secret and not secret.startswith('pending:')) or bool(stored_secret and secret is None)
             second_factor_valid = not has_totp
             backup_codes = []
-            if has_totp and second_factor:
-                counter = verify_totp_counter(secret, second_factor)
+            if has_totp and second_factor and password_valid:
+                counter = verify_totp_counter(secret, second_factor) if secret else None
                 if counter is not None and (row['totp_last_used_step'] is None or counter > row['totp_last_used_step']):
-                    second_factor_valid = True
-                    connection.execute(
-                        'UPDATE users SET totp_last_used_step = ? WHERE id = ?',
-                        (counter, user['id']),
+                    cursor = connection.execute(
+                        'UPDATE users SET totp_last_used_step = ? WHERE id = ? '
+                        'AND (totp_last_used_step IS NULL OR totp_last_used_step < ?)',
+                        (counter, user['id'], counter),
                     )
-                else:
+                    second_factor_valid = cursor.rowcount == 1
+                if not second_factor_valid:
                     try:
                         backup_codes = json.loads(row['backup_codes_json']) if row['backup_codes_json'] else []
                     except (TypeError, json.JSONDecodeError):
@@ -1973,7 +2286,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 content_length = int(self.headers.get('Content-Length', 0))
             except (ValueError, TypeError):
                 content_length = 0
-            if content_length > MAX_SNAPSHOT_BYTES:
+            if content_length > MAX_BACKUP_FILE_BYTES:
                 raise APIError('The backup file exceeds the size limit.', 413)
             try:
                 fields = parse_multipart_data(self.rfile, boundary, content_length)
@@ -1984,14 +2297,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
             if isinstance(archive_bytes, str):
                 archive_bytes = archive_bytes.encode('utf-8')
             if not archive_bytes:
-                archive_bytes = self.read_body(MAX_SNAPSHOT_BYTES)
+                archive_bytes = self.read_body(MAX_BACKUP_FILE_BYTES)
             if not archive_bytes:
                 raise APIError('No backup archive provided in request.', 400)
-            if len(archive_bytes) > MAX_SNAPSHOT_BYTES:
+            if len(archive_bytes) > MAX_BACKUP_FILE_BYTES:
                 raise APIError('The backup file exceeds the size limit.', 413)
             return archive_bytes
         else:
-            archive_bytes = self.read_body(MAX_SNAPSHOT_BYTES)
+            archive_bytes = self.read_body(MAX_BACKUP_FILE_BYTES)
             if not archive_bytes:
                 raise APIError('No backup archive provided in request.', 400)
             return archive_bytes
@@ -2158,31 +2471,68 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def build_snapshot(self):
         with database() as connection:
             connection.execute('BEGIN')
-            users = connection.execute('SELECT id, email, password_hash, role, created_at, avatar, labels_json, totp_secret, backup_codes_json FROM users ORDER BY id').fetchall()
-            notes = connection.execute('SELECT * FROM notes ORDER BY user_id, sort_order DESC').fetchall()
+            users = connection.execute(
+                'SELECT id, email, password_hash, role, created_at, avatar, labels_json, '
+                'totp_secret, backup_codes_json, totp_last_used_step FROM users ORDER BY id'
+            ).fetchall()
+            notes = connection.execute(
+                'SELECT id, user_id, title, body, body_format, color, tags_json, pinned, archived, '
+                'deleted, created_at, updated_at, sort_order, due_date FROM notes '
+                'ORDER BY user_id, sort_order DESC'
+            ).fetchall()
             invites = connection.execute('SELECT * FROM invites ORDER BY created_at').fetchall()
             shares = connection.execute('SELECT * FROM note_shares ORDER BY note_id, user_id').fetchall()
-            passkeys = connection.execute('SELECT id, user_id, public_key_pem, name, created_at FROM passkeys ORDER BY user_id, created_at').fetchall()
+            passkeys = connection.execute(
+                'SELECT id, user_id, public_key_pem, name, created_at, sign_count '
+                'FROM passkeys ORDER BY user_id, created_at'
+            ).fetchall()
             settings = connection.execute('SELECT key, value FROM settings ORDER BY key').fetchall()
+        snapshot_users = []
+        for row in users:
+            try:
+                labels = json.loads(row['labels_json']) if row['labels_json'] else []
+                backup_codes = json.loads(row['backup_codes_json']) if row['backup_codes_json'] else []
+            except (TypeError, json.JSONDecodeError) as error:
+                raise APIError('The snapshot contains invalid account metadata.', 500) from error
+            if not isinstance(labels, list) or not isinstance(backup_codes, list):
+                raise APIError('The snapshot contains invalid account metadata.', 500)
+            totp_secret = None
+            if row['totp_secret']:
+                totp_secret = reveal_totp_secret(row['totp_secret'])
+                if totp_secret is None:
+                    # Never silently export an account without its MFA factor.
+                    raise APIError(
+                        'Could not decrypt a stored two-factor secret; backup aborted to avoid losing MFA data.',
+                        500,
+                    )
+            snapshot_users.append({
+                'id': row['id'], 'email': row['email'], 'passwordHash': row['password_hash'],
+                'role': row['role'], 'createdAt': row['created_at'], 'avatar': row['avatar'],
+                'labels': labels,
+                'totpSecret': totp_secret,
+                'totpLastUsedStep': row['totp_last_used_step'],
+                'backupCodes': backup_codes,
+            })
+        snapshot_notes = []
+        for row in notes:
+            try:
+                tags = json.loads(row['tags_json']) if row['tags_json'] else []
+            except (TypeError, json.JSONDecodeError) as error:
+                raise APIError('The snapshot contains invalid note metadata.', 500) from error
+            snapshot_notes.append({
+                'id': row['id'], 'userId': row['user_id'], 'title': row['title'], 'body': row['body'],
+                'bodyFormat': row['body_format'], 'color': row['color'], 'tags': tags,
+                'pinned': bool(row['pinned']), 'archived': bool(row['archived']), 'deleted': bool(row['deleted']),
+                'createdAt': row['created_at'], 'updatedAt': row['updated_at'], 'order': row['sort_order'],
+                'dueDate': row['due_date'],
+            })
         snapshot = {
-            'format': 'notki-server-snapshot',
-            'version': 1,
+            'format': SNAPSHOT_FORMAT,
+            'version': SNAPSHOT_VERSION,
+            'appVersion': VERSION,
             'createdAt': iso_time(),
-            'users': [
-                {'id': row['id'], 'email': row['email'], 'passwordHash': row['password_hash'], 'role': row['role'],
-                 'createdAt': row['created_at'], 'avatar': row['avatar'],
-                 'labels': json.loads(row['labels_json']) if row['labels_json'] else [],
-                 'totpSecret': reveal_totp_secret(row['totp_secret']),
-                 'backupCodes': json.loads(row['backup_codes_json']) if row['backup_codes_json'] else []}
-                for row in users
-            ],
-            'notes': [
-                {'id': row['id'], 'userId': row['user_id'], 'title': row['title'], 'body': row['body'],
-                 'bodyFormat': row['body_format'], 'color': row['color'], 'tags': json.loads(row['tags_json']),
-                 'pinned': bool(row['pinned']), 'archived': bool(row['archived']), 'deleted': bool(row['deleted']),
-                 'createdAt': row['created_at'], 'updatedAt': row['updated_at'], 'order': row['sort_order']}
-                for row in notes
-            ],
+            'users': snapshot_users,
+            'notes': snapshot_notes,
             'invites': [
                 {'tokenHash': row['token_hash'], 'createdBy': row['created_by'], 'createdAt': row['created_at'],
                  'expiresAt': row['expires_at'], 'usedAt': row['used_at']}
@@ -2195,7 +2545,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             ],
             'passkeys': [
                 {'id': row['id'], 'userId': row['user_id'], 'publicKeyPem': row['public_key_pem'],
-                 'name': row['name'], 'createdAt': row['created_at']}
+                 'name': row['name'], 'createdAt': row['created_at'], 'signCount': row['sign_count']}
                 for row in passkeys
             ],
             'settings': [
@@ -2205,63 +2555,39 @@ class NotkiHandler(BaseHTTPRequestHandler):
         }
         return snapshot
 
+    def _backup_password_from_request(self, payload=None):
+        password = None
+        if isinstance(payload, dict):
+            password = payload.get('encryptionPassword') or payload.get('password')
+        if password is None:
+            headers = getattr(self, 'headers', None) or {}
+            password = headers.get('X-Backup-Password')
+        return password
+
     def create_server_backup(self, payload=None):
         user = self.require_user(admin=True)
         self.require_step_up(user)
-        created_at = utc_now()
-        snapshot = self.build_snapshot()
-        backup_bytes = json.dumps(snapshot, ensure_ascii=False, indent=2).encode('utf-8')
-        if len(backup_bytes) > MAX_SNAPSHOT_BYTES:
-            raise APIError('The snapshot exceeds the 100 MB limit.', 413)
-
-        payload = payload or {}
-        provided_password = payload.get('encryptionPassword') or payload.get('password')
-        enc_password = provided_password or server_backup_key()
-        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-        from cryptography.hazmat.primitives import hashes
-
-        salt = secrets.token_bytes(16)
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=BACKUP_PASSWORD_ITERATIONS,
-        )
-        key = kdf.derive(str(enc_password).encode('utf-8'))
-        aesgcm = AESGCM(key)
-        nonce = secrets.token_bytes(12)
-        ciphertext = aesgcm.encrypt(nonce, backup_bytes, None)
-        encrypted_data = {
-            'format': 'notki-encrypted-snapshot',
-            'version': 1,
-            'createdAt': iso_time(created_at),
-            'salt': salt.hex(),
-            'nonce': nonce.hex(),
-            'ciphertext': base64.b64encode(ciphertext).decode('utf-8'),
-            'iterations': BACKUP_PASSWORD_ITERATIONS,
-        }
-        backup_bytes = json.dumps(encrypted_data, ensure_ascii=False, indent=2).encode('utf-8')
-        filename = f"notki-backup-{created_at.strftime('%Y%m%d-%H%M%SZ')}-{secrets.token_hex(4)}.enc"
-
-        backup_dir = backup_directory()
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        backup_path = backup_dir / filename
-        temporary_file = tempfile.NamedTemporaryFile(dir=backup_dir, delete=False, prefix='.tmp-', suffix='.tmp')
-        temporary_path = Path(temporary_file.name)
+        password = self._backup_password_from_request(payload)
+        if not isinstance(password, str) or not password:
+            raise APIError('A backup password is required.', 400)
+        if len(password) < BACKUP_PASSWORD_MIN_LENGTH:
+            raise APIError('The backup password must be at least 12 characters long.')
+        if len(password) > BACKUP_PASSWORD_MAX_LENGTH:
+            raise APIError('The backup password is too long.')
+        with backup_operation():
+            snapshot = self.build_snapshot()
+            backup_bytes = encrypt_backup(snapshot, password)
+            filename, created_at, backup_path = write_backup_file(backup_bytes)
         try:
-            with temporary_file as stream:
-                stream.write(backup_bytes)
-            os.replace(temporary_path, backup_path)
-        except OSError as error:
-            temporary_path.unlink(missing_ok=True)
-            raise APIError('Could not save the backup on the server.', 500) from error
+            size_bytes = backup_path.stat().st_size
+        except OSError:
+            size_bytes = len(backup_bytes)
         self.send_json({
             'filename': filename,
             'createdAt': iso_time(created_at),
-            'sizeBytes': backup_path.stat().st_size,
+            'sizeBytes': size_bytes,
             'encrypted': True,
-            'usesServerKey': not bool(provided_password),
+            'formatVersion': BACKUP_FORMAT_VERSION,
         }, 201)
 
     def list_server_backups(self):
@@ -2300,7 +2626,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         path = self.find_server_backup(filename)
         try:
             size = path.stat().st_size
-            if size > MAX_SNAPSHOT_BYTES:
+            if size > MAX_BACKUP_FILE_BYTES:
                 raise APIError('The backup file exceeds the size limit.', 413)
             data = path.read_bytes()
         except OSError as error:
@@ -2366,31 +2692,32 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def upload_restore_server_backup(self):
         admin = self.require_user(admin=True)
         self.require_step_up(admin)
-        content_type = self.headers.get('Content-Type', '')
-        if 'application/json' in content_type:
-            payload = self.read_json(MAX_SNAPSHOT_BYTES)
-            password = payload.get('password') or payload.get('encryptionPassword') if isinstance(payload, dict) else None
-            snapshot = payload.get('snapshot') if isinstance(payload, dict) and 'snapshot' in payload else payload
-            snapshot = self.decrypt_snapshot_data(snapshot, password)
-        else:
-            password = self.headers.get('X-Backup-Password')
-            raw_bytes = self.read_archive_from_request()
-            snapshot = self.snapshot_from_bytes(raw_bytes, password=password)
-        self.restore_snapshot(snapshot, replace_existing=True)
+        # Only a self-contained encrypted backup is accepted. The request body is
+        # the raw archive; no plaintext JSON snapshot path exists.
+        password = self._backup_password_from_request(None)
+        raw_bytes = self.read_archive_from_request()
+        with backup_operation():
+            snapshot = decrypt_backup(raw_bytes, password)
+            self.restore_snapshot(snapshot, replace_existing=True)
 
     def restore_server_backup(self, filename, payload=None):
         admin = self.require_user(admin=True)
         self.require_step_up(admin)
         path = self.find_server_backup(filename)
-        if path.stat().st_size > MAX_SNAPSHOT_BYTES:
-            raise APIError('The backup file exceeds the size limit.', 413)
-        password = payload.get('password') or payload.get('encryptionPassword') if isinstance(payload, dict) else None
         try:
-            raw_bytes = path.read_bytes()
-            snapshot = self.snapshot_from_bytes(raw_bytes, password=password)
+            size = path.stat().st_size
         except OSError as error:
             raise APIError('The backup archive cannot be read.') from error
-        self.restore_snapshot(snapshot, replace_existing=True)
+        if size > MAX_BACKUP_FILE_BYTES:
+            raise APIError('The backup file exceeds the size limit.', 413)
+        password = self._backup_password_from_request(payload)
+        try:
+            raw_bytes = path.read_bytes()
+        except OSError as error:
+            raise APIError('The backup archive cannot be read.') from error
+        with backup_operation():
+            snapshot = decrypt_backup(raw_bytes, password)
+            self.restore_snapshot(snapshot, replace_existing=True)
 
     def check_update(self):
         self.require_user(admin=True)
@@ -2652,163 +2979,192 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def import_snapshot_archive(self, archive_bytes, password=None):
         if not self.check_setup_permission():
             raise APIError('Snapshot import is available only with a valid setup token.', 403)
-        self.restore_snapshot(self.snapshot_from_bytes(archive_bytes, password=password), replace_existing=False)
-
-    @staticmethod
-    def decrypt_snapshot_data(data, password=None):
-        if not isinstance(data, dict) or data.get('format') != 'notki-encrypted-snapshot':
-            return data
-        if not password:
-            password = server_backup_key()
-        try:
-            from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-            from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-            from cryptography.hazmat.primitives import hashes
-
-            salt = bytes.fromhex(data['salt'])
-            nonce = bytes.fromhex(data['nonce'])
-            ciphertext = base64.b64decode(data['ciphertext'])
-            iterations = int(data.get('iterations', 100_000))
-            if not 100_000 <= iterations <= 2_000_000:
-                raise ValueError('Invalid KDF iterations')
-            kdf = PBKDF2HMAC(
-                algorithm=hashes.SHA256(),
-                length=32,
-                salt=salt,
-                iterations=iterations,
-            )
-            key = kdf.derive(str(password).encode('utf-8'))
-            aesgcm = AESGCM(key)
-            decrypted_bytes = aesgcm.decrypt(nonce, ciphertext, None)
-            return json.loads(decrypted_bytes.decode('utf-8-sig'))
-        except APIError:
-            raise
-        except Exception as err:
-            raise APIError('Invalid backup password or corrupt backup.', 400) from err
+        with backup_operation():
+            snapshot = decrypt_backup(archive_bytes, password)
+            self.restore_snapshot(snapshot, replace_existing=False)
 
     @staticmethod
     def snapshot_from_bytes(raw_bytes, password=None):
-        if len(raw_bytes) > MAX_SNAPSHOT_BYTES:
-            raise APIError('The snapshot exceeds the 100 MB limit.', 413)
-        try:
-            data = json.loads(raw_bytes.decode('utf-8-sig'))
-            return NotkiHandler.decrypt_snapshot_data(data, password)
-        except APIError:
-            raise
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            try:
-                with tarfile.open(fileobj=io.BytesIO(raw_bytes), mode='r:*') as archive:
-                    members = archive.getmembers()
-                    valid_members = []
-                    for m in members:
-                        if m.isfile() and Path(m.name).name == 'snapshot.json' and not Path(m.name).name.startswith('._'):
-                            member_path = Path(m.name)
-                            if not member_path.is_absolute() and '..' not in member_path.parts:
-                                valid_members.append(m)
-
-                    if len(valid_members) == 1:
-                        snapshot_member = valid_members[0]
-                        snapshot_file = archive.extractfile(snapshot_member)
-                        if snapshot_file:
-                            data = json.loads(snapshot_file.read(MAX_SNAPSHOT_BYTES + 1).decode('utf-8-sig'))
-                            return NotkiHandler.decrypt_snapshot_data(data, password)
-            except APIError:
-                raise
-            except Exception as e:
-                add_log('ERROR', f'Failed to extract backup archive: {e}')
-            raise APIError('The backup archive cannot be read.')
+        """Decrypt a backup file. Plaintext snapshots are intentionally rejected."""
+        return decrypt_backup(raw_bytes, password)
 
     def import_snapshot(self, payload):
         if not self.check_setup_permission():
             raise APIError('Snapshot import is available only locally or with a valid setup token.', 403)
-        self.restore_snapshot(payload.get('snapshot'), replace_existing=False)
+        raise APIError('Plaintext backups are not supported. Create an encrypted backup with a password.')
+
+    # ---- Snapshot validation -------------------------------------------------
+    # Everything below is executed before the restore transaction starts. Values
+    # from the archive are treated as untrusted input: no coercing of arbitrary
+    # objects to strings, no unbounded collections and no unknown fields.
+
+    @staticmethod
+    def _snapshot_str(value, max_length, required=False, allow_none=True):
+        if value is None:
+            if required:
+                raise APIError('The snapshot contains an invalid value.')
+            return None if allow_none else ''
+        if not isinstance(value, str) or len(value) > max_length:
+            raise APIError('The snapshot contains an invalid value.')
+        return value
+
+    @staticmethod
+    def _snapshot_int(value, minimum, maximum, required=False):
+        if value is None:
+            if required:
+                raise APIError('The snapshot contains an invalid value.')
+            return None
+        if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+            raise APIError('The snapshot contains an invalid value.')
+        return value
+
+    @staticmethod
+    def _snapshot_bool(value, default=False):
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, int) and value in (0, 1):
+            return bool(value)
+        raise APIError('The snapshot contains an invalid value.')
+
+    @staticmethod
+    def _reject_unknown_fields(value, allowed, message):
+        if not isinstance(value, dict) or not set(value).issubset(allowed):
+            raise APIError(message)
 
     def _prepare_snapshot_users(self, users):
         user_ids = set()
         emails = set()
         prepared_users = []
+        allowed = {
+            'id', 'email', 'passwordHash', 'role', 'createdAt', 'avatar', 'labels',
+            'totpSecret', 'totpLastUsedStep', 'backupCodes',
+        }
         for user in users:
-            if not isinstance(user, dict):
-                raise APIError('Invalid account in the snapshot.')
-            user_id = user.get('id')
-            email = normalize_email(user.get('email'))
-            password_hash = str(user.get('passwordHash') or '')
+            self._reject_unknown_fields(user, allowed, 'Invalid account in the snapshot.')
+            user_id = self._snapshot_int(user.get('id'), 1, 2_147_483_647, required=True)
+            try:
+                email = normalize_email(user.get('email'))
+            except ValueError as error:
+                raise APIError('Invalid account address or role in the snapshot.') from error
+            password_hash = self._snapshot_str(user.get('passwordHash'), 512, required=True, allow_none=False)
             role = user.get('role')
-            if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0 or user_id in user_ids:
-                raise APIError('Invalid account identifier in the snapshot.')
-            if email in emails or role not in ('admin', 'user'):
+            if user_id in user_ids or email in emails or role not in ('admin', 'user'):
                 raise APIError('Invalid account address or role in the snapshot.')
             if not self.valid_password_hash(password_hash):
                 raise APIError('The snapshot contains an invalid password hash.')
-            avatar = user.get('avatar')
-            if avatar is not None:
-                avatar = str(avatar)
-                if len(avatar) > MAX_AVATAR_CHARS or not AVATAR_PATTERN.fullmatch(avatar):
-                    raise APIError('The snapshot contains an invalid avatar.')
-            totp_secret = user.get('totpSecret')
-            if totp_secret is not None:
-                totp_secret = str(totp_secret)
-                if len(totp_secret) > 256:
-                    totp_secret = None
-                else:
-                    totp_secret = protect_totp_secret(totp_secret)
-            backup_codes = user.get('backupCodes')
+            avatar = self._snapshot_str(user.get('avatar'), MAX_AVATAR_CHARS)
+            if avatar is not None and not AVATAR_PATTERN.fullmatch(avatar):
+                raise APIError('The snapshot contains an invalid avatar.')
+            labels = user.get('labels')
+            if labels is None:
+                labels = []
+            if (not isinstance(labels, list) or len(labels) > 64
+                    or any(not isinstance(label, str) or len(label) > 80 for label in labels)):
+                raise APIError('The snapshot contains invalid account metadata.')
             prepared_codes = []
-            if isinstance(backup_codes, list):
-                for raw_code in backup_codes[:32]:
-                    stored_code = str(raw_code or '')
+            backup_codes = user.get('backupCodes')
+            if backup_codes is not None:
+                if not isinstance(backup_codes, list) or len(backup_codes) > 64:
+                    raise APIError('The snapshot contains invalid two-factor data.')
+                for raw_code in backup_codes:
+                    if not isinstance(raw_code, str) or len(raw_code) > 512:
+                        raise APIError('The snapshot contains invalid two-factor data.')
+                    stored_code = raw_code
                     if stored_code.startswith(('sha256$', 'pbkdf2_sha256$')):
+                        if not self._valid_backup_code_hash(stored_code):
+                            raise APIError('The snapshot contains invalid two-factor data.')
                         prepared_codes.append(stored_code)
-                    elif normalize_backup_code(stored_code):
-                        prepared_codes.append(hash_backup_code(stored_code))
+                    else:
+                        normalized = normalize_backup_code(stored_code)
+                        if not 8 <= len(normalized) <= 128:
+                            raise APIError('The snapshot contains invalid two-factor data.')
+                        # Legacy plaintext codes are hashed on import, never stored as-is.
+                        prepared_codes.append(hash_backup_code(normalized))
+            totp_secret = user.get('totpSecret')
+            stored_totp = None
+            if totp_secret is not None:
+                totp_secret = self._snapshot_str(totp_secret, 256)
+                pending = totp_secret.startswith('pending:')
+                candidate = totp_secret.removeprefix('pending:') if pending else totp_secret
+                try:
+                    candidate = validate_totp_secret(candidate)
+                except ValueError as error:
+                    raise APIError('The snapshot contains invalid two-factor data.') from error
+                stored_totp = protect_totp_secret(('pending:' if pending else '') + candidate)
+            totp_last_step = self._snapshot_int(user.get('totpLastUsedStep'), 0, 10 ** 12)
             backup_codes_json = json.dumps(prepared_codes) if prepared_codes else None
             user_ids.add(user_id)
             emails.add(email)
-            labels = user.get('labels')
-            labels_json = json.dumps(labels if isinstance(labels, list) else [])
-            prepared_users.append((user_id, email, password_hash, role, self.snapshot_date(user.get('createdAt')), avatar, labels_json, totp_secret, backup_codes_json))
+            prepared_users.append((
+                user_id, email, password_hash, role, self.snapshot_date(user.get('createdAt')),
+                avatar, json.dumps(labels), stored_totp, backup_codes_json, totp_last_step,
+            ))
         if not any(user[3] == 'admin' for user in prepared_users):
             raise APIError('The snapshot must contain an administrator account.')
         return user_ids, emails, prepared_users
 
+    @staticmethod
+    def _valid_backup_code_hash(value):
+        if value.startswith('sha256$'):
+            digest = value.split('$', 1)[1]
+            return len(digest) == 64 and all(character in '0123456789abcdef' for character in digest)
+        return NotkiHandler.valid_password_hash(value)
+
     def _validate_snapshot_note_identity(self, note, user_ids, note_ids):
-        if not isinstance(note, dict):
-            raise APIError('Invalid note in the snapshot.')
-        note_id = str(note.get('id') or '')
-        user_id = note.get('userId')
-        if (not note_id or len(note_id) > 200 or note_id in note_ids or isinstance(user_id, bool)
-                or not isinstance(user_id, int) or user_id not in user_ids):
+        allowed = {
+            'id', 'userId', 'title', 'body', 'bodyFormat', 'color', 'tags', 'pinned',
+            'archived', 'deleted', 'createdAt', 'updatedAt', 'order', 'dueDate',
+        }
+        self._reject_unknown_fields(note, allowed, 'Invalid note in the snapshot.')
+        note_id = self._snapshot_str(note.get('id'), 200, required=True, allow_none=False)
+        user_id = self._snapshot_int(note.get('userId'), 1, 2_147_483_647, required=True)
+        if not note_id or note_id in note_ids or user_id not in user_ids:
             raise APIError('Invalid note or owner in the snapshot.')
         return note_id, user_id
 
     def _parse_snapshot_note_order(self, note):
-        try:
-            sort_order = float(note.get('order') or 0)
-        except (TypeError, ValueError) as error:
-            raise APIError('Invalid note order in the snapshot.') from error
-        if not math.isfinite(sort_order):
+        value = note.get('order')
+        if value is None:
+            return 0.0
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise APIError('Invalid note order in the snapshot.')
+        sort_order = float(value)
+        if not math.isfinite(sort_order) or abs(sort_order) > 1e15:
             raise APIError('Invalid note order in the snapshot.')
         return sort_order
 
     def _prepare_snapshot_note(self, note, user_ids, note_ids):
         note_id, user_id = self._validate_snapshot_note_identity(note, user_ids, note_ids)
-        title = str(note.get('title') or '')
-        body = str(note.get('body') or '')
-        if len(title) > 160 or len(body) > 1_000_000:
-            raise APIError('A note in the snapshot exceeds the size limit.')
+        title = self._snapshot_str(note.get('title'), 160, allow_none=False)
+        body = self._snapshot_str(note.get('body'), 1_000_000, allow_none=False)
         sort_order = self._parse_snapshot_note_order(note)
         note_ids.add(note_id)
 
-        tags = note.get('tags') if isinstance(note.get('tags'), list) else []
+        tags = note.get('tags')
+        if tags is None:
+            tags = []
+        if (not isinstance(tags, list) or len(tags) > 64
+                or any(not isinstance(tag, str) or len(tag) > 80 for tag in tags)):
+            raise APIError('Invalid note in the snapshot.')
+        body_format = note.get('bodyFormat')
+        if body_format is None:
+            body_format = 0
+        if isinstance(body_format, bool) or not isinstance(body_format, int) or body_format not in (0, 1):
+            raise APIError('Invalid note in the snapshot.')
         color = note.get('color')
-        archived = bool(note.get('archived'))
-        deleted = bool(note.get('deleted'))
-        pinned = False if (archived or deleted) else bool(note.get('pinned'))
-        due_date = str(note.get('dueDate'))[:64] if note.get('dueDate') else None
+        if color is None:
+            color = 'default'
+        if not isinstance(color, str) or color not in NOTE_COLORS:
+            raise APIError('Invalid note in the snapshot.')
+        archived = self._snapshot_bool(note.get('archived'))
+        deleted = self._snapshot_bool(note.get('deleted'))
+        pinned = False if (archived or deleted) else self._snapshot_bool(note.get('pinned'))
+        due_date = self._snapshot_str(note.get('dueDate'), 64)
         return (
-            note_id, user_id, title, body, 1 if note.get('bodyFormat') == 1 else 0,
-            color if isinstance(color, str) and color in NOTE_COLORS else 'default',
-            json.dumps([str(tag)[:80] for tag in tags[:64]], ensure_ascii=False),
+            note_id, user_id, title, body, body_format, color,
+            json.dumps(tags, ensure_ascii=False),
             int(pinned), int(archived), int(deleted),
             self.snapshot_date(note.get('createdAt')), self.snapshot_date(note.get('updatedAt')), sort_order,
             due_date,
@@ -2824,37 +3180,44 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def _prepare_snapshot_invites(self, invites, user_ids):
         prepared_invites = []
         invite_hashes = set()
+        allowed = {'tokenHash', 'createdBy', 'createdAt', 'expiresAt', 'usedAt'}
         for invite in invites:
-            if not isinstance(invite, dict):
-                raise APIError('Invalid invitation in the snapshot.')
-            token = str(invite.get('tokenHash') or '')
+            self._reject_unknown_fields(invite, allowed, 'Invalid invitation in the snapshot.')
+            token = invite.get('tokenHash')
             created_by = invite.get('createdBy')
-            if len(token) != 64 or any(character not in '0123456789abcdef' for character in token):
+            if (not isinstance(token, str) or len(token) != 64
+                    or any(character not in '0123456789abcdef' for character in token)):
                 raise APIError('Invalid invitation hash in the snapshot.')
-            if (token in invite_hashes or isinstance(created_by, bool) or not isinstance(created_by, int)
-                    or created_by not in user_ids):
+            if created_by is not None:
+                created_by = self._snapshot_int(created_by, 1, 2_147_483_647, required=True)
+                if created_by not in user_ids:
+                    raise APIError('Invalid invitation or administrator in the snapshot.')
+            if token in invite_hashes:
                 raise APIError('Invalid invitation or administrator in the snapshot.')
             invite_hashes.add(token)
+            used_at = invite.get('usedAt')
             prepared_invites.append((
                 token, created_by, self.snapshot_date(invite.get('createdAt')),
-                self.snapshot_date(invite.get('expiresAt')), self.snapshot_date(invite['usedAt']) if invite.get('usedAt') else None,
+                self.snapshot_date(invite.get('expiresAt')),
+                self.snapshot_date(used_at) if used_at else None,
             ))
         return prepared_invites
 
     def _prepare_snapshot_shares(self, shares, user_ids, note_ids):
         prepared_shares = []
         share_keys = set()
+        allowed = {'noteId', 'userId', 'permission', 'createdAt'}
         for share in shares:
-            if not isinstance(share, dict):
-                raise APIError('Nieprawidłowe udostępnienie w snapshocie.')
-            note_id = str(share.get('noteId') or '')
-            user_id = share.get('userId')
+            self._reject_unknown_fields(share, allowed, 'The snapshot contains an invalid sharing entry.')
+            note_id = share.get('noteId')
+            user_id = self._snapshot_int(share.get('userId'), 1, 2_147_483_647, required=True)
             permission = share.get('permission')
-            if (note_id not in note_ids or isinstance(user_id, bool) or not isinstance(user_id, int)
-                    or user_id not in user_ids or permission not in ('read', 'write')):
-                raise APIError('Nieprawidłowe udostępnienie w snapshocie.')
+            if not isinstance(note_id, str) or note_id not in note_ids:
+                raise APIError('The snapshot contains an invalid sharing entry.')
+            if user_id not in user_ids or permission not in ('read', 'write'):
+                raise APIError('The snapshot contains an invalid sharing entry.')
             if (note_id, user_id) in share_keys:
-                raise APIError('Nieprawidłowe udostępnienie w snapshocie.')
+                raise APIError('The snapshot contains an invalid sharing entry.')
             share_keys.add((note_id, user_id))
             prepared_shares.append((note_id, user_id, permission, self.snapshot_date(share.get('createdAt'))))
         return prepared_shares
@@ -2862,103 +3225,172 @@ class NotkiHandler(BaseHTTPRequestHandler):
     def _prepare_snapshot_passkeys(self, passkeys, user_ids):
         prepared_passkeys = []
         passkey_ids = set()
+        allowed = {'id', 'userId', 'publicKeyPem', 'name', 'createdAt', 'signCount'}
         for pk in passkeys:
-            if not isinstance(pk, dict):
-                raise APIError('Nieprawidłowy klucz zabezpieczeń w snapshocie.')
-            pk_id = str(pk.get('id') or '')
-            user_id = pk.get('userId')
-            pub_pem = str(pk.get('publicKeyPem') or '')
-            name = str(pk.get('name') or 'Passkey')[:80]
-            if not pk_id or len(pk_id) > 500 or pk_id in passkey_ids or isinstance(user_id, bool) or not isinstance(user_id, int) or user_id not in user_ids or not pub_pem:
-                raise APIError('Nieprawidłowy klucz zabezpieczeń w snapshocie.')
+            self._reject_unknown_fields(pk, allowed, 'The snapshot contains invalid security keys.')
+            pk_id = self._snapshot_str(pk.get('id'), 512, required=True, allow_none=False)
+            user_id = self._snapshot_int(pk.get('userId'), 1, 2_147_483_647, required=True)
+            pub_pem = self._snapshot_str(pk.get('publicKeyPem'), 10_000, required=True, allow_none=False)
+            name = self._snapshot_str(pk.get('name'), 80) or 'Passkey'
+            sign_count = self._snapshot_int(pk.get('signCount'), 0, 2_147_483_647)
+            if (not pk_id or pk_id in passkey_ids or user_id not in user_ids or not pub_pem):
+                raise APIError('The snapshot contains invalid security keys.')
             passkey_ids.add(pk_id)
-            prepared_passkeys.append((pk_id, user_id, pub_pem, name, self.snapshot_date(pk.get('createdAt'))))
+            prepared_passkeys.append((
+                pk_id, user_id, pub_pem, name, self.snapshot_date(pk.get('createdAt')),
+                sign_count if sign_count is not None else 0,
+            ))
         return prepared_passkeys
+
+    _SNAPSHOT_SETTING_KEYS = {
+        'require2FA', 'logLevel', 'sessionDays', 'announcement',
+        'fail2banEnabled', 'fail2banMaxAttempts', 'fail2banBanTime',
+    }
 
     def _prepare_snapshot_settings(self, settings):
         prepared_settings = []
         setting_keys = set()
+        allowed = {'key', 'value'}
         for st in settings:
-            if not isinstance(st, dict):
-                raise APIError('Nieprawidłowe ustawienie w snapshocie.')
-            key = str(st.get('key') or '')
-            value = str(st.get('value') or '')
-            if not key or len(key) > 100 or key in setting_keys:
-                raise APIError('Nieprawidłowe ustawienie w snapshocie.')
+            self._reject_unknown_fields(st, allowed, 'The snapshot contains invalid settings.')
+            key = self._snapshot_str(st.get('key'), 100, required=True, allow_none=False)
+            value = self._snapshot_str(st.get('value'), 65_536, required=True, allow_none=False)
+            if not key or key in setting_keys or key not in self._SNAPSHOT_SETTING_KEYS:
+                raise APIError('The snapshot contains invalid settings.')
+            self._validate_snapshot_setting(key, value)
             setting_keys.add(key)
             prepared_settings.append((key, value))
         return prepared_settings
 
+    @staticmethod
+    def _validate_snapshot_setting(key, value):
+        if key == 'require2FA' and value not in ('true', 'false'):
+            raise APIError('The snapshot contains invalid settings.')
+        if key == 'logLevel' and value not in ('INFO', 'WARNING', 'ERROR', 'DEBUG'):
+            raise APIError('The snapshot contains invalid settings.')
+        if key in ('sessionDays', 'fail2banMaxAttempts', 'fail2banBanTime'):
+            try:
+                number = int(value)
+            except (TypeError, ValueError) as error:
+                raise APIError('The snapshot contains invalid settings.') from error
+            limits = {'sessionDays': (1, 3650), 'fail2banMaxAttempts': (1, 1000), 'fail2banBanTime': (1, 86400)}
+            low, high = limits[key]
+            if not low <= number <= high:
+                raise APIError('The snapshot contains invalid settings.')
+        if key == 'fail2banEnabled' and value not in ('true', 'false'):
+            raise APIError('The snapshot contains invalid settings.')
+        if key == 'announcement' and len(value) > 2000:
+            raise APIError('The snapshot contains invalid settings.')
+
     def _apply_snapshot_data(self, prepared_users, prepared_notes, prepared_invites, prepared_shares, prepared_passkeys, prepared_settings, replace_existing):
         global _FAIL2BAN_CONFIG_CACHE
+        try:
+            with database() as connection:
+                try:
+                    connection.execute('BEGIN IMMEDIATE')
+                    has_existing_data = bool(connection.execute(
+                        'SELECT 1 WHERE '
+                        'EXISTS(SELECT 1 FROM users) OR '
+                        'EXISTS(SELECT 1 FROM notes) OR '
+                        'EXISTS(SELECT 1 FROM invites) OR '
+                        'EXISTS(SELECT 1 FROM sessions) OR '
+                        'EXISTS(SELECT 1 FROM passkeys) OR '
+                        'EXISTS(SELECT 1 FROM settings)'
+                    ).fetchone())
+                    if has_existing_data and not replace_existing:
+                        raise APIError('Import is possible only into a completely empty database.', 409)
+                    if replace_existing:
+                        connection.execute('DELETE FROM sessions')
+                        connection.execute('DELETE FROM note_shares')
+                        connection.execute('DELETE FROM notes')
+                        connection.execute('DELETE FROM invites')
+                        connection.execute('DELETE FROM passkeys')
+                        connection.execute('DELETE FROM settings')
+                        connection.execute('DELETE FROM fail2ban_attempts')
+                        connection.execute('DELETE FROM users')
+                    connection.executemany(
+                        'INSERT INTO users (id, email, password_hash, role, created_at, avatar, labels_json, '
+                        'totp_secret, backup_codes_json, totp_last_used_step) '
+                        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        prepared_users,
+                    )
+                    connection.executemany('''
+                        INSERT INTO notes (id, user_id, title, body, body_format, color, tags_json, pinned, archived,
+                                           deleted, created_at, updated_at, sort_order, due_date)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', prepared_notes)
+                    connection.executemany(
+                        'INSERT INTO invites (token_hash, created_by, created_at, expires_at, used_at) '
+                        'VALUES (?, ?, ?, ?, ?)',
+                        prepared_invites,
+                    )
+                    connection.executemany(
+                        'INSERT INTO note_shares (note_id, user_id, permission, created_at) VALUES (?, ?, ?, ?)',
+                        prepared_shares,
+                    )
+                    if prepared_passkeys:
+                        connection.executemany(
+                            'INSERT INTO passkeys (id, user_id, public_key_pem, name, created_at, sign_count) '
+                            'VALUES (?, ?, ?, ?, ?, ?)',
+                            prepared_passkeys,
+                        )
+                    if prepared_settings:
+                        connection.executemany(
+                            'INSERT INTO settings (key, value) VALUES (?, ?) '
+                            'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+                            prepared_settings,
+                        )
+                except APIError:
+                    connection.rollback()
+                    raise
+                except (sqlite3.Error, OSError) as error:
+                    connection.rollback()
+                    raise APIError('Could not restore the backup. No data was changed.', 500) from error
+        except APIError:
+            raise
+        except (sqlite3.Error, OSError) as error:
+            raise APIError('Could not restore the backup. No data was changed.', 500) from error
         _FAIL2BAN_CONFIG_CACHE = None
-        with database() as connection:
-            connection.execute('BEGIN IMMEDIATE')
-            has_existing_data = bool(connection.execute(
-                'SELECT 1 WHERE '
-                'EXISTS(SELECT 1 FROM users) OR '
-                'EXISTS(SELECT 1 FROM notes) OR '
-                'EXISTS(SELECT 1 FROM invites) OR '
-                'EXISTS(SELECT 1 FROM sessions) OR '
-                'EXISTS(SELECT 1 FROM passkeys) OR '
-                'EXISTS(SELECT 1 FROM settings)'
-            ).fetchone())
-            if has_existing_data and not replace_existing:
-                raise APIError('Import is possible only into a completely empty database.', 409)
-            if replace_existing:
-                connection.execute('DELETE FROM sessions')
-                connection.execute('DELETE FROM note_shares')
-                connection.execute('DELETE FROM notes')
-                connection.execute('DELETE FROM invites')
-                connection.execute('DELETE FROM passkeys')
-                connection.execute('DELETE FROM settings')
-                connection.execute('DELETE FROM fail2ban_attempts')
-                connection.execute('DELETE FROM users')
-            connection.executemany(
-                'INSERT INTO users (id, email, password_hash, role, created_at, avatar, labels_json, totp_secret, backup_codes_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                prepared_users,
-            )
-            connection.executemany('''
-                INSERT INTO notes (id, user_id, title, body, body_format, color, tags_json, pinned, archived,
-                                   deleted, created_at, updated_at, sort_order, due_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', prepared_notes)
-            connection.executemany(
-                'INSERT INTO invites (token_hash, created_by, created_at, expires_at, used_at) VALUES (?, ?, ?, ?, ?)',
-                prepared_invites,
-            )
-            connection.executemany(
-                'INSERT INTO note_shares (note_id, user_id, permission, created_at) VALUES (?, ?, ?, ?)',
-                prepared_shares,
-            )
-            if prepared_passkeys:
-                connection.executemany(
-                    'INSERT INTO passkeys (id, user_id, public_key_pem, name, created_at) VALUES (?, ?, ?, ?, ?)',
-                    prepared_passkeys,
-                )
-            if prepared_settings:
-                connection.executemany(
-                    'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-                    prepared_settings,
-                )
 
     def restore_snapshot(self, snapshot, replace_existing=False):
-        if not isinstance(snapshot, dict) or snapshot.get('format') != 'notki-server-snapshot' or snapshot.get('version') != 1:
+        allowed = {
+            'format', 'version', 'appVersion', 'createdAt', 'users', 'notes',
+            'invites', 'shares', 'passkeys', 'settings',
+        }
+        self._reject_unknown_fields(snapshot, allowed, 'The file is not a valid Notki server snapshot.')
+        if snapshot.get('format') != SNAPSHOT_FORMAT:
             raise APIError('The file is not a valid Notki server snapshot.')
+        version = snapshot.get('version')
+        if (isinstance(version, bool) or not isinstance(version, int)
+                or version not in SUPPORTED_SNAPSHOT_VERSIONS):
+            raise APIError('Unsupported backup format version.')
+        app_version = snapshot.get('appVersion')
+        if app_version is not None and (not isinstance(app_version, str) or len(app_version) > 64):
+            raise APIError('The file is not a valid Notki server snapshot.')
+        if snapshot.get('createdAt') is not None:
+            self.snapshot_date(snapshot.get('createdAt'))
+
         users = snapshot.get('users')
         notes = snapshot.get('notes')
         invites = snapshot.get('invites')
+        shares = snapshot.get('shares', [])
+        passkeys = snapshot.get('passkeys', [])
+        settings = snapshot.get('settings', [])
         if not isinstance(users, list) or not isinstance(notes, list) or not isinstance(invites, list):
             raise APIError('The snapshot does not contain a complete list of accounts, notes, and invitations.')
+        if not isinstance(shares, list) or not isinstance(passkeys, list) or not isinstance(settings, list):
+            raise APIError('The snapshot has an invalid structure.')
         if not users or len(users) > 10_000 or len(notes) > 100_000 or len(invites) > 100_000:
+            raise APIError('The snapshot is empty or exceeds the data limit.')
+        if len(shares) > 500_000 or len(passkeys) > 100_000 or len(settings) > 100:
             raise APIError('The snapshot is empty or exceeds the data limit.')
 
         user_ids, _, prepared_users = self._prepare_snapshot_users(users)
         note_ids, prepared_notes = self._prepare_snapshot_notes(notes, user_ids)
         prepared_invites = self._prepare_snapshot_invites(invites, user_ids)
-        prepared_shares = self._prepare_snapshot_shares(snapshot.get('shares') or [], user_ids, note_ids)
-        prepared_passkeys = self._prepare_snapshot_passkeys(snapshot.get('passkeys') or [], user_ids)
-        prepared_settings = self._prepare_snapshot_settings(snapshot.get('settings') or [])
+        prepared_shares = self._prepare_snapshot_shares(shares, user_ids, note_ids)
+        prepared_passkeys = self._prepare_snapshot_passkeys(passkeys, user_ids)
+        prepared_settings = self._prepare_snapshot_settings(settings)
 
         self._apply_snapshot_data(
             prepared_users, prepared_notes, prepared_invites, prepared_shares,
@@ -2981,28 +3413,36 @@ class NotkiHandler(BaseHTTPRequestHandler):
     @staticmethod
     def valid_password_hash(password_hash):
         try:
+            if not isinstance(password_hash, str) or len(password_hash) > 1024:
+                return False
             parts = password_hash.split('$')
             if parts[0] == 'scrypt':
                 _, n, r, p, salt_hex, digest_hex = parts
+                if len(salt_hex) > 128 or len(digest_hex) > 256:
+                    return False
                 return (
                     1024 <= int(n) <= 1_048_576 and 1 <= int(r) <= 32 and 1 <= int(p) <= 10
                     and len(bytes.fromhex(salt_hex)) == 16 and len(bytes.fromhex(digest_hex)) >= 16
                 )
             elif parts[0] == 'pbkdf2_sha256':
                 _, iterations, salt_hex, digest_hex = parts
+                if len(salt_hex) > 128 or len(digest_hex) > 256:
+                    return False
                 count = int(iterations)
                 return (
                     100_000 <= count <= 2_000_000
                     and len(bytes.fromhex(salt_hex)) == 16 and len(bytes.fromhex(digest_hex)) == 32
                 )
             return False
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, AttributeError):
             return False
 
     @staticmethod
     def snapshot_date(value):
+        if not isinstance(value, str) or len(value) > 64:
+            raise APIError('The snapshot contains an invalid date.')
         try:
-            parsed = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
         except (TypeError, ValueError) as error:
             raise APIError('The snapshot contains an invalid date.') from error
         if parsed.tzinfo is None:
@@ -3051,7 +3491,12 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 if password_needs_rehash(password_hash):
                     connection.execute('UPDATE users SET password_hash = ? WHERE id = ?', (hash_password(password), row['id']))
                 totp_secret = reveal_totp_secret(row['totp_secret'])
-                has_totp = bool(totp_secret and not totp_secret.startswith('pending:'))
+                # Fail closed: an undecryptable stored secret still requires a
+                # second factor and must never result in a password-only session.
+                has_totp = (
+                    bool(totp_secret and not totp_secret.startswith('pending:'))
+                    or bool(row['totp_secret'] and totp_secret is None)
+                )
                 pk_count = connection.execute('SELECT COUNT(*) FROM passkeys WHERE user_id = ?', (row['id'],)).fetchone()[0]
                 has_passkey = pk_count > 0
                 req_row = connection.execute("SELECT value FROM settings WHERE key = 'require2FA'").fetchone()
@@ -3210,7 +3655,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 'UPDATE users SET totp_secret = ?, totp_last_used_step = NULL WHERE id = ?',
                 (protect_totp_secret(f'pending:{secret}'), user['id']),
             )
-        otpauth_url = f"otpauth://totp/Notki:{quote(user['email'])}?secret={secret}&issuer=Notki&algorithm=SHA256"
+        otpauth_url = (
+            f"otpauth://totp/Notki:{quote(user['email'])}?secret={secret}&issuer=Notki"
+            f"&algorithm={TOTP_ALGORITHM}&digits={TOTP_DIGITS}&period={TOTP_PERIOD_SECONDS}"
+        )
         qr_svg = qr.generate_qr_svg(otpauth_url)
         self.send_json({'secret': secret, 'qrSvg': qr_svg, 'otpauthUrl': otpauth_url})
 
@@ -3775,6 +4223,96 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
             self._request_slots.release()
 
 
+class _HeadlessRestoreHandler(NotkiHandler):
+    """Run snapshot validation/apply without a socket or request state.
+
+    ``restore_snapshot`` only needs the validation helpers on the handler and a
+    ``send_json`` sink. The CLI uses this subclass so the destructive restore path
+    is exactly the same code as the HTTP admin endpoint.
+    """
+
+    def __init__(self):
+        self.restore_result = None
+
+    def send_json(self, payload, status=200, extra_headers=()):
+        self.restore_result = payload
+
+
+def _read_cli_backup_password(password_file=None):
+    """Read a backup password without putting it on the command line."""
+    if password_file:
+        try:
+            if password_file == '-':
+                line = sys.stdin.readline()
+            else:
+                with Path(password_file).expanduser().open('r', encoding='utf-8') as stream:
+                    line = stream.readline()
+        except OSError as error:
+            raise APIError('Could not read the backup password file.', 400) from error
+        password = line.rstrip('\r\n')
+        if not password:
+            raise APIError('The backup password file is empty.', 400)
+        return password
+
+    configured = os.environ.get('NOTKI_BACKUP_PASSWORD')
+    if configured:
+        return configured
+    try:
+        return getpass.getpass('Backup password: ')
+    except (EOFError, KeyboardInterrupt) as error:
+        raise APIError('Backup password entry was cancelled.', 400) from error
+
+
+def _confirm_cli_restore(assume_yes=False):
+    """Require an explicit confirmation for a destructive offline restore."""
+    if assume_yes:
+        return
+    if not sys.stdin.isatty():
+        raise APIError('Refusing to restore without confirmation. Re-run with --yes.', 400)
+    answer = input('This replaces ALL server data. Type RESTORE to continue: ')
+    if answer.strip() != 'RESTORE':
+        raise APIError('Restore cancelled.', 400)
+
+
+def restore_backup_cli(backup_path, password, *, max_bytes=MAX_CLI_BACKUP_BYTES):
+    """Restore a local encrypted backup, bypassing the HTTP upload limit.
+
+    The backup still uses the same authenticated encryption, KDF bounds, snapshot
+    validation and transaction as the web endpoint. Only the file-size cap is
+    raised, and it remains explicitly bounded.
+    """
+    if (isinstance(max_bytes, bool) or not isinstance(max_bytes, int)
+            or max_bytes <= 0 or max_bytes > MAX_CLI_BACKUP_LIMIT):
+        raise APIError('Invalid backup size limit.', 400)
+    path = Path(backup_path).expanduser()
+    try:
+        if not path.is_file():
+            raise APIError('Backup file not found.', 404)
+        size = path.stat().st_size
+    except OSError as error:
+        raise APIError('Could not read the backup file.', 400) from error
+    if size <= 0:
+        raise APIError('The backup archive cannot be read.', 400)
+    if size > max_bytes:
+        raise APIError('The backup file exceeds the CLI size limit.', 413)
+    try:
+        raw_bytes = path.read_bytes()
+    except OSError as error:
+        raise APIError('Could not read the backup file.', 400) from error
+    if len(raw_bytes) > max_bytes:
+        raise APIError('The backup file exceeds the CLI size limit.', 413)
+
+    with backup_operation():
+        snapshot = decrypt_backup(
+            raw_bytes, password,
+            max_file_bytes=max_bytes,
+            max_snapshot_bytes=max_bytes,
+        )
+        handler = _HeadlessRestoreHandler()
+        handler.restore_snapshot(snapshot, replace_existing=True)
+    return handler.restore_result
+
+
 def main():
     parser = argparse.ArgumentParser(description='Notki server with SQLite database.')
     parser.add_argument('--create-admin', action='store_true', help='Create the initial administrator account.')
@@ -3782,11 +4320,46 @@ def main():
     parser.add_argument('--disable-all-2fa', action='store_true', help='Completely disable two-factor authentication (2FA) server-wide for all users.')
     parser.add_argument('--unban', '--unban-ip', metavar='IP', help='Unban a specific IP address from fail2ban.')
     parser.add_argument('--unban-all', action='store_true', help='Unban all IP addresses from fail2ban.')
+    parser.add_argument('--restore-backup', metavar='FILE', help='Restore a local encrypted backup and exit. Existing data is replaced.')
+    parser.add_argument('--backup-password-file', metavar='FILE', help='Read the backup password from the first line of FILE (use - for stdin).')
+    parser.add_argument('--max-backup-size-mb', type=int, default=MAX_CLI_BACKUP_BYTES // (1024 * 1024), metavar='MB', help='Maximum CLI restore file size in MiB (default: 2048).')
+    parser.add_argument('--yes', action='store_true', help='Skip the destructive restore confirmation.')
     parser.add_argument('--host', default=os.environ.get('NOTKI_HOST', '127.0.0.1'))
     parser.add_argument('--port', type=int, default=int(os.environ.get('NOTKI_PORT', '8000')))
     args = parser.parse_args()
 
+    cli_actions = [
+        args.create_admin,
+        bool(args.disable_2fa),
+        args.disable_all_2fa,
+        bool(args.unban),
+        args.unban_all,
+        bool(args.restore_backup),
+    ]
+    if sum(bool(action) for action in cli_actions) > 1:
+        parser.error('Only one CLI action can be used at a time.')
+
     initialize_database()
+    if args.restore_backup:
+        max_bytes = args.max_backup_size_mb * 1024 * 1024
+        if max_bytes <= 0 or max_bytes > MAX_CLI_BACKUP_LIMIT:
+            parser.error('--max-backup-size-mb is outside the supported range.')
+        try:
+            _confirm_cli_restore(args.yes)
+            password = _read_cli_backup_password(args.backup_password_file)
+            result = restore_backup_cli(args.restore_backup, password, max_bytes=max_bytes)
+        except APIError as error:
+            print(f'Restore failed: {error}', file=sys.stderr)
+            raise SystemExit(1) from error
+        print(
+            'Restore complete: {users} users, {notes} notes, {invites} invitations, {shares} shares.'.format(
+                users=result.get('users', 0),
+                notes=result.get('notes', 0),
+                invites=result.get('invites', 0),
+                shares=result.get('shares', 0),
+            )
+        )
+        return
     if args.create_admin:
         create_admin_account()
         return

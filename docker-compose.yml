@@ -1,7 +1,7 @@
 services:
   notki:
     build: .
-    image: notki:0.1.6.0
+    image: notki:0.1.6.2
     container_name: notki
     restart: unless-stopped
     read_only: true
@@ -22,9 +22,8 @@ services:
       NOTKI_DB_PATH: /data/notki.sqlite3
       NOTKI_BACKUP_DIR: /data/backups
       NOTKI_KEY_DIR: /keys
-      # Set a strong, stable key so encrypted server backups survive restarts
-      # and can be restored on a fresh installation.
-      NOTKI_BACKUP_KEY: "${NOTKI_BACKUP_KEY:-}"
+      # Optional stable TOTP key material; otherwise Notki keeps a generated
+      # key in the /keys volume.
       NOTKI_TOTP_KEY: "${NOTKI_TOTP_KEY:-}"
       # Prefer setting NOTKI_SETUP_TOKEN in .env for headless deployments; the
       # setup page asks for it before creating the administrator.
