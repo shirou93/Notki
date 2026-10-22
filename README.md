@@ -146,7 +146,7 @@ From the Admin Panel under Server Backups, you can manage server data:
 | `NOTKI_PORT` | HTTP server port | `8000` |
 | `NOTKI_DB_PATH` | Path to the SQLite3 database file | `./data/notki.sqlite3` |
 | `NOTKI_BACKUP_DIR` | Directory for encrypted backups | `./data/backups` |
-| `NOTKI_KEY_DIR` | Directory for storing generated `backup.key` and `totp.key` | `./.keys` |
+| `NOTKI_KEY_DIR` | Directory for storing generated `backup.key` and `totp.key` (Must be writable by the user running Notki) | `./data/keys` |
 | `NOTKI_BACKUP_KEY` | Master key for server-created encrypted backups | Key file in `NOTKI_KEY_DIR` |
 | `NOTKI_TOTP_KEY` | Key for TOTP secrets encrypted at rest | Key file in `NOTKI_KEY_DIR` |
 | `NOTKI_SETUP_TOKEN` | One-time token required by every setup/import API call | Auto-generated and printed |

@@ -69,6 +69,7 @@ Group=notki
 WorkingDirectory=/opt/notki
 Environment=NOTKI_HOST=127.0.0.1
 Environment=NOTKI_PORT=8000
+Environment=NOTKI_KEY_DIR=/opt/notki/data/keys
 Environment=NOTKI_TRUST_PROXY=127.0.0.1/32
 Environment=NOTKI_PUBLIC_HTTPS=0
 ExecStart=/usr/bin/python3 /opt/notki/server.py

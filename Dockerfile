@@ -15,8 +15,8 @@ RUN pip install --no-cache-dir --only-binary=:all: -r requirements.txt
 COPY . ./
 RUN addgroup -S notki \
     && adduser -S -G notki -h /app notki \
-    && mkdir -p /data/backups \
-    && chown -R notki:notki /app /data
+    && mkdir -p /data/backups /keys \
+    && chown -R notki:notki /app /data /keys
 
 USER notki
 

@@ -40,6 +40,48 @@ def with_same_origin(base_url, headers=None):
 
 
 class ServerUnitTests(unittest.TestCase):
+    @unittest.mock.patch('server._get_key_path')
+    def test_key_generation_permission_error(self, mock_get_key_path):
+        mock_path = unittest.mock.MagicMock()
+        mock_get_key_path.return_value = mock_path
+
+        # Test directory creation failure
+        mock_path.parent.mkdir.side_effect = OSError("Permission denied")
+        with self.assertRaises(server.APIError) as context:
+            server.server_backup_key()
+        self.assertEqual(context.exception.status, 500)
+        self.assertIn("Permission denied: Cannot create key directory", str(context.exception))
+
+        # Reset and test read failure
+        mock_path.parent.mkdir.side_effect = None
+        mock_path.read_text.side_effect = OSError("Permission denied")
+        with self.assertRaises(server.APIError) as context:
+            server.server_backup_key()
+        self.assertEqual(context.exception.status, 500)
+        self.assertIn("Permission denied: Cannot read from", str(context.exception))
+
+        # Reset and test write failure (FileNotFoundError during read triggers generation)
+        mock_path.read_text.side_effect = FileNotFoundError()
+        with unittest.mock.patch('os.open', side_effect=OSError("Permission denied")):
+            with self.assertRaises(server.APIError) as context:
+                server.server_backup_key()
+            self.assertEqual(context.exception.status, 500)
+            self.assertIn("Permission denied: Cannot write to", str(context.exception))
+
+    @unittest.mock.patch('server._get_key_path')
+    @unittest.mock.patch('os.fdopen')
+    @unittest.mock.patch('os.open')
+    def test_key_generation_file_mode(self, mock_open, mock_fdopen, mock_get_key_path):
+        mock_path = unittest.mock.MagicMock()
+        mock_get_key_path.return_value = mock_path
+        mock_path.read_text.side_effect = FileNotFoundError()
+
+        server.server_backup_key()
+        mock_open.assert_called_once()
+        args, _ = mock_open.call_args
+        # args[0] is key_path, args[1] is flags, args[2] is mode
+        self.assertEqual(args[2], 0o600)
+
     def test_normalize_email_valid(self):
         self.assertEqual(server.normalize_email('user@example.com'), 'user@example.com')
         self.assertEqual(server.normalize_email('  user@example.com  '), 'user@example.com')

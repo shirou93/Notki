@@ -899,8 +899,8 @@ def _get_key_path(filename):
     if legacy_path.exists():
         return legacy_path
 
-    # If no legacy file exists, default to .keys directory in ROOT
-    return ROOT / '.keys' / filename
+    # If no legacy file exists, default to keys directory near the database
+    return DB_PATH.parent / 'keys' / filename
 
 
 def server_backup_key():
@@ -913,7 +913,11 @@ def server_backup_key():
     if configured:
         return configured
     key_path = _get_key_path('backup.key')
-    key_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        key_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise APIError(f"Permission denied: Cannot create key directory {key_path.parent}. Check NOTKI_KEY_DIR permissions.", status=500) from e
+
     try:
         return key_path.read_text(encoding='utf-8').strip()
     except FileNotFoundError:
@@ -923,8 +927,15 @@ def server_backup_key():
             with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
                 stream.write(key)
         except FileExistsError:
-            return key_path.read_text(encoding='utf-8').strip()
+            try:
+                return key_path.read_text(encoding='utf-8').strip()
+            except OSError as e:
+                raise APIError(f"Permission denied: Cannot read from {key_path}. Check NOTKI_KEY_DIR permissions.", status=500) from e
+        except OSError as e:
+            raise APIError(f"Permission denied: Cannot write to {key_path}. Check NOTKI_KEY_DIR permissions.", status=500) from e
         return key
+    except OSError as e:
+        raise APIError(f"Permission denied: Cannot read from {key_path}. Check NOTKI_KEY_DIR permissions.", status=500) from e
 
 
 def totp_master_key():
@@ -933,7 +944,11 @@ def totp_master_key():
     if configured:
         return configured
     key_path = _get_key_path('totp.key')
-    key_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        key_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise APIError(f"Permission denied: Cannot create key directory {key_path.parent}. Check NOTKI_KEY_DIR permissions.", status=500) from e
+
     try:
         return key_path.read_text(encoding='utf-8').strip()
     except FileNotFoundError:
@@ -943,8 +958,15 @@ def totp_master_key():
             with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
                 stream.write(key)
         except FileExistsError:
-            return key_path.read_text(encoding='utf-8').strip()
+            try:
+                return key_path.read_text(encoding='utf-8').strip()
+            except OSError as e:
+                raise APIError(f"Permission denied: Cannot read from {key_path}. Check NOTKI_KEY_DIR permissions.", status=500) from e
+        except OSError as e:
+            raise APIError(f"Permission denied: Cannot write to {key_path}. Check NOTKI_KEY_DIR permissions.", status=500) from e
         return key
+    except OSError as e:
+        raise APIError(f"Permission denied: Cannot read from {key_path}. Check NOTKI_KEY_DIR permissions.", status=500) from e
 
 
 _TOTP_KEY_CACHE = None
