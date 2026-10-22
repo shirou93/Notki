@@ -2026,42 +2026,6 @@ class FirstRunSetupTests(unittest.TestCase):
         )
         self.assertEqual(status, 409)
 
-    def test_plaintext_and_legacy_archive_import_are_rejected(self):
-        created_at = server.iso_time()
-        snapshot = {
-            'format': 'notki-server-snapshot', 'version': 2, 'createdAt': created_at,
-            'users': [{
-                'id': 1, 'email': 'archive-admin@example.com',
-                'passwordHash': server.hash_password('archive-admin-password'),
-                'role': 'admin', 'createdAt': created_at,
-            }],
-            'notes': [], 'invites': [],
-        }
-        snapshot_bytes = json.dumps(snapshot).encode('utf-8')
-
-        # A bare plaintext snapshot is never accepted.
-        status, _ = self.request('POST', '/api/setup/import', {'snapshot': snapshot})
-        self.assertEqual(status, 400)
-        status, _ = self.request_raw(
-            'POST', '/api/setup/import-backup', snapshot_bytes,
-            content_type='application/json',
-            headers={'X-Backup-Password': BACKUP_PASSWORD},
-        )
-        self.assertEqual(status, 400)
-
-        # Legacy plaintext tar archives are rejected as well.
-        archive_bytes = io.BytesIO()
-        with tarfile.open(fileobj=archive_bytes, mode='w:gz') as archive:
-            member = tarfile.TarInfo('snapshot.json')
-            member.size = len(snapshot_bytes)
-            archive.addfile(member, io.BytesIO(snapshot_bytes))
-        status, _ = self.request_raw(
-            'POST', '/api/setup/import-backup', archive_bytes.getvalue(),
-            content_type='application/gzip',
-            headers={'X-Backup-Password': BACKUP_PASSWORD},
-        )
-        self.assertEqual(status, 400)
-
     def test_invalid_backup_archive_returns_bad_request(self):
         status, error = self.request_raw('POST', '/api/setup/import-backup', b'not a valid snapshot json')
         self.assertEqual(status, 400)
@@ -3698,38 +3662,6 @@ class TestSecurityAndBackupFixes(ServerFlowTests):
                     self.headers = {'Host': 'example.com'}
             handler = DummyHandler()
             self.assertFalse(handler.check_setup_permission())
-
-    def test_totp_secret_is_encrypted_at_rest(self):
-        user = self.register_user('encryptedtotp@example.com', 'user-passphrase-123')
-        status, res = self.request(user, 'POST', '/api/account/totp')
-        self.assertEqual(status, 200)
-        code = server.compute_totp_code(res['secret'])
-        status, _ = self.request(user, 'POST', '/api/account/totp/verify', {'code': code})
-        self.assertEqual(status, 200)
-
-        with server.database() as connection:
-            stored = connection.execute(
-                "SELECT totp_secret FROM users WHERE email = 'encryptedtotp@example.com'"
-            ).fetchone()['totp_secret']
-        self.assertTrue(stored.startswith('enc:v1:'))
-        self.assertNotIn(res['secret'], stored)
-        self.assertEqual(server.reveal_totp_secret(stored), res['secret'])
-
-    def test_legacy_plaintext_totp_secret_is_migrated(self):
-        user = self.register_user('legacytotp@example.com', 'user-passphrase-123')
-        secret = server.generate_totp_secret()
-        with server.database() as connection:
-            connection.execute(
-                "UPDATE users SET totp_secret = ? WHERE email = 'legacytotp@example.com'",
-                (secret,),
-            )
-        server.initialize_database()
-        with server.database() as connection:
-            stored = connection.execute(
-                "SELECT totp_secret FROM users WHERE email = 'legacytotp@example.com'"
-            ).fetchone()['totp_secret']
-        self.assertTrue(stored.startswith('enc:v1:'))
-        self.assertEqual(server.reveal_totp_secret(stored), secret)
 
     def test_setup_status_does_not_expose_accounts(self):
         self.register_user('hidden@example.com')

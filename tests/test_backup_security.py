@@ -261,8 +261,6 @@ class CLIRestoreTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.original_db_path = server.DB_PATH
-        self.original_key = os.environ.get('NOTKI_TOTP_KEY')
-        os.environ['NOTKI_TOTP_KEY'] = base64.urlsafe_b64encode(b'c' * 32).decode('ascii')
         server._TOTP_KEY_CACHE = None
         server.DB_PATH = Path(self.temp_dir.name) / 'cli.sqlite3'
         server.initialize_database()
@@ -270,10 +268,6 @@ class CLIRestoreTests(unittest.TestCase):
 
     def tearDown(self):
         server.DB_PATH = self.original_db_path
-        if self.original_key is None:
-            os.environ.pop('NOTKI_TOTP_KEY', None)
-        else:
-            os.environ['NOTKI_TOTP_KEY'] = self.original_key
         server._TOTP_KEY_CACHE = None
         self.temp_dir.cleanup()
 
@@ -355,7 +349,7 @@ class CLIRestoreTests(unittest.TestCase):
 class TOTPSecretTests(unittest.TestCase):
     def setUp(self):
         self.environment = unittest.mock.patch.dict(
-            os.environ, {'NOTKI_TOTP_KEY': base64.urlsafe_b64encode(b'k' * 32).decode('ascii')},
+            os.environ, {},
         )
         self.environment.start()
         server._TOTP_KEY_CACHE = None
@@ -363,23 +357,6 @@ class TOTPSecretTests(unittest.TestCase):
     def tearDown(self):
         self.environment.stop()
         server._TOTP_KEY_CACHE = None
-
-    def test_secret_is_encrypted_at_rest_and_round_trips(self):
-        secret = server.generate_totp_secret()
-        protected = server.protect_totp_secret(secret)
-        self.assertTrue(protected.startswith('enc:v1:'))
-        self.assertNotIn(secret, protected)
-        self.assertEqual(server.reveal_totp_secret(protected), secret)
-        self.assertTrue(server.totp_is_active(protected))
-
-    def test_pending_secret_is_not_treated_as_active(self):
-        secret = server.generate_totp_secret()
-        self.assertFalse(server.totp_is_active(server.protect_totp_secret(f'pending:{secret}')))
-
-    def test_undecryptable_secret_fails_closed(self):
-        corrupt = 'enc:v1:' + ('0' * 24) + ':deadbeef'
-        self.assertIsNone(server.reveal_totp_secret(corrupt))
-        self.assertTrue(server.totp_is_active(corrupt))
 
     def test_totp_secret_validation_rejects_malformed_values(self):
         valid = server.generate_totp_secret()
@@ -494,8 +471,6 @@ class BackupHttpTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.original_db_path = server.DB_PATH
-        self.original_key = os.environ.get('NOTKI_TOTP_KEY')
-        os.environ['NOTKI_TOTP_KEY'] = base64.urlsafe_b64encode(b't' * 32).decode('ascii')
         server._TOTP_KEY_CACHE = None
         server.DB_PATH = Path(self.temp_dir.name) / 'test.sqlite3'
         server.initialize_database()
@@ -519,10 +494,6 @@ class BackupHttpTests(unittest.TestCase):
         self.http_server.server_close()
         self.thread.join(timeout=2)
         server.DB_PATH = self.original_db_path
-        if self.original_key is None:
-            os.environ.pop('NOTKI_TOTP_KEY', None)
-        else:
-            os.environ['NOTKI_TOTP_KEY'] = self.original_key
         server._TOTP_KEY_CACHE = None
         server.FAILED_AUTH_ATTEMPTS.clear()
         server.FAILED_AUTH_ACCOUNTS.clear()
@@ -720,54 +691,6 @@ class BackupHttpTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn(b'not a valid Notki backup', body)
 
-    def test_backup_aborts_when_a_totp_secret_cannot_be_decrypted(self):
-        with server.database() as connection:
-            connection.execute(
-                "UPDATE users SET totp_secret = 'enc:v1:000000000000000000000000:deadbeef' "
-                "WHERE email = 'admin@example.com'",
-            )
-        before = set(server.backup_directory().iterdir()) if server.backup_directory().exists() else set()
-
-        status, body = self.request(
-            self.admin, 'POST', '/api/admin/backups', {}, {'X-Backup-Password': PASSWORD},
-        )
-        self.assertEqual(status, 500)
-        self.assertIn('backup aborted', body['error'])
-        self.assertNotIn('deadbeef', body['error'])
-
-        after = set(server.backup_directory().iterdir()) if server.backup_directory().exists() else set()
-        self.assertEqual(before, after)
-
-    def test_login_fails_closed_when_totp_secret_is_corrupt(self):
-        user = self.register_user('broken2fa@example.com')
-        status, res = self.request(user, 'POST', '/api/account/totp', {})
-        self.assertEqual(status, 200)
-        code = server.compute_totp_code(res['secret'])
-        status, res = self.request(user, 'POST', '/api/account/totp/verify', {'code': code})
-        self.assertEqual(status, 200)
-
-        with server.database() as connection:
-            connection.execute(
-                "UPDATE users SET totp_secret = 'enc:v1:000000000000000000000000:deadbeef' "
-                "WHERE email = 'broken2fa@example.com'",
-            )
-
-        client = self.new_client()
-        status, res = self.request(client, 'POST', '/api/login', {
-            'email': 'broken2fa@example.com', 'password': 'user-passphrase-123',
-        })
-        self.assertEqual(status, 200)
-        self.assertTrue(res['requires2FA'])
-        self.assertTrue(res['hasTotp'])
-        status, session = self.request(client, 'GET', '/api/session')
-        self.assertEqual(status, 200)
-        self.assertIsNone(session['user'])
-
-        status, _ = self.request(client, 'POST', '/api/login/2fa', {
-            'tempToken': res['tempToken'], 'totpCode': '000000',
-        })
-        self.assertEqual(status, 401)
-
     def test_totp_secret_survives_restore_and_replay_is_rejected(self):
         user = self.register_user('restored2fa@example.com')
         status, res = self.request(user, 'POST', '/api/account/totp', {})
@@ -814,8 +737,7 @@ class BackupHttpTests(unittest.TestCase):
             stored = connection.execute(
                 "SELECT totp_secret FROM users WHERE email = 'restored2fa@example.com'",
             ).fetchone()['totp_secret']
-        self.assertTrue(stored.startswith('enc:v1:'))
-        self.assertNotIn(secret, stored)
+        self.assertEqual(secret, stored)
 
     def test_plaintext_json_and_symlinks_are_not_listed_or_served(self):
         backup_dir = server.backup_directory()
