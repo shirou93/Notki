@@ -730,6 +730,19 @@ class ServerFlowTests(unittest.TestCase):
                 data = response.read()
                 self.assertGreater(len(data), 0)
 
+    def test_no_external_fonts_or_cdn(self):
+        req_index = Request(f'{self.base_url}/index.html')
+        with urlopen(req_index) as response:
+            body = response.read().decode('utf-8')
+            self.assertNotIn('https://cdnjs.cloudflare.com', body)
+            self.assertNotIn('fonts.googleapis.com', body)
+
+        req_setup = Request(f'{self.base_url}/setup.html')
+        with urlopen(req_setup) as response:
+            body = response.read().decode('utf-8')
+            self.assertNotIn('https://cdnjs.cloudflare.com', body)
+            self.assertNotIn('fonts.googleapis.com', body)
+
     def test_security_headers(self):
         req = Request(f'{self.base_url}/')
         with urlopen(req) as response:
@@ -754,6 +767,14 @@ class ServerFlowTests(unittest.TestCase):
         with urlopen(req_https) as response:
             self.assertEqual(response.headers.get('Strict-Transport-Security'), 'max-age=31536000; includeSubDomains')
             self.assertNotIn('0.1.5.94', server_header)
+
+    def test_vendored_dompurify_is_served(self):
+        req = Request(f'{self.base_url}/vendor/dompurify.min.js')
+        with urlopen(req) as response:
+            self.assertEqual(response.status, 200)
+            self.assertIn('javascript', response.headers.get('Content-Type'))
+            body = response.read().decode('utf-8')
+            self.assertIn('DOMPurify', body)
 
     def test_user_directory_is_not_exposed(self):
         self.register_user('target@example.com')

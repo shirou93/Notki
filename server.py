@@ -104,7 +104,7 @@ MAX_PASSKEY_CHALLENGES = 5_000
 MAX_TEMP_2FA_TOKENS = 10_000
 STATIC_FILES = {
     'manifest.json', 'index.html', 'app.js', 'i18n.js', 'theme.js', 'setup.html', 'setup.js', 'styles.css',
-    'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon.svg'}
+    'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon.svg', 'vendor/dompurify.min.js'}
 TRANSLATION_FILES = {
     'translations/pl.js', 'translations/en.js', 'translations/de.js',
     'translations/fr.js', 'translations/ja.js', 'translations/ko.js',
