@@ -1571,7 +1571,14 @@
 
   function sanitizeRichHtml(html) {
     const purify = getDOMPurify();
-    if (!purify) return document.createDocumentFragment();
+    if (!purify) {
+      showToast(t('setup.totpUnavailable', { message: 'DOMPurify is missing' }) || 'Security module is not loaded. Rich text will not be rendered.');
+      const frag = document.createDocumentFragment();
+      const msg = document.createElement('div');
+      msg.textContent = "Error: DOMPurify is missing. Rich text cannot be safely rendered.";
+      frag.appendChild(msg);
+      return frag;
+    }
 
     purify.addHook('afterSanitizeElements', (node) => {
       if (node.nodeType !== Node.ELEMENT_NODE) return;
@@ -1638,6 +1645,10 @@
   }
 
   function sanitizeRichHtmlToString(html) {
+    if (!getDOMPurify()) {
+      showToast(t('setup.totpUnavailable', { message: 'DOMPurify is missing' }) || 'Security module is not loaded. Cannot save rich text.');
+      throw new Error("DOMPurify is not loaded.");
+    }
     const wrapper = document.createElement('div');
     wrapper.appendChild(sanitizeRichHtml(html));
     return wrapper.innerHTML;
@@ -4422,6 +4433,7 @@
       encodeBase64Url,
       getTaskStatsFromElement,
       getTaskStatsFromHtml,
+      sanitizeRichHtmlToString,
       tableCell,
       createIconSvg,
       saveLocalCache,

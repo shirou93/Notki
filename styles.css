@@ -32,8 +32,8 @@
   --plum: #f3e5f5;
   --plum-border: #b893c8;
   --danger: #bd5747;
-  --sans: 'DM Sans', 'Segoe UI', sans-serif;
-  --serif: 'Fraunces', Georgia, serif;
+  --sans: 'Segoe UI', sans-serif;
+  --serif: Georgia, serif;
 }
 
 * { box-sizing: border-box; }

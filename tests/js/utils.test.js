@@ -1039,3 +1039,10 @@ describe('getCacheKey', () => {
     expect(getCacheKey('user123', null)).toBe('notki.cache.null.user123');
   });
 });
+
+describe('sanitizeRichHtmlToString', () => {
+  it('correctly returns safe HTML when DOMPurify is loaded', () => {
+    const sanitizeRichHtmlToString = require('../../app.js').sanitizeRichHtmlToString;
+    expect(sanitizeRichHtmlToString('<b>test</b>')).toBe('<b>test</b>');
+  });
+});
