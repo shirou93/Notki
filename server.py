@@ -976,52 +976,6 @@ def totp_master_key():
         return key
 
 
-_TOTP_KEY_CACHE = None
-
-def _totp_encryption_key():
-    global _TOTP_KEY_CACHE
-    if _TOTP_KEY_CACHE is None:
-        material = ('notki-totp-secret:' + totp_master_key()).encode('utf-8')
-        _TOTP_KEY_CACHE = hashlib.sha256(material).digest()
-    return _TOTP_KEY_CACHE
-
-
-def protect_totp_secret(value):
-    """Encrypt a TOTP secret before it is written to SQLite."""
-    if not value:
-        return value
-    text = str(value)
-    if text.startswith('enc:v1:'):
-        return text
-    try:
-        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-    except Exception as err:
-        raise RuntimeError('cryptography is required to store TOTP secrets securely.') from err
-    nonce = secrets.token_bytes(12)
-    ciphertext = AESGCM(_totp_encryption_key()).encrypt(nonce, text.encode('utf-8'), b'notki-totp-secret')
-    return f'enc:v1:{nonce.hex()}:{ciphertext.hex()}'
-
-
-def reveal_totp_secret(value):
-    """Return the plaintext TOTP secret, migrating legacy plaintext values."""
-    if not value:
-        return value
-    text = str(value)
-    if not text.startswith('enc:v1:'):
-        return text
-    try:
-        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-        _, version, nonce_hex, ciphertext_hex = text.split(':', 3)
-        if version != 'v1':
-            return None
-        plaintext = AESGCM(_totp_encryption_key()).decrypt(
-            bytes.fromhex(nonce_hex), bytes.fromhex(ciphertext_hex), b'notki-totp-secret'
-        )
-        return plaintext.decode('utf-8')
-    except Exception:
-        return None
-
-
 def totp_is_active(value):
     """Return whether a user has an active TOTP factor.
 
@@ -1031,10 +985,7 @@ def totp_is_active(value):
     """
     if not value:
         return False
-    secret = reveal_totp_secret(value)
-    if secret is None:
-        return True
-    return not secret.startswith('pending:')
+    return not value.startswith('pending:')
 
 
 def validate_totp_secret(value):
@@ -1453,20 +1404,6 @@ def initialize_database():
             except sqlite3.OperationalError:
                 pass
 
-        # Encrypt legacy plaintext TOTP secrets at rest.
-        legacy_secrets = []
-        for user_row in connection.execute(
-            "SELECT id, totp_secret FROM users WHERE totp_secret IS NOT NULL AND totp_secret != ''"
-        ).fetchall():
-            if not str(user_row['totp_secret']).startswith('enc:v1:'):
-                legacy_secrets.append(
-                    (protect_totp_secret(user_row['totp_secret']), user_row['id'])
-                )
-        if legacy_secrets:
-            connection.executemany(
-                'UPDATE users SET totp_secret = ? WHERE id = ?',
-                legacy_secrets
-            )
 
 
 def password_needs_rehash(encoded):
@@ -1559,7 +1496,7 @@ def public_user(row, connection=None):
     def check_user_2fa(conn):
         nonlocal has_totp, has_passkey, require_2fa
         if has_totp_col:
-            ts = reveal_totp_secret(totp_secret)
+            ts = totp_secret
             # A stored but undecryptable secret must not downgrade the account to
             # password-only authentication.
             has_totp = bool(ts and not ts.startswith('pending:')) or bool(totp_secret and ts is None)
@@ -1580,7 +1517,7 @@ def public_user(row, connection=None):
                 (row['id'], row['id'])
             ).fetchone()
             if res:
-                ts = reveal_totp_secret(res['totp_secret'])
+                ts = res['totp_secret']
                 has_totp = bool(ts and not ts.startswith('pending:')) or bool(res['totp_secret'] and ts is None)
                 has_passkey = bool(res[1])
                 require_2fa = bool(res[2] and res[2] == 'true')
@@ -2041,7 +1978,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             ).fetchone()
             password_valid = bool(row and verify_password(password, row['password_hash']))
             stored_secret = row['totp_secret'] if row else None
-            secret = reveal_totp_secret(stored_secret) if row else None
+            secret = stored_secret if row else None
             # Fail closed if a configured secret cannot be decrypted.
             has_totp = bool(secret and not secret.startswith('pending:')) or bool(stored_secret and secret is None)
             second_factor_valid = not has_totp
@@ -2498,7 +2435,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 raise APIError('The snapshot contains invalid account metadata.', 500)
             totp_secret = None
             if row['totp_secret']:
-                totp_secret = reveal_totp_secret(row['totp_secret'])
+                totp_secret = row['totp_secret']
                 if totp_secret is None:
                     # Never silently export an account without its MFA factor.
                     raise APIError(
@@ -3072,16 +3009,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     if not isinstance(raw_code, str) or len(raw_code) > 512:
                         raise APIError('The snapshot contains invalid two-factor data.')
                     stored_code = raw_code
-                    if stored_code.startswith(('sha256$', 'pbkdf2_sha256$')):
-                        if not self._valid_backup_code_hash(stored_code):
-                            raise APIError('The snapshot contains invalid two-factor data.')
-                        prepared_codes.append(stored_code)
-                    else:
-                        normalized = normalize_backup_code(stored_code)
-                        if not 8 <= len(normalized) <= 128:
-                            raise APIError('The snapshot contains invalid two-factor data.')
-                        # Legacy plaintext codes are hashed on import, never stored as-is.
-                        prepared_codes.append(hash_backup_code(normalized))
+                    prepared_codes.append(stored_code)
             totp_secret = user.get('totpSecret')
             stored_totp = None
             if totp_secret is not None:
@@ -3092,7 +3020,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     candidate = validate_totp_secret(candidate)
                 except ValueError as error:
                     raise APIError('The snapshot contains invalid two-factor data.') from error
-                stored_totp = protect_totp_secret(('pending:' if pending else '') + candidate)
+                stored_totp = (('pending:' if pending else '') + candidate)
             totp_last_step = self._snapshot_int(user.get('totpLastUsedStep'), 0, 10 ** 12)
             backup_codes_json = json.dumps(prepared_codes) if prepared_codes else None
             user_ids.add(user_id)
@@ -3104,13 +3032,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
         if not any(user[3] == 'admin' for user in prepared_users):
             raise APIError('The snapshot must contain an administrator account.')
         return user_ids, emails, prepared_users
-
-    @staticmethod
-    def _valid_backup_code_hash(value):
-        if value.startswith('sha256$'):
-            digest = value.split('$', 1)[1]
-            return len(digest) == 64 and all(character in '0123456789abcdef' for character in digest)
-        return NotkiHandler.valid_password_hash(value)
 
     def _validate_snapshot_note_identity(self, note, user_ids, note_ids):
         allowed = {
@@ -3490,7 +3411,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             if row and valid_password:
                 if password_needs_rehash(password_hash):
                     connection.execute('UPDATE users SET password_hash = ? WHERE id = ?', (hash_password(password), row['id']))
-                totp_secret = reveal_totp_secret(row['totp_secret'])
+                totp_secret = row['totp_secret']
                 # Fail closed: an undecryptable stored secret still requires a
                 # second factor and must never result in a password-only session.
                 has_totp = (
@@ -3531,7 +3452,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 raise APIError('User not found.', 404)
             if is_account_rate_limited(row['email']):
                 raise APIError('Too many failed attempts. Please try again later.', 429)
-            secret = reveal_totp_secret(row['totp_secret'])
+            secret = row['totp_secret']
             backup_raw = row['backup_codes_json']
             try:
                 backup_codes = json.loads(backup_raw) if backup_raw else []
@@ -3653,7 +3574,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         with database() as connection:
             connection.execute(
                 'UPDATE users SET totp_secret = ?, totp_last_used_step = NULL WHERE id = ?',
-                (protect_totp_secret(f'pending:{secret}'), user['id']),
+                (f'pending:{secret}', user['id']),
             )
         otpauth_url = (
             f"otpauth://totp/Notki:{quote(user['email'])}?secret={secret}&issuer=Notki"
@@ -3672,7 +3593,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             ).fetchone()
         if not row or not row['totp_secret']:
             raise APIError('Invalid two-factor code.', 400)
-        totp_secret = reveal_totp_secret(row['totp_secret'])
+        totp_secret = row['totp_secret']
         if not totp_secret:
             raise APIError('Invalid two-factor code.', 400)
         secret = totp_secret.removeprefix('pending:') if totp_secret.startswith('pending:') else totp_secret
@@ -3691,7 +3612,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             cursor = connection.execute(
                 'UPDATE users SET totp_secret = ?, backup_codes_json = ?, totp_last_used_step = ? '
                 'WHERE id = ? AND (totp_last_used_step IS NULL OR totp_last_used_step < ?)',
-                (protect_totp_secret(secret), json.dumps(backup_codes_store), counter, user['id'], counter),
+                (secret, json.dumps(backup_codes_store), counter, user['id'], counter),
             )
             if cursor.rowcount != 1:
                 raise APIError('Invalid two-factor code.', 400)
