@@ -86,7 +86,7 @@ with TLS for anything reachable from the public internet.
 | **Accounts** | Profiles, avatars, password changes, and per-user labels. |
 | **Authentication** | TOTP apps, WebAuthn passkeys / hardware keys, recovery codes, optional server-wide 2FA enforcement, and fail2ban. |
 | **Backups** | Mandatory AES-256-GCM `.enc` backups, authenticated metadata, full validation, atomic restore, and a CLI path for large archives. |
-| **Administration** | User management, single-use invitations, server stats, announcements, update checks, and checksum/signature verification for installs. |
+| **Administration** | User management, single-use invitations, server stats, announcements, and update checks. |
 | **Interface** | Light, dark, and system themes; English, Polish, German, French, Japanese, Korean, Italian, and Spanish. |
 
 ## `$` screenshots
@@ -211,10 +211,6 @@ first so only one process touches the SQLite database.
 | `NOTKI_PUBLIC_HOST` | Canonical public host or full URL used for links and Origin checks | Empty |
 | `NOTKI_COOKIE_SECURE` | Force `Secure` + `__Host-` session cookies (`1`) or detect automatically | Automatic |
 | `NOTKI_PUBLIC_HTTPS` | Emit HTTPS links when TLS terminates at a proxy | `0` |
-| `NOTKI_ALLOW_BETA_UPDATES` | Allow the moving `main` tarball, not recommended | `0` |
-| `NOTKI_UPDATE_SHA256` | Expected SHA-256 of an update tarball | Empty |
-| `NOTKI_UPDATE_PUBLIC_KEY` | Optional Ed25519 public key that verifies update signatures | Empty |
-| `NOTKI_ALLOW_UNVERIFIED_UPDATES` | Allow updates without a checksum, dangerous | `0` |
 | `NOTKI_BACKUP_PASSWORD` | Backup password for CLI restore only; never put it in argv | Empty |
 
 ### Reverse proxy and HTTPS

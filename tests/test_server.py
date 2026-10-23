@@ -889,10 +889,9 @@ class ServerFlowTests(unittest.TestCase):
             mock_opener.open.return_value = mock_cm
             mock_build_opener.return_value = mock_opener
 
-            with unittest.mock.patch.dict(os.environ, {'NOTKI_ALLOW_UNVERIFIED_UPDATES': '1'}):
-                status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                    'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.94'
-                })
+            status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.94'
+            })
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'No newer version available.')
 
@@ -922,11 +921,10 @@ class ServerFlowTests(unittest.TestCase):
             mock_opener.open.return_value = mock_cm
             mock_build_opener.return_value = mock_opener
 
-            with unittest.mock.patch.dict(os.environ, {'NOTKI_ALLOW_BETA_UPDATES': '1', 'NOTKI_ALLOW_UNVERIFIED_UPDATES': '1'}):
-                status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                    'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/main',
-                    'isBeta': True
-                })
+            status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
+                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/main',
+                'isBeta': True
+            })
             self.assertEqual(status, 200)
             self.assertTrue(res.get('success', False))
             self.assertTrue(mock_extract.called)
@@ -3732,32 +3730,6 @@ class TestSecurityAndBackupFixes(ServerFlowTests):
             )
             self.assertEqual(status, 201)
             self.assertTrue(res['url'].startswith('https://notki.example.com/?invite='))
-
-    def test_update_signature_is_verified_when_configured(self):
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-        from cryptography.hazmat.primitives import serialization
-
-        private_key = Ed25519PrivateKey.generate()
-        public_raw = private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
-        )
-        payload_bytes = b'update-archive'
-        signature = private_key.sign(payload_bytes)
-        handler = server.NotkiHandler
-
-        with unittest.mock.patch.dict(os.environ, {
-            'NOTKI_UPDATE_PUBLIC_KEY': base64.b64encode(public_raw).decode('ascii'),
-        }):
-            handler._verify_update_signature(payload_bytes, {
-                'signature': base64.b64encode(signature).decode('ascii'),
-            })
-            with self.assertRaises(server.APIError):
-                handler._verify_update_signature(payload_bytes + b'x', {
-                    'signature': base64.b64encode(signature).decode('ascii'),
-                })
-            with self.assertRaises(server.APIError):
-                handler._verify_update_signature(payload_bytes, {})
 
     def test_csp_and_hsts_headers(self):
         status, res, headers = self.request_with_response_headers(self.admin, 'GET', '/api/admin/settings')
