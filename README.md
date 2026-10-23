@@ -25,7 +25,7 @@ python 3.9+ | sqlite | vanilla js | webauthn | cryptography
 ### Docker Compose (recommended)
 
 ```bash
-TAG=$(curl -s https://api.github.com/repos/shirou93/Notki/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+TAG=$(curl -s https://api.github.com/repos/shirou93/Notki/tags | grep '"name":' | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
 git clone --branch $TAG --depth 1 https://github.com/shirou93/Notki.git notki
 cd notki
 docker compose up -d --build
@@ -48,7 +48,7 @@ the token out of shell history and logs.
 ### Python (no container)
 
 ```bash
-TAG=$(curl -s https://api.github.com/repos/shirou93/Notki/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+TAG=$(curl -s https://api.github.com/repos/shirou93/Notki/tags | grep '"name":' | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
 git clone --branch $TAG --depth 1 https://github.com/shirou93/Notki.git Notki
 cd Notki
 python3 -m pip install --only-binary=:all: -r requirements.txt
