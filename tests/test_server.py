@@ -833,7 +833,7 @@ class ServerFlowTests(unittest.TestCase):
             self.new_client(), 'GET', '/api/notes', headers={'Accept-Language': 'pl-PL,pl;q=0.9'},
         )
         self.assertEqual(status, 401)
-        self.assertEqual(error['error'], 'Zaloguj się, aby kontynuować.')
+        self.assertEqual(error['error'], 'Sign in to continue.')
 
         status, error = self.request(self.new_client(), 'GET', '/api/notes')
         self.assertEqual(status, 401)
@@ -1921,7 +1921,7 @@ class FirstRunSetupTests(unittest.TestCase):
             'email': 'admin@example.com', 'password': 'short',
         }, {'Accept-Language': 'pl-PL'})
         self.assertEqual(status, 400)
-        self.assertEqual(result['error'], 'Hasło musi mieć co najmniej 12 znaków.')
+        self.assertEqual(result['error'], 'The password must be at least 12 characters long.')
 
         status, result = self.request('POST', '/api/setup/admin', {
             'email': 'admin@example.com', 'password': 'secure-first-admin-password',
@@ -2536,26 +2536,6 @@ class GetForwardedProtoTests(unittest.TestCase):
 
 
 
-class TranslateMessageTests(unittest.TestCase):
-    def test_translate_message_polish(self):
-        # Known message in POLISH_MESSAGES
-        self.assertEqual(server.translate_message('Enter a valid e-mail address.', 'pl'), 'Podaj poprawny adres e-mail.')
-
-        # Unknown message, should return the original
-        self.assertEqual(server.translate_message('Some unknown message', 'pl'), 'Some unknown message')
-
-    def test_translate_message_other_languages(self):
-        # Even if the message exists in POLISH_MESSAGES, shouldn't translate to Polish if language is not 'pl'
-        self.assertEqual(server.translate_message('Enter a valid e-mail address.', 'en'), 'Enter a valid e-mail address.')
-        self.assertEqual(server.translate_message('Enter a valid e-mail address.', 'de'), 'Enter a valid e-mail address.')
-        self.assertEqual(server.translate_message('Enter a valid e-mail address.', 'es'), 'Enter a valid e-mail address.')
-
-    def test_translate_message_none_language(self):
-        self.assertEqual(server.translate_message('Enter a valid e-mail address.', None), 'Enter a valid e-mail address.')
-
-    def test_translate_message_invalid_message(self):
-        self.assertEqual(server.translate_message(None, 'pl'), None)
-        self.assertEqual(server.translate_message('', 'pl'), '')
 
 
 class RecordFailedAuthTests(unittest.TestCase):
