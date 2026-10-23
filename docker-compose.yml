@@ -20,6 +20,7 @@ services:
       NOTKI_PORT: "8000"
       NOTKI_DB_PATH: /data/notki.sqlite3
       NOTKI_BACKUP_DIR: /data/backups
+      NOTKI_BACKUP_PASSWORD: "${NOTKI_BACKUP_PASSWORD:-}"
       # Prefer setting NOTKI_SETUP_TOKEN in .env for headless deployments; the
       # setup page asks for it before creating the administrator.
       NOTKI_SETUP_TOKEN: "${NOTKI_SETUP_TOKEN:-}"

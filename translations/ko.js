@@ -283,7 +283,6 @@ window.notkiTranslations.ko = {
   'admin.update.description': 'GitHub에서 업데이트를 확인하고 설치합니다.',
   'admin.update.check': '업데이트 확인',
   'admin.update.currentVersion': '설치된 버전:',
-  'admin.update.betaChannel': '베타 업데이트 (기본 저장소에서 직접 다운로드)',
   'admin.update.available': '업데이트를 사용할 수 있습니다! 최신 버전:',
   'admin.update.perform': '지금 업데이트',
   'admin.update.upToDate': '시스템이 최신 상태입니다 (버전 {version}).',

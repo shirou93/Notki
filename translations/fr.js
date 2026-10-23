@@ -283,7 +283,6 @@ window.notkiTranslations.fr = {
   'admin.update.description': 'Vérifier et installer les mises à jour depuis GitHub.',
   'admin.update.check': 'Vérifier les mises à jour',
   'admin.update.currentVersion': 'Version installée :',
-  'admin.update.betaChannel': 'Mises à jour bêta (télécharger directement depuis le dépôt principal)',
   'admin.update.available': 'Une mise à jour est disponible ! Dernière version :',
   'admin.update.perform': 'Mettre à jour maintenant',
   'admin.update.upToDate': 'Le système est à jour (version {version}).',

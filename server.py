@@ -2499,16 +2499,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def check_update(self):
         self.require_user(admin=True)
-        query = urlsplit(self.path).query
-        if 'beta=1' in query or 'beta=true' in query:
-            tarball_url = 'https://api.github.com/repos/shirou93/Notki/tarball/main'
-            self.send_json({
-                'updateAvailable': True,
-                'latestVersion': 'main (beta)',
-                'tarballUrl': tarball_url,
-                'isBeta': True
-            })
-            return
 
         req = urllib.request.Request('https://api.github.com/repos/shirou93/Notki/tags')
         req.add_header('User-Agent', 'Notki-App')
@@ -2633,21 +2623,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
         self._safe_extract(archive, ROOT, valid_members)
 
-    def _finalize_update_index_html(self, is_beta):
-        index_path = ROOT / 'index.html'
-        if not index_path.exists():
-            return
-        try:
-            content = index_path.read_text(encoding='utf-8')
-            pattern = r'(<span class="sidebar-version">\s*NOTKI ·\s*)(?:ALPHA|BETA)?\s*(\d[^<]*</span>)'
-            replacement = r'\1BETA \2' if is_beta else r'\1\2'
-            new_content = re.sub(pattern, replacement, content)
-            if new_content != content:
-                index_path.write_text(new_content, encoding='utf-8')
-        except Exception as e:
-            add_log('ERROR', f'Failed to update index.html version footer: {e}')
-
-
     def _update_rollback_path(self):
         return backup_directory() / f'update-rollback-{utc_now().strftime("%Y%m%d-%H%M%S")}-{secrets.token_hex(4)}.tar.gz'
 
@@ -2684,7 +2659,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('admin.update.dockerWarning', 400)
 
         tarball_url = payload.get('tarballUrl')
-        is_beta = bool(payload.get('isBeta')) or (tarball_url and tarball_url.endswith('/main'))
         if not tarball_url or not tarball_url.startswith('https://api.github.com/repos/shirou93/Notki/tarball/'):
             raise APIError('Invalid download URL.', 400)
 
@@ -2699,12 +2673,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 if not members:
                     raise ValueError("Empty archive")
 
-                if not is_beta:
-                    self._verify_update_version(archive, members)
+                self._verify_update_version(archive, members)
                 rollback_path = self._create_update_rollback(members)
                 try:
                     self._extract_update_archive(archive, members)
-                    self._finalize_update_index_html(is_beta)
                 except Exception:
                     if rollback_path and rollback_path.exists():
                         self._restore_update_rollback(rollback_path)

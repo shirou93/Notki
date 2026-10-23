@@ -283,7 +283,6 @@ window.notkiTranslations.ja = {
   'admin.update.description': 'GitHub からアップデートを確認してインストールします。',
   'admin.update.check': 'アップデートを確認',
   'admin.update.currentVersion': 'インストール済みバージョン:',
-  'admin.update.betaChannel': 'ベータアップデート（メインリポジトリから直接ダウンロード）',
   'admin.update.available': 'アップデートが利用可能です！ 最新バージョン:',
   'admin.update.perform': '今すぐアップデート',
   'admin.update.upToDate': 'システムは最新状態です (バージョン {version})。',
