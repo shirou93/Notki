@@ -2795,56 +2795,17 @@ class NotkiHandler(BaseHTTPRequestHandler):
             valid_members = [m for m in rollback.getmembers() if m.isfile()]
             NotkiHandler._safe_extract(rollback, ROOT, valid_members)
 
-    @staticmethod
-    def _verify_update_signature(archive_bytes, payload):
-        public_key_value = os.environ.get('NOTKI_UPDATE_PUBLIC_KEY', '').strip()
-        if not public_key_value:
-            return
-        signature_value = payload.get('signature') or os.environ.get('NOTKI_UPDATE_SIGNATURE') or ''
-        if not signature_value:
-            raise APIError('An update signature is required.', 400)
-        try:
-            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-            from cryptography.hazmat.primitives import serialization
-
-            signature = base64.b64decode(signature_value, validate=True)
-            try:
-                raw_key = base64.b64decode(public_key_value, validate=True)
-            except Exception:
-                raw_key = b''
-            if len(raw_key) == 32:
-                public_key = Ed25519PublicKey.from_public_bytes(raw_key)
-            else:
-                public_key = serialization.load_pem_public_key(public_key_value.encode('utf-8'))
-            public_key.verify(signature, archive_bytes)
-        except APIError:
-            raise
-        except Exception as err:
-            raise APIError('The update signature is invalid.', 400) from err
-
     def perform_update(self, payload):
         admin = self.require_user(admin=True)
         self.require_step_up(admin)
         tarball_url = payload.get('tarballUrl')
         is_beta = bool(payload.get('isBeta')) or (tarball_url and tarball_url.endswith('/main'))
-        if is_beta and os.environ.get('NOTKI_ALLOW_BETA_UPDATES') != '1':
-            raise APIError('Beta updates are disabled. Set NOTKI_ALLOW_BETA_UPDATES=1 to enable them.', 403)
         if not tarball_url or not tarball_url.startswith('https://api.github.com/repos/shirou93/Notki/tarball/'):
             raise APIError('Invalid download URL.', 400)
-
-        expected_sha256 = str(payload.get('sha256') or os.environ.get('NOTKI_UPDATE_SHA256') or '').lower()
-        allow_unverified = os.environ.get('NOTKI_ALLOW_UNVERIFIED_UPDATES') == '1'
-        if not expected_sha256 and not allow_unverified:
-            raise APIError('Update checksum is required. Set NOTKI_UPDATE_SHA256 or NOTKI_ALLOW_UNVERIFIED_UPDATES.', 400)
-        if expected_sha256 and not re.fullmatch(r'[0-9a-f]{64}', expected_sha256):
-            raise APIError('Invalid update checksum.', 400)
 
         archive_bytes = self._download_update_archive(tarball_url)
         if len(archive_bytes) > MAX_SNAPSHOT_BYTES:
             raise APIError('The update archive is too large.', 413)
-        if expected_sha256 and not hmac.compare_digest(hashlib.sha256(archive_bytes).hexdigest(), expected_sha256):
-            raise APIError('The update archive checksum does not match.', 400)
-        self._verify_update_signature(archive_bytes, payload)
 
         rollback_path = None
         try:
