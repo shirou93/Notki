@@ -939,50 +939,8 @@ def backup_directory():
     return Path(os.environ.get('NOTKI_BACKUP_DIR') or DB_PATH.parent / 'backups')
 
 
-def _get_key_path(filename):
-    """Return the Path where a given key file should be stored or read.
-    Respects NOTKI_KEY_DIR if set. Otherwise, uses NOTKI_KEY_DIR defaults,
-    but falls back to DB_PATH.parent if the legacy key file already exists there.
-    """
-    env_dir = os.environ.get('NOTKI_KEY_DIR')
-    if env_dir:
-        return Path(env_dir) / filename
-
-    legacy_path = DB_PATH.parent / filename
-    if legacy_path.exists():
-        return legacy_path
-
-    # If no legacy file exists, default to .keys directory in ROOT
-    return ROOT / '.keys' / filename
-
-
-def totp_master_key():
-    """Return a stable key used only for TOTP secrets at rest."""
-    configured = os.environ.get('NOTKI_TOTP_KEY', '')
-    if configured:
-        return configured
-    key_path = _get_key_path('totp.key')
-    key_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        return key_path.read_text(encoding='utf-8').strip()
-    except FileNotFoundError:
-        key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('ascii')
-        try:
-            descriptor = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
-                stream.write(key)
-        except FileExistsError:
-            return key_path.read_text(encoding='utf-8').strip()
-        return key
-
-
 def totp_is_active(value):
-    """Return whether a user has an active TOTP factor.
-
-    If a stored secret exists but cannot be decrypted we fail closed: the account
-    is still treated as MFA-protected rather than silently downgrading to a
-    password-only login.
-    """
+    """Return whether a user has an active TOTP factor."""
     if not value:
         return False
     return not value.startswith('pending:')

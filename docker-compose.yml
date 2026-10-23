@@ -15,16 +15,11 @@ services:
       - "${NOTKI_HTTP_PORT:-8000}:8000"
     volumes:
       - notki-data:/data
-      - notki-keys:/keys
     environment:
       NOTKI_HOST: 0.0.0.0
       NOTKI_PORT: "8000"
       NOTKI_DB_PATH: /data/notki.sqlite3
       NOTKI_BACKUP_DIR: /data/backups
-      NOTKI_KEY_DIR: /keys
-      # Optional stable TOTP key material; otherwise Notki keeps a generated
-      # key in the /keys volume.
-      NOTKI_TOTP_KEY: "${NOTKI_TOTP_KEY:-}"
       # Prefer setting NOTKI_SETUP_TOKEN in .env for headless deployments; the
       # setup page asks for it before creating the administrator.
       NOTKI_SETUP_TOKEN: "${NOTKI_SETUP_TOKEN:-}"
@@ -41,4 +36,3 @@ services:
 
 volumes:
   notki-data:
-  notki-keys:

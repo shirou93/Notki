@@ -203,8 +203,6 @@ first so only one process touches the SQLite database.
 | `NOTKI_PORT` | HTTP port | `8000` |
 | `NOTKI_DB_PATH` | SQLite database path | `./data/notki.sqlite3` |
 | `NOTKI_BACKUP_DIR` | Directory for encrypted `.enc` backups | `./data/backups` |
-| `NOTKI_KEY_DIR` | Directory containing the generated TOTP key file | `./.keys` |
-| `NOTKI_TOTP_KEY` | Optional TOTP key material; takes precedence over the key file | Key file in `NOTKI_KEY_DIR` |
 | `NOTKI_SETUP_TOKEN` | One-time token required by setup and import APIs | Generated and printed |
 | `NOTKI_TRUST_PROXY` | Proxy peers whose forwarding headers are trusted (`1`, `true`, `all`, or an IP/CIDR list) | Loopback only |
 | `NOTKI_ALLOWED_HOSTS` | Optional hostname allowlist for forwarded hosts | Empty |
@@ -241,7 +239,7 @@ by `NOTKI_TRUST_PROXY`.
   exist.
 - Restoring a backup is a destructive administrative operation. It replaces all
   data and invalidates sessions.
-- Use HTTPS in production, protect the setup token and TOTP key material, and
+- Use HTTPS in production, protect the setup token, and
   keep backup passwords outside the backup directory.
 - Run one Notki process per SQLite database. The backup/restore lock is
   process-local.
