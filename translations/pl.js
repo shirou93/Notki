@@ -411,4 +411,12 @@ window.notkiTranslations.pl = {
   'setup.importFailed': 'Nie udało się przywrócić backupu.',
   'setup.importRestored': 'Backup przywrócony. Przekierowuję do logowania.',
   'setup.connectionFailed': 'Nie udało się połączyć z serwerem.',
+  'admin.backups.generatedWarning': 'W pliku .env nie znaleziono hasła backupu. Wygenerowano tymczasowe hasło. Proszę ustawić NOTKI_BACKUP_PASSWORD w .env.',
+  'setup.tokenLabel': 'TOKEN KONFIGURACYJNY',
+  'setup.tokenHint': 'Wklej jednorazowy token wyświetlony w konsoli serwera przy uruchomieniu.',
+  'setup.tokenRequired': 'Token konfiguracyjny jest wymagany.',
+  'setup.backupInfo': 'Ustaw hasło backupu w pliku .env, jeśli chcesz móc go przywrócić.',
+  'setup.importEncryptedRequiresPassword': 'Ten backup wymaga hasła.',
+  'stepUp.password': 'Potwierdź swoje hasło, aby kontynuować tę wrażliwą operację.',
+  'stepUp.code': 'Kod dwuskładnikowy lub kod zapasowy (zostaw puste, jeśli nie włączono).',
 };

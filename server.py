@@ -31,7 +31,7 @@ import webauthn
 
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.1.6.2'
+VERSION = '0.1.6.10'
 GENERATED_SETUP_TOKEN = None
 GENERATED_BACKUP_PASSWORD = None
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
