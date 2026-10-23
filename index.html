@@ -259,6 +259,7 @@
       <header class="admin-section-header">
         <div><h2 data-i18n="admin.backups.title">Server-wide backups</h2><p data-i18n="admin.backups.description">Encrypted archives contain accounts, notes, and invitations. Sessions are not saved.</p></div>
       </header>
+      <div id="backup-generated-password-warning" class="admin-message is-error" hidden data-i18n="admin.backups.generatedWarning">No backup password found in .env. A temporary one has been generated. Please set NOTKI_BACKUP_PASSWORD in .env.</div>
       <form id="backup-form" class="backup-form-wrap">
         <button class="button-primary" id="create-backup" type="submit" data-i18n="admin.backups.create">+ Create encrypted backup (.enc)</button>
       </form>

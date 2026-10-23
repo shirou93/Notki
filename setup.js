@@ -72,12 +72,6 @@
       snapshotMessage.hidden = false;
       return;
     }
-    const backupPassword = (document.querySelector('#setup-backup-password')?.value || '');
-    if (!backupPassword) {
-      snapshotMessage.textContent = t('setup.backupPasswordRequired');
-      snapshotMessage.hidden = false;
-      return;
-    }
     importButton.disabled = true;
     snapshotMessage.hidden = true;
     try {
@@ -87,7 +81,6 @@
       const headers = {
         'Accept-Language': window.i18n.getLanguage(),
         'X-Setup-Token': setupToken(),
-        'X-Backup-Password': backupPassword,
       };
       const response = await fetch('/api/setup/import-backup', {
         method: 'POST',
