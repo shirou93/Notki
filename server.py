@@ -163,109 +163,6 @@ def add_log(level, message):
             LOG_BUFFER.pop(0)
 
 # Polish messages are the source strings; this catalog provides their English counterparts.
-POLISH_MESSAGES = {
-    'Enter a valid e-mail address.': 'Podaj poprawny adres e-mail.',
-    'The password must be at least 12 characters long.': 'Hasło musi mieć co najmniej 12 znaków.',
-    'The password is too long.': 'Hasło jest zbyt długie.',
-    'The passwords do not match.': 'Podane hasła nie są takie same.',
-    'Invalid request size.': 'Nieprawidłowy rozmiar żądania.',
-    'The request is too large.': 'Żądanie jest zbyt duże.',
-    'JSON data was expected.': 'Oczekiwano danych JSON.',
-    'A .tgz or .json archive was expected.': 'Oczekiwano archiwum .tgz lub .json.',
-    'Invalid JSON format.': 'Nieprawidłowy format JSON.',
-    'Invalid request data.': 'Nieprawidłowe dane żądania.',
-    'A cross-origin request was blocked.': 'Żądanie z innej domeny zostało zablokowane.',
-    'Sign in to continue.': 'Zaloguj się, aby kontynuować.',
-    'This section is available only to the administrator.': 'Ta sekcja jest dostępna tylko dla administratora.',
-    'The first-time setup can only be completed locally.': 'Pierwszą konfigurację można wykonać wyłącznie lokalnie.',
-    'Creating the first administrator requires local access.': 'Pierwsza konfiguracja administratora wymaga dostępu lokalnego.',
-    'Endpoint not found.': 'Nie znaleziono endpointu.',
-    'Page not found.': 'Nie znaleziono strony.',
-    'File not found.': 'Nie znaleziono pliku.',
-    'The administrator account has already been created.': 'Konto administratora zostało już utworzone.',
-    'An account with this e-mail address already exists.': 'Konto z tym adresem e-mail już istnieje.',
-    'Invalid e-mail or password.': 'Nieprawidłowy e-mail lub hasło.',
-    'The current password is incorrect.': 'Aktualne hasło jest nieprawidłowe.',
-    'Registration requires a valid invitation.': 'Rejestracja wymaga ważnego zaproszenia.',
-    'The invitation is invalid or has expired.': 'Zaproszenie jest nieprawidłowe lub wygasło.',
-    'The snapshot exceeds the 100 MB limit.': 'Snapshot przekracza limit 100 MB.',
-    'The snapshot exceeds the size limit.': 'Snapshot przekracza limit rozmiaru.',
-    'Could not save the backup on the server.': 'Nie udało się zapisać backupu na serwerze.',
-    'Backup not found.': 'Nie znaleziono backupu.',
-    'The backup file exceeds the size limit.': 'Plik backupu przekracza limit rozmiaru.',
-    'The backup archive cannot be read.': 'Nie można odczytać archiwum backupu.',
-    'The backup archive has invalid contents.': 'Archiwum backupu ma nieprawidłową zawartość.',
-    'The snapshot cannot be read from the archive.': 'Nie można odczytać snapshotu z archiwum.',
-    'Snapshot import is available only locally.': 'Import snapshotu jest dostępny tylko lokalnie.',
-    'The file is not a valid Notki server snapshot.': 'Plik nie jest prawidłowym snapshotem serwera Notki.',
-    'The snapshot does not contain a complete list of accounts, notes, and invitations.': 'Snapshot nie zawiera kompletnej listy kont, notatek i zaproszeń.',
-    'The snapshot is empty or exceeds the data limit.': 'Snapshot jest pusty lub przekracza limit danych.',
-    'Invalid account in the snapshot.': 'Nieprawidłowe konto w snapshocie.',
-    'Invalid account identifier in the snapshot.': 'Nieprawidłowy identyfikator konta w snapshocie.',
-    'Invalid account address or role in the snapshot.': 'Nieprawidłowy adres lub rola konta w snapshocie.',
-    'The snapshot contains an invalid password hash.': 'Snapshot zawiera nieprawidłowy hash hasła.',
-    'The snapshot contains an invalid avatar.': 'Snapshot zawiera nieprawidłowy avatar.',
-    'The avatar is too large.': 'Avatar jest zbyt duży.',
-    'The avatar must be a PNG, JPEG, WebP, or GIF image.': 'Avatar musi być obrazem PNG, JPEG, WebP lub GIF.',
-    'The snapshot must contain an administrator account.': 'Snapshot musi zawierać konto administratora.',
-    'Invalid note in the snapshot.': 'Nieprawidłowa notatka w snapshocie.',
-    'Invalid note or owner in the snapshot.': 'Nieprawidłowa notatka lub właściciel w snapshocie.',
-    'A note in the snapshot exceeds the size limit.': 'Notatka w snapshocie przekracza limit rozmiaru.',
-    'Invalid note order in the snapshot.': 'Nieprawidłowa kolejność notatek w snapshocie.',
-    'Invalid invitation in the snapshot.': 'Nieprawidłowe zaproszenie w snapshocie.',
-    'Invalid invitation hash in the snapshot.': 'Nieprawidłowy hash zaproszenia w snapshocie.',
-    'Invalid invitation or administrator in the snapshot.': 'Nieprawidłowe zaproszenie lub administrator w snapshocie.',
-    'Import is possible only into a completely empty database.': 'Import jest możliwy tylko do całkowicie pustej bazy danych.',
-    'The snapshot contains an invalid date.': 'Snapshot zawiera nieprawidłową datę.',
-    'The snapshot contains a date without a time zone.': 'Snapshot zawiera datę bez strefy czasowej.',
-    'Invalid note list.': 'Nieprawidłowa lista notatek.',
-    'Invalid note.': 'Nieprawidłowa notatka.',
-    'The note data is invalid or too large.': 'Dane notatki są nieprawidłowe lub zbyt duże.',
-    'Invalid note order.': 'Nieprawidłowa kolejność notatek.',
-    'Note not found.': 'Nie znaleziono notatki.',
-    'You cannot share a note with yourself.': 'Nie możesz udostępnić notatki samemu sobie.',
-    'No user with that e-mail address was found.': 'Nie znaleziono użytkownika o tym adresie e-mail.',
-    'Invalid permission level.': 'Nieprawidłowy poziom uprawnień.',
-    'This note is no longer shared with that user.': 'Ta notatka nie jest już udostępniona temu użytkownikowi.',
-    'You do not have permission to edit this note.': 'Nie masz uprawnień do edycji tej notatki.',
-    'You cannot change permissions of a note you do not own.': 'Nie możesz zmieniać uprawnień notatki, której nie jesteś właścicielem.',
-    'No newer version available.': 'Brak nowszej wersji.',
-    'Could not fetch update information.': 'Nie udało się pobrać informacji o aktualizacji.',
-    'No tarball address in response.': 'Brak adresu tarball w odpowiedzi.',
-    'An error occurred while downloading the archive.': 'Wystąpił błąd podczas pobierania archiwum.',
-    'Could not extract files.': 'Nie udało się wyodrębnić plików.',
-    'Invalid download URL.': 'Nieprawidłowy adres pobierania.',
-    '2FA session expired or invalid.': 'Sesja 2FA wygasła lub jest nieprawidłowa.',
-    'Invalid two-factor code.': 'Nieprawidłowy kod dwuskładnikowy.',
-    'Passkey not found.': 'Nie znaleziono klucza zabezpieczeń.',
-    'Invalid passkey signature.': 'Nieprawidłowy podpis klucza zabezpieczeń.',
-    'Invalid key data.': 'Nieprawidłowe dane klucza.',
-    'User not found.': 'Nie znaleziono użytkownika.',
-    'Invitation not found.': 'Nie znaleziono zaproszenia.',
-    'Could not delete backup.': 'Nie udało się usunąć backupu.',
-    'You cannot delete your own account from the admin panel.': 'Nie możesz usunąć własnego konta z panelu administratora.',
-    'No backup archive provided in request.': 'Brak archiwum w żądaniu.',
-    'Expected .json, .tgz, or multipart/form-data file.': 'Oczekiwano pliku .json, .tgz lub multipart/form-data.',
-    'A backup password is required.': 'Wymagane jest hasło backupu.',
-    'The backup password must be at least 12 characters long.': 'Hasło backupu musi mieć co najmniej 12 znaków.',
-    'The backup password is too long.': 'Hasło backupu jest zbyt długie.',
-    'Invalid backup password or corrupt backup.': 'Nieprawidłowe hasło backupu lub uszkodzony backup.',
-    'The file is not a valid Notki backup.': 'Plik nie jest prawidłowym backupem Notki.',
-    'The backup file has an invalid structure.': 'Plik backupu ma nieprawidłową strukturę.',
-    'The backup file has invalid key-derivation parameters.': 'Plik backupu ma nieprawidłowe parametry wyprowadzania klucza.',
-    'The backup file uses an unsupported key-derivation algorithm.': 'Plik backupu używa nieobsługiwanego algorytmu wyprowadzania klucza.',
-    'The backup file uses an unsupported cipher.': 'Plik backupu używa nieobsługiwanego szyfru.',
-    'Unsupported backup format version.': 'Nieobsługiwana wersja formatu backupu.',
-    'Could not decrypt a stored two-factor secret; backup aborted to avoid losing MFA data.': 'Nie można odszyfrować zapisanego sekretu dwuskładnikowego; backup przerwano, aby nie utracić danych MFA.',
-    'Another backup or restore operation is already running.': 'Inna operacja backupu lub odtwarzania jest już w toku.',
-    'Could not restore the backup. No data was changed.': 'Nie udało się odtworzyć backupu. Żadne dane nie zostały zmienione.',
-    'The snapshot contains invalid two-factor data.': 'Snapshot zawiera nieprawidłowe dane dwuskładnikowego uwierzytelniania.',
-    'The snapshot contains invalid settings.': 'Snapshot zawiera nieprawidłowe ustawienia.',
-    'The snapshot contains invalid security keys.': 'Snapshot zawiera nieprawidłowe klucze zabezpieczeń.',
-    'The snapshot contains an invalid sharing entry.': 'Snapshot zawiera nieprawidłowe udostępnienie.',
-    'The snapshot contains invalid account metadata.': 'Snapshot zawiera nieprawidłowe metadane konta.',
-    'Plaintext backups are not supported. Create an encrypted backup with a password.': 'Backupy w postaci jawnej nie są obsługiwane. Utwórz zaszyfrowany backup z hasłem.',
-}
 
 
 TEMP_2FA_TOKENS = {}
@@ -922,10 +819,6 @@ def parse_language(header_value):
     return best[2] if best else DEFAULT_LANGUAGE
 
 
-def translate_message(message, language):
-    if language == 'pl':
-        return POLISH_MESSAGES.get(message, message)
-    return message
 
 
 def utc_now():
@@ -1617,7 +1510,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         return parse_language(self.headers.get('Accept-Language'))
 
     def error_message(self, message):
-        return translate_message(message, self.language)
+        return message
 
     def send_error_json(self, message, status=400):
         self.send_json({'error': self.error_message(message)}, status)
