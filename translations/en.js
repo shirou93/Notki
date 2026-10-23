@@ -308,6 +308,7 @@ window.notkiTranslations.en = {
   'admin.update.updating': 'Updating system...',
   'admin.update.success': 'System updated successfully. Restarting server...',
   'admin.update.restarting': 'Restarting server and loading interface...',
+  'admin.update.dockerWarning': 'Updates cannot be performed from the GUI within a Docker container. Please update the container image instead.',
   'admin.backups.empty': 'No saved backups.',
   'admin.backups.title': 'Server-wide backups',
   'admin.backups.generatedWarning': 'No backup password found in .env. A temporary one has been generated. Please set NOTKI_BACKUP_PASSWORD in .env.',

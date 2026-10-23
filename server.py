@@ -2680,6 +2680,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def perform_update(self, payload):
         admin = self.require_user(admin=True)
+        if Path('/.dockerenv').exists():
+            raise APIError('admin.update.dockerWarning', 400)
+
         tarball_url = payload.get('tarballUrl')
         is_beta = bool(payload.get('isBeta')) or (tarball_url and tarball_url.endswith('/main'))
         if not tarball_url or not tarball_url.startswith('https://api.github.com/repos/shirou93/Notki/tarball/'):

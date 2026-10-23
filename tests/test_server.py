@@ -890,11 +890,21 @@ class ServerFlowTests(unittest.TestCase):
             mock_opener.open.return_value = mock_cm
             mock_build_opener.return_value = mock_opener
 
+            with unittest.mock.patch('server.Path.exists', return_value=False):
+                status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
+                    'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.94'
+                })
+                self.assertEqual(status, 400)
+                self.assertEqual(res['error'], 'No newer version available.')
+
+
+    def test_update_check_and_perform_docker(self):
+        with unittest.mock.patch('server.Path.exists', return_value=True):
             status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
                 'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/v0.1.5.94'
             })
             self.assertEqual(status, 400)
-            self.assertEqual(res['error'], 'No newer version available.')
+            self.assertEqual(res['error'], 'admin.update.dockerWarning')
 
     def test_update_check_and_perform_beta(self):
         # Test check update with beta query parameter
@@ -915,6 +925,7 @@ class ServerFlowTests(unittest.TestCase):
 
         with unittest.mock.patch('server.urllib.request.build_opener') as mock_build_opener, \
              unittest.mock.patch('server.NotkiHandler._extract_update_archive') as mock_extract, \
+             unittest.mock.patch('server.Path.exists', return_value=False), \
              unittest.mock.patch('threading.Timer') as mock_timer:
             mock_opener = unittest.mock.MagicMock()
             mock_cm = unittest.mock.MagicMock()

@@ -45,35 +45,6 @@ To choose your own token, set `NOTKI_SETUP_TOKEN` in `.env` before the first
 start. To publish a different host port, set `NOTKI_HTTP_PORT` in `.env`. Keep
 the token out of shell history and logs.
 
-### Python (no container)
-
-```bash
-TAG=$(curl -s https://api.github.com/repos/shirou93/Notki/tags | grep '"name":' | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
-git clone --branch $TAG --depth 1 https://github.com/shirou93/Notki.git Notki
-cd Notki
-python3 -m pip install --only-binary=:all: -r requirements.txt
-python3 server.py
-```
-
-```text
-Notki running at http://127.0.0.1:8000
-SETUP TOKEN: <generated on first run>
-Initial admin setup: http://127.0.0.1:8000/setup
-```
-
-If `NOTKI_SETUP_TOKEN` is set, Notki uses that value instead of generating one.
-
-### Linux systemd installer
-
-```bash
-sudo ./install.sh
-journalctl -u notki | grep "SETUP TOKEN"
-```
-
-The installer creates the `notki` system user, installs the pinned release in
-`/opt/notki`, and configures a sandboxed `notki.service`. Use a reverse proxy
-with TLS for anything reachable from the public internet.
-
 ## `$` features
 
 | Area | What it does |
