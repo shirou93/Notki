@@ -45,20 +45,32 @@ To choose your own token, set `NOTKI_SETUP_TOKEN` in `.env` before the first
 start. To publish a different host port, set `NOTKI_HTTP_PORT` in `.env`. Keep
 the token out of shell history and logs.
 
+### Updates
+
+You can easily update (or install) the application by running the included `update.sh` script:
+
+```bash
+chmod +x update.sh
+./update.sh
+```
+
+This will automatically fetch the latest release, checkout the code, and rebuild the docker container.
+
+
 ## `$` features
 
 | Area | What it does |
 | --- | --- |
-| **Notes** | Rich text, checklists with progress, drag-and-drop tasks, note colors, pinning, archive and trash. |
-| **Planning** | Due dates, a daily plan grouped by urgency, and iCalendar (`.ics`) export. |
-| **Organization** | Custom labels, search, flexible sorting, and a quick-note capture row. |
-| **Sharing** | Share notes with other users on the same server as read-only or read-write. |
-| **Offline** | Browser caching and automatic sync when the connection returns. |
-| **Accounts** | Profiles, avatars, password changes, and per-user labels. |
-| **Authentication** | TOTP apps, WebAuthn passkeys / hardware keys, recovery codes, optional server-wide 2FA enforcement, and fail2ban. |
-| **Backups** | Mandatory AES-256-GCM `.enc` backups, authenticated metadata, full validation, atomic restore, and a CLI path for large archives. |
-| **Administration** | User management, single-use invitations, server stats, announcements, and update checks. |
-| **Interface** | Light, dark, and system themes; English, Polish, German, French, Japanese, Korean, Italian, and Spanish. |
+| Notes | Rich text, checklists with progress, drag-and-drop tasks, note colors, pinning, archive and trash. |
+| Planning | Due dates, a daily plan grouped by urgency, and iCalendar (`.ics`) export. |
+| Organization | Custom labels, search, flexible sorting, and a quick-note capture row. |
+| Sharing | Share notes with other users on the same server as read-only or read-write. |
+| Offline | Browser caching and automatic sync when the connection returns. |
+| Accounts | Profiles, avatars, password changes, and per-user labels. |
+| Authentication | TOTP apps, WebAuthn passkeys / hardware keys, recovery codes, optional server-wide 2FA enforcement, and fail2ban. |
+| Backups | Mandatory AES-256-GCM `.enc` backups, authenticated metadata, full validation, atomic restore, and a CLI path for large archives. |
+| Administration | User management, single-use invitations, server stats, announcements, and update checks. |
+| Interface | Light, dark, and system themes; English, Polish, German, French, Japanese, Korean, Italian, and Spanish. |
 
 ## `$` screenshots
 
@@ -86,7 +98,7 @@ Captured from a demo instance running the current code.
 
 ## `$` backups
 
-Create and restore backups from **Admin panel -> Server-wide backups**. Every
+Create and restore backups from Admin panel -> Server-wide backups. Every
 backup is a single `.enc` file protected by a password you choose.
 
 ```text
@@ -100,20 +112,20 @@ user out.
 
 Security properties:
 
-- **Always encrypted.** There is no plaintext export path.
-- **AES-256-GCM** with a unique 96-bit nonce for every backup.
-- **scrypt** key derivation with `n=65536`, `r=8`, `p=1`, a random 16-byte salt,
+- Always encrypted. There is no plaintext export path.
+- AES-256-GCM with a unique 96-bit nonce for every backup.
+- scrypt key derivation with `n=65536`, `r=8`, `p=1`, a random 16-byte salt,
   and a 32-byte key.
 - The JSON header (format, version, creation time, KDF, and cipher parameters)
   is authenticated as AES-GCM additional data. Tampering is detected.
 - The backup password is the only decryption key. Notki does not store it and
   has no server-side key fallback.
-- **Fail closed.** If a stored TOTP secret cannot be decrypted, backup creation
+- Fail closed. If a stored TOTP secret cannot be decrypted, backup creation
   aborts instead of silently dropping MFA data.
 - Restores are validated in full and applied inside one transaction. A failed
   restore changes no data.
 
-Only `notki-backup` **version 2** and `notki-server-snapshot` **version 2** are
+Only `notki-backup` version 2 and `notki-server-snapshot` version 2 are
 accepted. Version 1 encrypted backups, version 1 snapshots, plaintext `.json`,
 and `.tgz` archives are rejected rather than silently downgraded.
 
