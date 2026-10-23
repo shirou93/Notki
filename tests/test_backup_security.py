@@ -261,14 +261,12 @@ class CLIRestoreTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.original_db_path = server.DB_PATH
-        server._TOTP_KEY_CACHE = None
         server.DB_PATH = Path(self.temp_dir.name) / 'cli.sqlite3'
         server.initialize_database()
         self.backup_path = Path(self.temp_dir.name) / 'large-backup.enc'
 
     def tearDown(self):
         server.DB_PATH = self.original_db_path
-        server._TOTP_KEY_CACHE = None
         self.temp_dir.cleanup()
 
     def test_cli_limit_is_larger_than_the_http_limit(self):
@@ -352,11 +350,9 @@ class TOTPSecretTests(unittest.TestCase):
             os.environ, {},
         )
         self.environment.start()
-        server._TOTP_KEY_CACHE = None
 
     def tearDown(self):
         self.environment.stop()
-        server._TOTP_KEY_CACHE = None
 
     def test_totp_secret_validation_rejects_malformed_values(self):
         valid = server.generate_totp_secret()
@@ -471,7 +467,6 @@ class BackupHttpTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.original_db_path = server.DB_PATH
-        server._TOTP_KEY_CACHE = None
         server.DB_PATH = Path(self.temp_dir.name) / 'test.sqlite3'
         server.initialize_database()
         with server.database() as connection:
@@ -494,7 +489,6 @@ class BackupHttpTests(unittest.TestCase):
         self.http_server.server_close()
         self.thread.join(timeout=2)
         server.DB_PATH = self.original_db_path
-        server._TOTP_KEY_CACHE = None
         server.FAILED_AUTH_ATTEMPTS.clear()
         server.FAILED_AUTH_ACCOUNTS.clear()
         server.TEMP_2FA_TOKENS.clear()

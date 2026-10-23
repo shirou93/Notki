@@ -194,9 +194,7 @@ recoverable through this code because there is no server-key fallback.
   authenticators; losing an authenticator still requires a recovery code or an
   admin 2FA reset.
 - **TOTP secrets are included in encrypted backups** so MFA survives a restore.
-  They are re-encrypted with the destination server's `NOTKI_TOTP_KEY` (or the
-  generated `totp.key`) on import. The backup file itself never contains a
-  plaintext TOTP secret.
+  The backup file itself never contains a plaintext TOTP secret.
 - **The backup password is not the user password.** It protects the backup file
   only. User passwords remain individually hashed inside the encrypted snapshot.
 - **Backups are not a substitute for TLS.** Use HTTPS for every admin request
@@ -219,7 +217,7 @@ recoverable through this code because there is no server-key fallback.
 2. Keep backups on encrypted storage and restrict access to administrators.
 3. Test a restore on a staging instance periodically; never assume a backup is
    valid just because it exists.
-4. Keep the setup token and TOTP key material separate from backup files.
+4. Keep the setup token separate from backup files.
 5. Rotate the backup password by creating a new backup and securely deleting the
    old one when policy requires it.
 6. For CLI restores, stop the server and use a protected password file rather than
