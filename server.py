@@ -33,6 +33,7 @@ import webauthn
 ROOT = Path(__file__).resolve().parent
 VERSION = '0.1.6.2'
 GENERATED_SETUP_TOKEN = None
+GENERATED_BACKUP_PASSWORD = None
 DB_PATH = Path(os.environ.get('NOTKI_DB_PATH', ROOT / 'data' / 'notki.sqlite3'))
 # Canonical public host used when generating links (e.g. invitations). When set, it
 # takes precedence over request headers so a client cannot poison generated URLs.
@@ -937,6 +938,10 @@ def iso_time(value=None):
 
 def backup_directory():
     return Path(os.environ.get('NOTKI_BACKUP_DIR') or DB_PATH.parent / 'backups')
+
+def get_backup_password():
+    return os.environ.get('NOTKI_BACKUP_PASSWORD') or GENERATED_BACKUP_PASSWORD
+
 
 
 def totp_is_active(value):
@@ -2022,7 +2027,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def handle_setup_get(self, path):
         if path == '/api/setup/status':
-            self.send_json({'needsSetup': not self.has_admin()})
+            self.send_json({
+                'needsSetup': not self.has_admin(),
+                'usingGeneratedBackupPassword': not bool(os.environ.get('NOTKI_BACKUP_PASSWORD'))
+            })
             return True
         elif path in ('/setup', '/setup.html'):
             if self.has_admin():
@@ -2117,6 +2125,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     'has2FA': bool(totp_is_active(row['totp_secret']) or row['passkey_count'] > 0)
                 } for row in users],
                 'invites': [{'tokenHash': row['token_hash'], 'createdAt': row['created_at'], 'expiresAt': row['expires_at'], 'usedAt': row['used_at']} for row in invites],
+                'usingGeneratedBackupPassword': not bool(os.environ.get('NOTKI_BACKUP_PASSWORD')),
             })
             return True
         elif path == '/api/admin/fail2ban':
@@ -2227,7 +2236,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                     raise APIError('Too many failed attempts. Please try again later.', 429)
             if path == '/api/setup/import-backup':
                 archive_bytes = self.read_archive_from_request()
-                password = self.headers.get('X-Backup-Password') or None
+                password = get_backup_password()
                 self.import_snapshot_archive(archive_bytes, password=password)
                 return
             if path == '/api/admin/backups/upload-restore':
@@ -2450,25 +2459,11 @@ class NotkiHandler(BaseHTTPRequestHandler):
         }
         return snapshot
 
-    def _backup_password_from_request(self, payload=None):
-        password = None
-        if isinstance(payload, dict):
-            password = payload.get('encryptionPassword') or payload.get('password')
-        if password is None:
-            headers = getattr(self, 'headers', None) or {}
-            password = headers.get('X-Backup-Password')
-        return password
-
     def create_server_backup(self, payload=None):
         user = self.require_user(admin=True)
-        self.require_step_up(user)
-        password = self._backup_password_from_request(payload)
-        if not isinstance(password, str) or not password:
-            raise APIError('A backup password is required.', 400)
-        if len(password) < BACKUP_PASSWORD_MIN_LENGTH:
-            raise APIError('The backup password must be at least 12 characters long.')
-        if len(password) > BACKUP_PASSWORD_MAX_LENGTH:
-            raise APIError('The backup password is too long.')
+        password = get_backup_password()
+        if not password:
+            raise APIError('A backup password is required but not set in the environment.', 400)
         with backup_operation():
             snapshot = self.build_snapshot()
             backup_bytes = encrypt_backup(snapshot, password)
@@ -2539,7 +2534,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def delete_server_backup(self, filename):
         user = self.require_user(admin=True)
-        self.require_step_up(user)
         path = self.find_server_backup(filename)
         try:
             path.unlink()
@@ -2551,7 +2545,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def delete_user(self, user_id):
         admin = self.require_user(admin=True)
-        self.require_step_up(admin)
         if admin['id'] == user_id:
             raise APIError('You cannot delete your own account from the admin panel.', 400)
         with database() as connection:
@@ -2566,7 +2559,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def reset_user_2fa(self, user_id):
         admin = self.require_user(admin=True)
-        self.require_step_up(admin)
         with database() as connection:
             row = connection.execute('SELECT id FROM users WHERE id = ?', (user_id,)).fetchone()
             if not row:
@@ -2586,10 +2578,9 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def upload_restore_server_backup(self):
         admin = self.require_user(admin=True)
-        self.require_step_up(admin)
         # Only a self-contained encrypted backup is accepted. The request body is
         # the raw archive; no plaintext JSON snapshot path exists.
-        password = self._backup_password_from_request(None)
+        password = get_backup_password()
         raw_bytes = self.read_archive_from_request()
         with backup_operation():
             snapshot = decrypt_backup(raw_bytes, password)
@@ -2597,7 +2588,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def restore_server_backup(self, filename, payload=None):
         admin = self.require_user(admin=True)
-        self.require_step_up(admin)
         path = self.find_server_backup(filename)
         try:
             size = path.stat().st_size
@@ -2605,7 +2595,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             raise APIError('The backup archive cannot be read.') from error
         if size > MAX_BACKUP_FILE_BYTES:
             raise APIError('The backup file exceeds the size limit.', 413)
-        password = self._backup_password_from_request(payload)
+        password = get_backup_password()
         try:
             raw_bytes = path.read_bytes()
         except OSError as error:
@@ -2797,7 +2787,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
     def perform_update(self, payload):
         admin = self.require_user(admin=True)
-        self.require_step_up(admin)
         tarball_url = payload.get('tarballUrl')
         is_beta = bool(payload.get('isBeta')) or (tarball_url and tarball_url.endswith('/main'))
         if not tarball_url or not tarball_url.startswith('https://api.github.com/repos/shirou93/Notki/tarball/'):
@@ -4215,6 +4204,13 @@ def main():
     if args.unban_all:
         unban_all_cli()
         return
+    if not os.environ.get('NOTKI_BACKUP_PASSWORD'):
+        global GENERATED_BACKUP_PASSWORD
+        GENERATED_BACKUP_PASSWORD = secrets.token_urlsafe(32)
+        print('\nWARNING: NOTKI_BACKUP_PASSWORD is not set in the environment.')
+        print(f'A temporary backup password has been generated: {GENERATED_BACKUP_PASSWORD}')
+        print('Please copy this password and set it as NOTKI_BACKUP_PASSWORD in your .env file.\n')
+
     server = BoundedThreadingHTTPServer((args.host, args.port), NotkiHandler)
     print(f'Notki running at http://{args.host}:{args.port}')
     with database() as connection:

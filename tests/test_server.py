@@ -402,13 +402,14 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(len(shared['notes']), 1)
         self.assertEqual(shared['notes'][0]['title'], 'Notes after save')
 
-    def test_shares_survive_server_backup_restore(self):
+    @unittest.mock.patch('server.get_backup_password', return_value=BACKUP_PASSWORD)
+    def test_shares_survive_server_backup_restore(self, mock_pw):
         owner = self.register_user('owner3@example.com')
         reader = self.register_user('reader3@example.com')
         self.request(owner, 'PUT', '/api/notes', {'notes': [self.note_payload('backup-1', 'Kopia')]})
         self.request(owner, 'POST', '/api/notes/backup-1/shares', {'email': 'reader3@example.com', 'permission': 'write'})
 
-        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {}, {'X-Backup-Password': BACKUP_PASSWORD})
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
         self.assertEqual(status, 201)
 
         status, backup_list = self.request(self.admin, 'GET', '/api/admin/backups')
@@ -417,7 +418,6 @@ class ServerFlowTests(unittest.TestCase):
 
         status, result = self.request(
             self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {},
-            {'X-Backup-Password': BACKUP_PASSWORD},
         )
         self.assertEqual(status, 200)
         self.assertEqual(result['shares'], 1)
@@ -429,7 +429,8 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(len(shared['notes']), 1)
         self.assertEqual(shared['notes'][0]['permission'], 'write')
 
-    def test_invitation_registration_notes_and_admin_statistics(self):
+    @unittest.mock.patch('server.get_backup_password', return_value=BACKUP_PASSWORD)
+    def test_invitation_registration_notes_and_admin_statistics(self, mock_pw):
         status, empty_summary = self.request(self.admin, 'GET', '/api/admin/summary')
         self.assertEqual(status, 200)
         self.assertEqual(empty_summary['stats']['notes'], 0)
@@ -455,7 +456,7 @@ class ServerFlowTests(unittest.TestCase):
         }
         status, _ = self.request(user_client, 'PUT', '/api/notes', {'notes': [note]})
         self.assertEqual(status, 200)
-        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {}, {'X-Backup-Password': BACKUP_PASSWORD})
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
         self.assertEqual(status, 201)
         self.assertRegex(backup['filename'], r'^notki-backup-\d{8}-\d{6}Z-[a-f0-9]{8}\.enc$')
         status, backups = self.request(self.admin, 'GET', '/api/admin/backups')
@@ -657,11 +658,12 @@ class ServerFlowTests(unittest.TestCase):
         status, session = self.request(self.admin, 'GET', '/api/session')
         self.assertIsNone(session['user']['avatar'])
 
-    def test_avatar_survives_server_backup_restore(self):
+    @unittest.mock.patch('server.get_backup_password', return_value=BACKUP_PASSWORD)
+    def test_avatar_survives_server_backup_restore(self, mock_pw):
         status, _ = self.request(self.admin, 'POST', '/api/account/avatar', {'avatar': self.avatar_data})
         self.assertEqual(status, 200)
 
-        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {}, {'X-Backup-Password': BACKUP_PASSWORD})
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
         self.assertEqual(status, 201)
         filename = backup['filename']
 
@@ -670,7 +672,6 @@ class ServerFlowTests(unittest.TestCase):
 
         status, _ = self.request(
             self.admin, 'POST', f'/api/admin/backups/{filename}/restore', {},
-            {'X-Backup-Password': BACKUP_PASSWORD},
         )
         self.assertEqual(status, 200)
 
@@ -1010,7 +1011,8 @@ class ServerFlowTests(unittest.TestCase):
         self.assertIn('logs', logs_resp)
         self.assertIsInstance(logs_resp['logs'], list)
 
-    def test_upload_restore_server_backup(self):
+    @unittest.mock.patch('server.get_backup_password', return_value=BACKUP_PASSWORD)
+    def test_upload_restore_server_backup(self, mock_pw):
         created_at = server.iso_time()
         snapshot = {
             'format': 'notki-server-snapshot', 'version': 2, 'createdAt': created_at,
@@ -1032,7 +1034,6 @@ class ServerFlowTests(unittest.TestCase):
         status, result = self.request_raw_client(
             self.admin, 'POST', '/api/admin/backups/upload-restore', snapshot_bytes,
             content_type='application/octet-stream',
-            headers={'X-Backup-Password': BACKUP_PASSWORD},
         )
         self.assertEqual(status, 200)
         self.assertTrue(result['restored'])
@@ -1047,7 +1048,8 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(notes['notes'][0]['title'], 'Uploaded Note')
 
-    def test_backup_restore_replaces_server_and_delete_removes_archive(self):
+    @unittest.mock.patch('server.get_backup_password', return_value=BACKUP_PASSWORD)
+    def test_backup_restore_replaces_server_and_delete_removes_archive(self, mock_pw):
         original_note = {
             'id': 'original-note', 'title': 'Stan z backupu', 'body': 'Odtworzona treść',
             'bodyFormat': 0, 'color': 'default', 'tags': [], 'pinned': False,
@@ -1056,7 +1058,7 @@ class ServerFlowTests(unittest.TestCase):
         }
         status, _ = self.request(self.admin, 'PUT', '/api/notes', {'notes': [original_note]})
         self.assertEqual(status, 200)
-        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {}, {'X-Backup-Password': BACKUP_PASSWORD})
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
         self.assertEqual(status, 201)
 
         changed_note = {**original_note, 'id': 'later-note', 'title': 'Nowszy stan'}
@@ -1064,7 +1066,6 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         status, restored = self.request(
             self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {},
-            {'X-Backup-Password': BACKUP_PASSWORD},
         )
         self.assertEqual(status, 200)
         self.assertTrue(restored['restored'])
@@ -1094,7 +1095,8 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(backups['backups'], [])
 
-    def test_backup_path_traversal_rejected(self):
+    @unittest.mock.patch('server.get_backup_password', return_value=BACKUP_PASSWORD)
+    def test_backup_path_traversal_rejected(self, mock_pw):
         traversal_filenames = [
             'notki-../test.json',
             'notki-../../etc/passwd.json',
@@ -1421,7 +1423,8 @@ class ServerFlowTests(unittest.TestCase):
         status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fareset@example.com', 'password': 'user-passphrase-123'})
         self.assertEqual(status, 200)
     @unittest.mock.patch('server.webauthn.verify_registration_response')
-    def test_totp_passkey_settings_survive_backup_restore(self, mock_verify):
+    @unittest.mock.patch('server.get_backup_password', return_value=BACKUP_PASSWORD)
+    def test_totp_passkey_settings_survive_backup_restore(self, mock_pw, mock_verify):
         mock_verify.return_value = unittest.mock.Mock(
             credential_public_key=b'dummy_pub_key',
             sign_count=0
@@ -1453,13 +1456,12 @@ class ServerFlowTests(unittest.TestCase):
         self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': False, 'logLevel': 'DEBUG'})
 
         # Create backup
-        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {}, {'X-Backup-Password': BACKUP_PASSWORD})
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
         self.assertEqual(status, 201)
 
         # Restore backup
         status, restored = self.request(
             self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {},
-            {'X-Backup-Password': BACKUP_PASSWORD},
         )
         self.assertEqual(status, 200)
         self.assertEqual(restored.get('passkeys'), 1)
@@ -1495,7 +1497,8 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(twofa_info['passkeys'][0]['id'], passkey_id)
         self.assertEqual(twofa_info['passkeys'][0]['name'], 'My Laptop')
 
-    def test_session_days_and_formatted_backup_code(self):
+    @unittest.mock.patch('server.get_backup_password', return_value=BACKUP_PASSWORD)
+    def test_session_days_and_formatted_backup_code(self, mock_pw):
         # Admin sets custom session days
         status, settings = self.request(self.admin, 'POST', '/api/admin/settings', {'sessionDays': 14})
         self.assertEqual(status, 200)
@@ -1961,7 +1964,8 @@ class FirstRunSetupTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertTrue(result['user']['isAdmin'])
 
-    def test_encrypted_backup_import_restores_accounts_notes_and_invites(self):
+    @unittest.mock.patch('server.get_backup_password', return_value=BACKUP_PASSWORD)
+    def test_encrypted_backup_import_restores_accounts_notes_and_invites(self, mock_pw):
         created_at = server.iso_time()
         invite_token = 'invitation-token-from-snapshot'
         snapshot = {
@@ -1998,7 +2002,6 @@ class FirstRunSetupTests(unittest.TestCase):
         status, result = self.request_raw(
             'POST', '/api/setup/import-backup', backup_bytes,
             content_type='application/octet-stream',
-            headers={'X-Backup-Password': BACKUP_PASSWORD},
         )
         self.assertEqual(status, 201)
         self.assertEqual(result, {'imported': True, 'users': 1, 'notes': 1, 'invites': 1, 'shares': 0})
@@ -2020,7 +2023,6 @@ class FirstRunSetupTests(unittest.TestCase):
         status, _ = self.request_raw(
             'POST', '/api/setup/import-backup', backup_bytes,
             content_type='application/octet-stream',
-            headers={'X-Backup-Password': BACKUP_PASSWORD},
         )
         self.assertEqual(status, 409)
 
@@ -3245,7 +3247,7 @@ class TestCreateServerBackupTemporaryFile(unittest.TestCase):
         class DummyHandler(server.NotkiHandler):
             def __init__(self):
                 self.user = {'id': 1, 'role': 'admin', 'isAdmin': True}
-                self.headers = {'X-Backup-Password': BACKUP_PASSWORD}
+                self.headers = {}
                 self.response_body = None
                 self.response_status = None
 
@@ -3257,8 +3259,8 @@ class TestCreateServerBackupTemporaryFile(unittest.TestCase):
                 self.response_status = status
 
         handler = DummyHandler()
-        handler.require_step_up = lambda user: None
-        handler.create_server_backup()
+        with unittest.mock.patch('server.get_backup_password', return_value=BACKUP_PASSWORD):
+            handler.create_server_backup()
 
         self.assertEqual(handler.response_status, 201)
         self.assertTrue(handler.response_body['encrypted'])
@@ -3595,7 +3597,8 @@ class Fail2banAPITests(unittest.TestCase):
 
 
 class TestSecurityAndBackupFixes(ServerFlowTests):
-    def test_backup_code_hashing_and_encrypted_backup(self):
+    @unittest.mock.patch('server.get_backup_password', return_value='secret-backup-pass')
+    def test_backup_code_hashing_and_encrypted_backup(self, mock_backup_pw):
         # Create user with 2FA
         status, invite = self.request(self.admin, 'POST', '/api/admin/invites', {})
         invite_token = parse_qs(urlsplit(invite['url']).query)['invite'][0]
@@ -3620,16 +3623,12 @@ class TestSecurityAndBackupFixes(ServerFlowTests):
             self.assertTrue(stored[0].startswith('sha256$'))
 
         # Create encrypted server backup
-        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {'encryptionPassword': 'secret-backup-pass'})
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
         self.assertEqual(status, 201)
         self.assertTrue(backup['filename'].endswith('.enc'))
 
-        # Restoring encrypted backup with wrong password should fail with 400
-        status, err = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {'encryptionPassword': 'wrong-password'})
-        self.assertEqual(status, 400)
-
-        # Restoring encrypted backup with correct password should succeed
-        status, restored = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {'encryptionPassword': 'secret-backup-pass'})
+        # Restoring encrypted backup should succeed
+        status, restored = self.request(self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {})
         self.assertEqual(status, 200)
 
     def test_passkey_and_announcement_limits(self):
@@ -3665,7 +3664,7 @@ class TestSecurityAndBackupFixes(ServerFlowTests):
         self.register_user('hidden@example.com')
         status, res = self.request(self.new_client(), 'GET', '/api/setup/status')
         self.assertEqual(status, 200)
-        self.assertEqual(res, {'needsSetup': False})
+        self.assertEqual(res, {'needsSetup': False, 'usingGeneratedBackupPassword': True})
 
     def test_totp_step_up_requirements(self):
         user = self.register_user('totpstepup@example.com', 'user-passphrase-123')

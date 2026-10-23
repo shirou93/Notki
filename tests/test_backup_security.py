@@ -548,16 +548,9 @@ class BackupHttpTests(unittest.TestCase):
         self.assertEqual(status, 201)
         return backup
 
-    def test_create_backup_requires_password_and_returns_only_ciphertext(self):
-        status, error = self.request(self.admin, 'POST', '/api/admin/backups', {})
-        self.assertEqual(status, 400)
-        self.assertIn('password', error['error'].lower())
-
-        status, error = self.request(
-            self.admin, 'POST', '/api/admin/backups', {}, {'X-Backup-Password': 'too-short'},
-        )
-        self.assertEqual(status, 400)
-
+    @unittest.mock.patch('server.get_backup_password', return_value='secret-backup-pass')
+    def test_create_backup_requires_password_and_returns_only_ciphertext(self, mock_pw):
+        # The password is now handled server-side, so create_backup should just succeed when get_backup_password returns one
         backup = self.create_backup()
         self.assertTrue(backup['filename'].endswith('.enc'))
         self.assertTrue(backup['encrypted'])
@@ -579,14 +572,15 @@ class BackupHttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual([item['filename'] for item in listing['backups']], [backup['filename']])
 
-    def test_wrong_or_missing_password_does_not_change_existing_data(self):
+    @unittest.mock.patch('server.get_backup_password', return_value='secret-backup-pass')
+    def test_wrong_or_missing_password_does_not_change_existing_data(self, mock_pw):
         self.request(self.admin, 'PUT', '/api/notes', {'notes': [make_note('before', title='Before')]})
         backup = self.create_backup()
         self.request(self.admin, 'PUT', '/api/notes', {'notes': [make_note('after', title='After')]})
 
+        mock_pw.return_value = 'wrong password entirely'
         status, _ = self.request(
             self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {},
-            {'X-Backup-Password': 'wrong password entirely'},
         )
         self.assertEqual(status, 400)
         status, notes = self.request(self.admin, 'GET', '/api/notes')
@@ -600,9 +594,9 @@ class BackupHttpTests(unittest.TestCase):
         status, notes = self.request(self.admin, 'GET', '/api/notes')
         self.assertEqual([note['id'] for note in notes['notes']], ['after'])
 
+        mock_pw.return_value = 'secret-backup-pass'
         status, restored = self.request(
             self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {},
-            {'X-Backup-Password': PASSWORD},
         )
         self.assertEqual(status, 200)
         self.assertTrue(restored['restored'])
@@ -636,7 +630,8 @@ class BackupHttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual([note['id'] for note in notes['notes']], ['keep'])
 
-    def test_non_admin_cannot_create_restore_or_list_backups(self):
+    @unittest.mock.patch('server.get_backup_password', return_value='secret-backup-pass')
+    def test_non_admin_cannot_create_restore_or_list_backups(self, mock_pw):
         backup = self.create_backup()
         raw = (server.backup_directory() / backup['filename']).read_bytes()
         user = self.register_user('normal@example.com')
@@ -651,7 +646,8 @@ class BackupHttpTests(unittest.TestCase):
         )
         self.assertEqual(status, 403)
 
-    def test_plaintext_and_legacy_plaintext_uploads_are_rejected(self):
+    @unittest.mock.patch('server.get_backup_password', return_value='secret-backup-pass')
+    def test_plaintext_and_legacy_plaintext_uploads_are_rejected(self, mock_pw):
         plaintext = json.dumps(make_snapshot()).encode('utf-8')
         status, body = self.request_raw(
             self.admin, 'POST', '/api/admin/backups/upload-restore', plaintext,
@@ -667,7 +663,8 @@ class BackupHttpTests(unittest.TestCase):
         )
         self.assertEqual(status, 400)
 
-    def test_legacy_encrypted_backup_upload_is_rejected(self):
+    @unittest.mock.patch('server.get_backup_password', return_value='secret-backup-pass')
+    def test_legacy_encrypted_backup_upload_is_rejected(self, mock_pw):
         legacy = json.dumps({
             'format': 'notki-encrypted-snapshot',
             'version': 1,
@@ -685,7 +682,8 @@ class BackupHttpTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn(b'not a valid Notki backup', body)
 
-    def test_totp_secret_survives_restore_and_replay_is_rejected(self):
+    @unittest.mock.patch('server.get_backup_password', return_value='secret-backup-pass')
+    def test_totp_secret_survives_restore_and_replay_is_rejected(self, mock_pw):
         user = self.register_user('restored2fa@example.com')
         status, res = self.request(user, 'POST', '/api/account/totp', {})
         secret = res['secret']
@@ -766,11 +764,12 @@ class BackupHttpTests(unittest.TestCase):
         self.assertEqual(status, 413)
         self.assertIn(b'too large', body.lower())
 
-    def test_secrets_do_not_appear_in_logs_or_error_responses(self):
+    @unittest.mock.patch('server.get_backup_password', return_value='secret-backup-pass')
+    def test_secrets_do_not_appear_in_logs_or_error_responses(self, mock_pw):
         backup = self.create_backup()
+        mock_pw.return_value = 'wrong password entirely'
         status, body = self.request(
             self.admin, 'POST', f"/api/admin/backups/{backup['filename']}/restore", {},
-            {'X-Backup-Password': 'wrong password entirely'},
         )
         self.assertEqual(status, 400)
         self.assertNotIn(PASSWORD, body['error'])

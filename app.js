@@ -791,6 +791,11 @@
     renderBackups(backupList.backups);
     renderBannedIps(fail2ban ? fail2ban.bannedIps || [] : []);
 
+    const warningEl = document.querySelector('#backup-generated-password-warning');
+    if (warningEl) {
+      warningEl.hidden = !summary.usingGeneratedBackupPassword;
+    }
+
     if (settings) {
       if ($('#admin-require-2fa')) $('#admin-require-2fa').checked = settings.require2FA;
       if ($('#admin-session-days')) $('#admin-session-days').value = settings.sessionDays ?? 30;
@@ -860,17 +865,11 @@
     const confirmed = window.confirm(t('admin.backups.confirmRestore', { filename }));
     if (!confirmed) return;
 
-    const password = window.prompt(t('admin.backups.passwordPrompt'), '') || '';
-    if (!password) {
-      setBackupMessage(t('admin.backups.passwordRequired'), true);
-      return;
-    }
     setBackupMessage(t('admin.backups.restoring'));
     try {
       await apiRequest(`/api/admin/backups/${encodeURIComponent(filename)}/restore`, {
         method: 'POST',
         body: '{}',
-        headers: { 'X-Backup-Password': password },
       });
       setBackupMessage(t('admin.backups.restored'));
       setTimeout(() => window.location.reload(), 1000);
@@ -4313,16 +4312,6 @@
 
   const handleCreateBackup = async event => {
     if (event) event.preventDefault();
-    const password = window.prompt(t('admin.backups.passwordPromptCreate'), '') || '';
-    if (password.length < 12) {
-      setBackupMessage(t('admin.backups.passwordTooShort'), true);
-      return;
-    }
-    const confirmation = window.prompt(t('admin.backups.passwordConfirmPrompt'), '') || '';
-    if (password !== confirmation) {
-      setBackupMessage(t('admin.backups.passwordMismatch'), true);
-      return;
-    }
     const button = document.querySelector('#create-backup');
     if (button) button.disabled = true;
     setBackupMessage(t('admin.backups.creating'));
@@ -4330,7 +4319,6 @@
       const backup = await apiRequest('/api/admin/backups', {
         method: 'POST',
         body: '{}',
-        headers: { 'X-Backup-Password': password },
       });
       setBackupMessage(t('admin.backups.created', { filename: backup.filename }));
       await refreshAdmin();
@@ -4353,12 +4341,6 @@
     const confirmed = window.confirm(t('admin.backups.confirmRestoreFile'));
     if (!confirmed) return;
 
-    const password = window.prompt(t('admin.backups.passwordPrompt'), '') || '';
-    if (!password) {
-      setBackupMessage(t('admin.backups.passwordRequired'), true);
-      return;
-    }
-
     setBackupMessage(t('admin.backups.restoring'));
 
     try {
@@ -4368,7 +4350,6 @@
         body: buffer,
         headers: {
           'Content-Type': 'application/octet-stream',
-          'X-Backup-Password': password,
         },
       });
       setBackupMessage(t('admin.backups.restored'));
