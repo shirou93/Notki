@@ -1,0 +1,12 @@
+Update: Disable GUI updates when running in Docker
+
+Since the Docker container is run read-only and code updates
+should be done by pulling a new image instead of mutating
+the running container, this disables the GUI update button
+when a Docker environment is detected (`/.dockerenv`).
+It displays an appropriate message in the UI asking to
+update the container image instead.
+
+Also removed the alternative Python directly-on-host instructions
+and systemd installation from README as requested by the user,
+leaving Docker Compose as the primary recommended method.

@@ -317,6 +317,7 @@ window.notkiTranslations.pl = {
   'admin.update.updating': 'Aktualizacja systemu...',
   'admin.update.success': 'System został pomyślnie zaktualizowany. Ponowne uruchamianie serwera...',
   'admin.update.restarting': 'Trwa ponowne uruchamianie serwera i wczytywanie interfejsu...',
+  'admin.update.dockerWarning': 'Nie można zaktualizować aplikacji przez GUI w kontenerze Docker. Zaktualizuj obraz kontenera.',
   'admin.backups.empty': 'Brak zapisanych backupów.',
   'admin.backups.title': 'Backupy całego serwera',
   'admin.backups.description': 'Zaszyfrowane archiwa zawierają konta, notatki i zaproszenia. Sesje nie są zapisywane.',

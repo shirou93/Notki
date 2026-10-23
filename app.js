@@ -4240,7 +4240,7 @@
         message.hidden = false;
       }
     } catch (error) {
-      message.textContent = error.message;
+      message.textContent = t(error.message) || error.message;
       message.classList.add('is-error');
       message.hidden = false;
     } finally {
@@ -4291,7 +4291,7 @@
       showUpdateLoadingOverlay();
       pollServerUntilOnline();
     } catch (error) {
-      message.textContent = error.message;
+      message.textContent = t(error.message) || error.message;
       message.classList.add('is-error');
       button.disabled = false;
     }
