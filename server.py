@@ -2562,6 +2562,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
         safe_members = []
         base_path = os.path.realpath(path)
         for member in members:
+            # Strip leading slashes to prevent absolute path traversal during extraction
+            member.name = member.name.lstrip('/')
             # Emulate Python 3.12 data_filter for older versions
             if hasattr(tarfile, 'data_filter'):
                 safe_members.append(member)
@@ -2569,7 +2571,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 if member.issym() or member.islnk():
                     continue
                 member_path = os.path.realpath(os.path.join(base_path, member.name))
-                if os.path.commonpath([base_path, member_path]) == base_path:
+                abs_path = os.path.abspath(member_path)
+                if abs_path.startswith(base_path + os.sep) or abs_path == base_path:
                     safe_members.append(member)
 
         if hasattr(tarfile, 'data_filter'):
@@ -2578,7 +2581,8 @@ class NotkiHandler(BaseHTTPRequestHandler):
             import shutil
             for member in safe_members:
                 member_path = os.path.realpath(os.path.join(base_path, member.name))
-                if os.path.commonpath([base_path, member_path]) != base_path:
+                abs_path = os.path.abspath(member_path)
+                if not (abs_path.startswith(base_path + os.sep) or abs_path == base_path):
                     continue
                 if member.isdir():
                     os.makedirs(member_path, exist_ok=True)
