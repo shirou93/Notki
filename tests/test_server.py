@@ -2489,12 +2489,13 @@ class PerformUpdateHelperTests(unittest.TestCase):
         self.assertEqual(mock_member1.name, 'file1.py')
         mock_archive.extractall.assert_called_once_with(path=mock_root, members=[mock_member1], filter='data')
 
-    @unittest.mock.patch('server.os.path.commonpath')
+    @unittest.mock.patch('server.os.path.abspath')
     @unittest.mock.patch('server.os.path.realpath')
     @unittest.mock.patch('server.ROOT')
-    def test_extract_update_archive_without_data_filter(self, mock_root, mock_realpath, mock_commonpath):
+    def test_extract_update_archive_without_data_filter(self, mock_root, mock_realpath, mock_abspath):
+        mock_root.__str__.return_value = "/mock/root"
         mock_realpath.side_effect = lambda x: str(x)
-        mock_commonpath.return_value = str(mock_root)
+        mock_abspath.side_effect = lambda x: str(x)
         mock_archive = unittest.mock.MagicMock()
 
         mock_member = unittest.mock.MagicMock()
