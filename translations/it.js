@@ -283,7 +283,6 @@ window.notkiTranslations.it = {
   'admin.update.description': 'Controlla e installa gli aggiornamenti da GitHub.',
   'admin.update.check': 'Controlla aggiornamenti',
   'admin.update.currentVersion': 'Versione installata:',
-  'admin.update.betaChannel': 'Aggiornamenti beta (scarica direttamente dal repository principale)',
   'admin.update.available': 'È disponibile un aggiornamento! Ultima versione:',
   'admin.update.perform': 'Aggiorna ora',
   'admin.update.upToDate': 'Il sistema è aggiornato (versione {version}).',

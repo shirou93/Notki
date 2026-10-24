@@ -301,7 +301,6 @@ window.notkiTranslations.en = {
   'admin.update.description': 'Check for and install updates from GitHub.',
   'admin.update.check': 'Check for updates',
   'admin.update.currentVersion': 'Installed version:',
-  'admin.update.betaChannel': 'Beta updates (download directly from main repository)',
   'admin.update.available': 'An update is available! Latest version:',
   'admin.update.perform': 'Update now',
   'admin.update.upToDate': 'The system is up to date (version {version}).',

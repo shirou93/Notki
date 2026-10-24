@@ -906,66 +906,6 @@ class ServerFlowTests(unittest.TestCase):
             self.assertEqual(status, 400)
             self.assertEqual(res['error'], 'admin.update.dockerWarning')
 
-    def test_update_check_and_perform_beta(self):
-        # Test check update with beta query parameter
-        status, res = self.request(self.admin, 'GET', '/api/admin/update/check?beta=1')
-        self.assertEqual(status, 200)
-        self.assertTrue(res.get('updateAvailable', False))
-        self.assertEqual(res.get('latestVersion'), 'main (beta)')
-        self.assertEqual(res.get('tarballUrl'), 'https://api.github.com/repos/shirou93/Notki/tarball/main')
-        self.assertTrue(res.get('isBeta', False))
-
-        # Test perform beta update succeeds even when tarball contains same version
-        tarball_buf = io.BytesIO()
-        server_code = f"VERSION = '{server.VERSION}'\n".encode('utf-8')
-        with tarfile.open(fileobj=tarball_buf, mode='w:gz') as archive:
-            member = tarfile.TarInfo('repo-main/server.py')
-            member.size = len(server_code)
-            archive.addfile(member, io.BytesIO(server_code))
-
-        with unittest.mock.patch('server.urllib.request.build_opener') as mock_build_opener, \
-             unittest.mock.patch('server.NotkiHandler._extract_update_archive') as mock_extract, \
-             unittest.mock.patch('server.Path.exists', return_value=False), \
-             unittest.mock.patch('threading.Timer') as mock_timer:
-            mock_opener = unittest.mock.MagicMock()
-            mock_cm = unittest.mock.MagicMock()
-            mock_cm.__enter__.return_value.read.return_value = tarball_buf.getvalue()
-            mock_opener.open.return_value = mock_cm
-            mock_build_opener.return_value = mock_opener
-
-            status, res = self.request(self.admin, 'POST', '/api/admin/update/perform', {
-                'tarballUrl': 'https://api.github.com/repos/shirou93/Notki/tarball/main',
-                'isBeta': True
-            })
-            self.assertEqual(status, 200)
-            self.assertTrue(res.get('success', False))
-            self.assertTrue(mock_extract.called)
-
-    def test_finalize_update_index_html(self):
-        handler = server.NotkiHandler
-        dummy_handler = unittest.mock.MagicMock(spec=server.NotkiHandler)
-
-        # Test beta update replaces ALPHA or empty badge with BETA
-        with unittest.mock.patch('pathlib.Path.exists', return_value=True), \
-             unittest.mock.patch('pathlib.Path.read_text', return_value='<span class="sidebar-version">NOTKI · ALPHA 0.1.5.94</span>'), \
-             unittest.mock.patch('pathlib.Path.write_text') as mock_write:
-            server.NotkiHandler._finalize_update_index_html(dummy_handler, is_beta=True)
-            mock_write.assert_called_once_with('<span class="sidebar-version">NOTKI · BETA 0.1.5.94</span>', encoding='utf-8')
-
-        # Test standard update removes ALPHA/BETA badge and keeps only digits
-        with unittest.mock.patch('pathlib.Path.exists', return_value=True), \
-             unittest.mock.patch('pathlib.Path.read_text', return_value='<span class="sidebar-version">NOTKI · ALPHA 0.1.6.0</span>'), \
-             unittest.mock.patch('pathlib.Path.write_text') as mock_write:
-            server.NotkiHandler._finalize_update_index_html(dummy_handler, is_beta=False)
-            mock_write.assert_called_once_with('<span class="sidebar-version">NOTKI · 0.1.6.0</span>', encoding='utf-8')
-
-        # Test standard update removes BETA badge if previously updated from beta
-        with unittest.mock.patch('pathlib.Path.exists', return_value=True), \
-             unittest.mock.patch('pathlib.Path.read_text', return_value='<span class="sidebar-version">NOTKI · BETA 0.1.6.0</span>'), \
-             unittest.mock.patch('pathlib.Path.write_text') as mock_write:
-            server.NotkiHandler._finalize_update_index_html(dummy_handler, is_beta=False)
-            mock_write.assert_called_once_with('<span class="sidebar-version">NOTKI · 0.1.6.0</span>', encoding='utf-8')
-
     def test_admin_settings_and_logs(self):
         # Non-admin / unauthenticated cannot access settings or logs
         user = self.new_client()

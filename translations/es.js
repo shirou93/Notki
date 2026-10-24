@@ -283,7 +283,6 @@ window.notkiTranslations.es = {
   'admin.update.description': 'Buscar e instalar actualizaciones desde GitHub.',
   'admin.update.check': 'Buscar actualizaciones',
   'admin.update.currentVersion': 'Versión instalada:',
-  'admin.update.betaChannel': 'Actualizaciones beta (descargar directamente del repositorio principal)',
   'admin.update.available': '¡Hay una actualización disponible! Última versión:',
   'admin.update.perform': 'Actualizar ahora',
   'admin.update.upToDate': 'El sistema está actualizado (versión {version}).',
