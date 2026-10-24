@@ -1157,7 +1157,7 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(notes['notes'][0]['title'], 'Uploaded Note')
 
     @unittest.mock.patch('server.get_backup_password', return_value=BACKUP_PASSWORD)
-    def test_backup_restore_replaces_server_and_delete_removes_archive(self, mock_pw):
+    def test_backup_restore_replaces_server_state(self, mock_pw):
         original_note = {
             'id': 'original-note', 'title': 'Stan z backupu', 'body': 'Odtworzona treść',
             'bodyFormat': 0, 'color': 'default', 'tags': [], 'pinned': False,
@@ -1194,12 +1194,17 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(notes['notes'][0]['title'], 'Stan z backupu')
 
+    @unittest.mock.patch('server.get_backup_password', return_value=BACKUP_PASSWORD)
+    def test_backup_delete_removes_archive(self, mock_pw):
+        status, backup = self.request(self.admin, 'POST', '/api/admin/backups', {})
+        self.assertEqual(status, 201)
+
         status, deleted = self.request(
-            restored_admin, 'DELETE', f"/api/admin/backups/{backup['filename']}", {},
+            self.admin, 'DELETE', f"/api/admin/backups/{backup['filename']}", {},
         )
         self.assertEqual(status, 200)
         self.assertEqual(deleted['deleted'], backup['filename'])
-        status, backups = self.request(restored_admin, 'GET', '/api/admin/backups')
+        status, backups = self.request(self.admin, 'GET', '/api/admin/backups')
         self.assertEqual(status, 200)
         self.assertEqual(backups['backups'], [])
 
