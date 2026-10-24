@@ -227,6 +227,38 @@ class TestQRGenerator(unittest.TestCase):
         self.assertEqual(qr.evaluate_penalty(m, size), 703)
 
 
+
+    def test_apply_best_mask(self):
+        size = 21
+        # Create a basic blank grid and reserved matrix
+        grid, reserved = qr._build_matrix_grid(size, 1)
+
+        import unittest.mock
+
+        # We will mock evaluate_penalty so we can control which mask wins
+        # Masks are evaluated in order 0 to 7. We'll make mask 4 have the lowest penalty.
+        with unittest.mock.patch('qr.evaluate_penalty') as mock_eval:
+            mock_eval.side_effect = [1000, 1000, 1000, 1000, 10, 1000, 1000, 1000]
+
+            best_matrix = qr._apply_best_mask(grid, reserved, size)
+
+            self.assertEqual(mock_eval.call_count, 8)
+
+            # Since mask 4 won, we should verify the format info bits injected match mask 4.
+            # Format info for mask 4, EC level M (00) is get_format_info(4).
+            expected_fmt = qr.get_format_info(4)
+
+            # Check a few format bits to verify mask 4 was actually applied to best_matrix.
+            # Bit 14 (MSB) is at best_matrix[0][8] and best_matrix[8][0]
+            for idx in range(15):
+                mod = (expected_fmt >> (14 - idx)) & 1
+                if idx < 6:
+                    self.assertEqual(best_matrix[idx][8], mod)
+                elif idx < 8:
+                    self.assertEqual(best_matrix[idx + 1][8], mod)
+                else:
+                    self.assertEqual(best_matrix[size - 15 + idx][8], mod)
+
     def test_gf_mul(self):
         # Zero multiplication
         self.assertEqual(qr.gf_mul(0, 5), 0)
