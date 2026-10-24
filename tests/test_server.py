@@ -44,6 +44,36 @@ def with_same_origin(base_url, headers=None):
 
 class ServerUnitTests(unittest.TestCase):
 
+    def test_get_trusted_proxy_networks(self):
+        import ipaddress
+        func = server._get_trusted_proxy_networks.__wrapped__
+
+        default_nets = [ipaddress.ip_network('127.0.0.0/8'), ipaddress.ip_network('::1/128')]
+        all_nets = [ipaddress.ip_network('0.0.0.0/0'), ipaddress.ip_network('::/0')]
+
+        cases = [
+            ('0', []),
+            ('false', []),
+            ('no', []),
+            ('1', all_nets),
+            ('true', all_nets),
+            ('yes', all_nets),
+            ('all', all_nets),
+            ('*', all_nets),
+            ('', default_nets),
+            ('   ', default_nets),
+            (',,,', default_nets),
+            ('192.168.0.0/24', [ipaddress.ip_network('192.168.0.0/24')]),
+            ('10.0.0.0/8, 192.168.0.0/24', [ipaddress.ip_network('10.0.0.0/8'), ipaddress.ip_network('192.168.0.0/24')]),
+            ('192.168.1.1/24', [ipaddress.ip_network('192.168.1.0/24')]),
+            ('10.0.0.0/8, invalid_net, 192.168.0.0/24', [ipaddress.ip_network('10.0.0.0/8'), ipaddress.ip_network('192.168.0.0/24')]),
+            ('invalid', []),
+        ]
+
+        for input_val, expected in cases:
+            with self.subTest(trust_proxy=input_val):
+                self.assertEqual(func(input_val), expected)
+
     @unittest.mock.patch.dict('server.FAILED_AUTH_ATTEMPTS', clear=True)
     @unittest.mock.patch.dict('server.FAILED_AUTH_ACCOUNTS', clear=True)
     @unittest.mock.patch.dict('server.ACCOUNT_FAILURES', clear=True)
