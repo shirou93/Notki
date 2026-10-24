@@ -1,0 +1,9 @@
+🧹 refactor: Splitting long 2FA flow tests
+
+The initial `test_totp_and_passkey_2fa_flow` test case was overly long and covered multiple distinct testing areas regarding TOTP, passkey registration, and logins. This monolithic approach made it difficult to pinpoint exact failures and decreased test maintainability.
+
+The large test has been systematically split into several focused and modular test methods: `test_totp_setup`, `test_totp_login`, `test_totp_backup_code_login`, `test_passkey_registration`, `test_passkey_login_2fa`, `test_passkey_login_passwordless`, and `test_passkey_deletion`. Each test now handles a single responsibility, verifying specific behaviors in the 2FA flow independently.
+
+Also added a descriptive docstring to `ServerFlowTests` to accurately reflect its scope.
+
+Tests pass successfully, guaranteeing 2FA functionalities behave properly and mitigating the original code health concern.
