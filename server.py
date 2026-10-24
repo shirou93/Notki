@@ -1929,6 +1929,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 # The page itself contains no secrets. The setup token is required
                 # by every mutating setup endpoint.
                 self.serve_static('setup.html')
+            return True
 
     def handle_account_get(self, path):
         if path == '/api/session':
