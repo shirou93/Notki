@@ -3138,6 +3138,50 @@ class TestHashBackupCode(unittest.TestCase):
         self.assertEqual(server.hash_backup_code(12345), f"sha256${expected_hash}")
 
 
+class TestVerifyBackupCode(unittest.TestCase):
+    def test_verify_backup_code_valid_sha256(self):
+        code = "1234ABCD"
+        stored_hash = server.hash_backup_code(code)
+        # Should verify with exact match and lowercase/formatted versions
+        self.assertTrue(server.verify_backup_code(code, stored_hash))
+        self.assertTrue(server.verify_backup_code("1234abcd", stored_hash))
+        self.assertTrue(server.verify_backup_code("1234-abcd", stored_hash))
+
+    def test_verify_backup_code_invalid_sha256(self):
+        stored_hash = server.hash_backup_code("1234ABCD")
+        self.assertFalse(server.verify_backup_code("WRONGCODE", stored_hash))
+
+    def test_verify_backup_code_valid_legacy_pbkdf2(self):
+        code = "1234ABCD"
+        salt = b'somesalt'
+        digest = hashlib.pbkdf2_hmac('sha256', b'1234ABCD', salt, 260000)
+        legacy_hash = f'pbkdf2_sha256$260000${salt.hex()}${digest.hex()}'
+        self.assertTrue(server.verify_backup_code(code, legacy_hash))
+        self.assertTrue(server.verify_backup_code("1234abcd", legacy_hash))
+        self.assertTrue(server.verify_backup_code("1234-abcd", legacy_hash))
+
+    def test_verify_backup_code_invalid_legacy_pbkdf2(self):
+        salt = b'somesalt'
+        digest = hashlib.pbkdf2_hmac('sha256', b'1234ABCD', salt, 260000)
+        legacy_hash = f'pbkdf2_sha256$260000${salt.hex()}${digest.hex()}'
+        self.assertFalse(server.verify_backup_code("WRONGCODE", legacy_hash))
+
+    def test_verify_backup_code_empty_and_none(self):
+        valid_hash = server.hash_backup_code("1234ABCD")
+        self.assertFalse(server.verify_backup_code(None, valid_hash))
+        self.assertFalse(server.verify_backup_code("", valid_hash))
+
+        self.assertFalse(server.verify_backup_code("1234ABCD", None))
+        self.assertFalse(server.verify_backup_code("1234ABCD", ""))
+
+    def test_verify_backup_code_invalid_formats(self):
+        code = "1234ABCD"
+        self.assertFalse(server.verify_backup_code(code, "plain_text_code"))
+        self.assertFalse(server.verify_backup_code(code, "md5$hashvalue"))
+        self.assertFalse(server.verify_backup_code(code, "sha256$too_short"))
+        self.assertFalse(server.verify_backup_code(code, "pbkdf2_sha256$260000$bad$format$extra"))
+
+
 class TestVerifyPassword(unittest.TestCase):
     def test_verify_password_valid(self):
         password = "secret_password_123"
