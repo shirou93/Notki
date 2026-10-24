@@ -35,13 +35,23 @@ git checkout "$TAG"
 
 if [ ! -f ".env" ]; then
     echo "Initializing new .env file..."
-    # Generate a 32-character random alphanumeric password
-    BACKUP_PWD=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 32 || true)
-    if [ -z "$BACKUP_PWD" ]; then
-        BACKUP_PWD=$(openssl rand -hex 16)
+    IS_INIT=1
+    read -p "Enter backup password (or press Enter to generate randomly): " -r BACKUP_PWD_INPUT
+
+    if [ -z "$BACKUP_PWD_INPUT" ]; then
+        # Generate a 32-character random alphanumeric password
+        BACKUP_PWD=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 32 || true)
+        if [ -z "$BACKUP_PWD" ]; then
+            BACKUP_PWD=$(openssl rand -hex 16)
+        fi
+        echo "NOTKI_BACKUP_PASSWORD=\"$BACKUP_PWD\"" > .env
+        echo "Generated random NOTKI_BACKUP_PASSWORD in .env"
+    else
+        echo "NOTKI_BACKUP_PASSWORD=\"$BACKUP_PWD_INPUT\"" > .env
+        echo "Saved NOTKI_BACKUP_PASSWORD to .env"
     fi
-    echo "NOTKI_BACKUP_PASSWORD=\"$BACKUP_PWD\"" > .env
-    echo "Generated random NOTKI_BACKUP_PASSWORD in .env"
+else
+    IS_INIT=0
 fi
 
 echo "Building and starting Docker containers..."
@@ -49,5 +59,11 @@ docker compose up -d --build
 
 echo "Cleaning up old Docker images..."
 docker image prune -f
+
+if [ "$IS_INIT" = "1" ]; then
+    echo "Fetching setup token..."
+    sleep 3
+    docker compose logs notki | grep "SETUP TOKEN" || true
+fi
 
 echo "Done!"
