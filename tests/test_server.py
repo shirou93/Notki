@@ -43,6 +43,54 @@ def with_same_origin(base_url, headers=None):
 
 
 class ServerUnitTests(unittest.TestCase):
+
+    @unittest.mock.patch.dict('server.FAILED_AUTH_ATTEMPTS', clear=True)
+    @unittest.mock.patch.dict('server.FAILED_AUTH_ACCOUNTS', clear=True)
+    @unittest.mock.patch.dict('server.ACCOUNT_FAILURES', clear=True)
+    @unittest.mock.patch.multiple('server',
+                    LAST_AUTH_STATE_PRUNE=0,
+                    FAIL2BAN_PRUNE_INTERVAL=300,
+                    MAX_ATTEMPTS_PER_KEY=3,
+                    MAX_AUTH_TRACKED_IPS=2,
+                    MAX_AUTH_ACCOUNTS=2)
+    def test_prune_auth_state_locked(self, **kwargs):
+        server.FAILED_AUTH_ATTEMPTS['ip1'] = [100, 3600]
+        server.FAILED_AUTH_ATTEMPTS['ip2'] = [100]
+        server.FAILED_AUTH_ATTEMPTS['ip3'] = [3600, 3601, 3602, 3603]
+        server.FAILED_AUTH_ATTEMPTS['ip4'] = [3604]
+
+        server.FAILED_AUTH_ACCOUNTS['acc1'] = [100, 3600]
+        server.FAILED_AUTH_ACCOUNTS['acc2'] = [100]
+        server.FAILED_AUTH_ACCOUNTS['acc3'] = [3600, 3601, 3602, 3603]
+        server.FAILED_AUTH_ACCOUNTS['acc4'] = [3604]
+
+        server.ACCOUNT_FAILURES['fail1'] = [100, 3600]
+        server.ACCOUNT_FAILURES['fail2'] = [100]
+        server.ACCOUNT_FAILURES['fail3'] = [3600, 3601, 3602, 3603]
+        server.ACCOUNT_FAILURES['fail4'] = [3604]
+
+        server._prune_auth_state_locked(3700)
+
+        self.assertNotIn('ip2', server.FAILED_AUTH_ATTEMPTS)
+        self.assertNotIn('ip1', server.FAILED_AUTH_ATTEMPTS)
+        self.assertIn('ip3', server.FAILED_AUTH_ATTEMPTS)
+        self.assertIn('ip4', server.FAILED_AUTH_ATTEMPTS)
+        self.assertEqual(server.FAILED_AUTH_ATTEMPTS['ip3'], [3601, 3602, 3603])
+        self.assertEqual(server.FAILED_AUTH_ATTEMPTS['ip4'], [3604])
+
+        self.assertNotIn('acc2', server.FAILED_AUTH_ACCOUNTS)
+        self.assertNotIn('acc1', server.FAILED_AUTH_ACCOUNTS)
+        self.assertIn('acc3', server.FAILED_AUTH_ACCOUNTS)
+        self.assertIn('acc4', server.FAILED_AUTH_ACCOUNTS)
+        self.assertEqual(server.FAILED_AUTH_ACCOUNTS['acc3'], [3601, 3602, 3603])
+        self.assertEqual(server.FAILED_AUTH_ACCOUNTS['acc4'], [3604])
+
+        self.assertNotIn('fail2', server.ACCOUNT_FAILURES)
+        self.assertNotIn('fail1', server.ACCOUNT_FAILURES)
+        self.assertIn('fail3', server.ACCOUNT_FAILURES)
+        self.assertIn('fail4', server.ACCOUNT_FAILURES)
+        self.assertEqual(server.ACCOUNT_FAILURES['fail3'], [3601, 3602, 3603])
+        self.assertEqual(server.ACCOUNT_FAILURES['fail4'], [3604])
     def test_password_needs_rehash(self):
         cases = [
             ('pbkdf2_sha256$600000$salt$hash', False),
