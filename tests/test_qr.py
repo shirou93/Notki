@@ -30,6 +30,26 @@ class TestQRGenerator(unittest.TestCase):
         self.assertEqual(len(m5), 37)
         self.assertEqual(len(m5[0]), 37)
 
+    def test_find_qr_spec(self):
+        cases = [
+            (1, 1),      # Version 1 bounds
+            (14, 1),
+            (15, 2),     # Transition to Version 2
+            (84, 5),     # Version 5 bounds
+            (85, 6),
+            (213, 10),   # Version 10 bounds
+            (214, None), # Exceeds capacity
+            (500, None)
+        ]
+        for data_len, expected_version in cases:
+            with self.subTest(data_len=data_len):
+                spec = qr._find_qr_spec(data_len)
+                if expected_version is None:
+                    self.assertIsNone(spec)
+                else:
+                    self.assertIsNotNone(spec)
+                    self.assertEqual(spec[0], expected_version)
+
     def test_qr_matrix_finder_patterns(self):
         m = qr.generate_qr_matrix("test")
         # Top-left finder pattern center (2,2) should be black (1)
