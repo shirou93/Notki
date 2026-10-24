@@ -3359,6 +3359,60 @@ class TestGenerateTOTPSecret(unittest.TestCase):
         self.assertTrue(set(secret).issubset(valid_alphabet))
 
 
+class TestReadCliBackupPassword(unittest.TestCase):
+    @unittest.mock.patch('server.Path')
+    def test_read_from_valid_file(self, mock_path):
+        mock_file = unittest.mock.mock_open(read_data="secretpass123\n")
+        mock_path.return_value.expanduser.return_value.open = mock_file
+        password = server._read_cli_backup_password('some_file.txt')
+        self.assertEqual(password, "secretpass123")
+
+    @unittest.mock.patch('sys.stdin')
+    def test_read_from_stdin(self, mock_stdin):
+        mock_stdin.readline.return_value = "stdinpass\n"
+        password = server._read_cli_backup_password('-')
+        self.assertEqual(password, "stdinpass")
+
+    @unittest.mock.patch('server.Path')
+    def test_read_file_oserror(self, mock_path):
+        mock_path.return_value.expanduser.return_value.open.side_effect = OSError("Access denied")
+        with self.assertRaisesRegex(server.APIError, 'Could not read the backup password file.'):
+            server._read_cli_backup_password('restricted_file.txt')
+
+    @unittest.mock.patch('server.Path')
+    def test_read_file_empty(self, mock_path):
+        mock_file = unittest.mock.mock_open(read_data="")
+        mock_path.return_value.expanduser.return_value.open = mock_file
+        with self.assertRaisesRegex(server.APIError, 'The backup password file is empty.'):
+            server._read_cli_backup_password('empty_file.txt')
+
+    @unittest.mock.patch.dict('os.environ', {'NOTKI_BACKUP_PASSWORD': 'env_password'})
+    def test_read_from_env_var(self):
+        password = server._read_cli_backup_password()
+        self.assertEqual(password, "env_password")
+
+    @unittest.mock.patch.dict('os.environ', clear=True)
+    @unittest.mock.patch('getpass.getpass')
+    def test_read_from_getpass(self, mock_getpass):
+        mock_getpass.return_value = "prompt_pass"
+        password = server._read_cli_backup_password()
+        self.assertEqual(password, "prompt_pass")
+
+    @unittest.mock.patch.dict('os.environ', clear=True)
+    @unittest.mock.patch('getpass.getpass')
+    def test_getpass_cancelled_eof(self, mock_getpass):
+        mock_getpass.side_effect = EOFError
+        with self.assertRaisesRegex(server.APIError, 'Backup password entry was cancelled.'):
+            server._read_cli_backup_password()
+
+    @unittest.mock.patch.dict('os.environ', clear=True)
+    @unittest.mock.patch('getpass.getpass')
+    def test_getpass_cancelled_keyboard(self, mock_getpass):
+        mock_getpass.side_effect = KeyboardInterrupt
+        with self.assertRaisesRegex(server.APIError, 'Backup password entry was cancelled.'):
+            server._read_cli_backup_password()
+
+
 class TestComputeTOTPCode(unittest.TestCase):
     def test_compute_totp_code_known_values(self):
         secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'
