@@ -1850,10 +1850,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
                         backup_codes = json.loads(row['backup_codes_json']) if row['backup_codes_json'] else []
                     except (TypeError, json.JSONDecodeError):
                         backup_codes = []
-                    for stored_code in list(backup_codes):
+                    for i, stored_code in enumerate(backup_codes):
                         if verify_backup_code(second_factor, stored_code):
                             second_factor_valid = True
-                            backup_codes.remove(stored_code)
+                            del backup_codes[i]
                             connection.execute(
                                 'UPDATE users SET backup_codes_json = ? WHERE id = ?',
                                 (json.dumps(backup_codes), user['id']),
@@ -3256,10 +3256,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
 
             backup_valid = False
             if not totp_valid and backup_codes:
-                for stored_code in list(backup_codes):
+                for i, stored_code in enumerate(backup_codes):
                     if verify_backup_code(totp_code, stored_code):
                         backup_valid = True
-                        backup_codes.remove(stored_code)
+                        del backup_codes[i]
                         connection.execute('UPDATE users SET backup_codes_json = ? WHERE id = ?', (json.dumps(backup_codes), user_id))
                         break
 
