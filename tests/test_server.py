@@ -91,6 +91,70 @@ class ServerUnitTests(unittest.TestCase):
         self.assertIn('fail4', server.ACCOUNT_FAILURES)
         self.assertEqual(server.ACCOUNT_FAILURES['fail3'], [3601, 3602, 3603])
         self.assertEqual(server.ACCOUNT_FAILURES['fail4'], [3604])
+    def test_handle_setup_get(self):
+        class DummyHandler(server.NotkiHandler):
+            def __init__(self):
+                self.json_sent = None
+                self.redirect_sent = None
+                self.static_served = None
+                self._has_admin_val = False
+
+            def send_json(self, data):
+                self.json_sent = data
+                return True
+
+            def send_redirect(self, path):
+                self.redirect_sent = path
+
+            def serve_static(self, path):
+                self.static_served = path
+
+            def has_admin(self):
+                return self._has_admin_val
+
+        handler = DummyHandler()
+
+        # Test /api/setup/status
+        handler._has_admin_val = True
+        with unittest.mock.patch.dict(os.environ, {}, clear=True):
+            self.assertTrue(handler.handle_setup_get('/api/setup/status'))
+            self.assertEqual(handler.json_sent, {'needsSetup': False, 'usingGeneratedBackupPassword': True})
+
+        with unittest.mock.patch.dict(os.environ, {'NOTKI_BACKUP_PASSWORD': 'test'}, clear=True):
+            self.assertTrue(handler.handle_setup_get('/api/setup/status'))
+            self.assertEqual(handler.json_sent, {'needsSetup': False, 'usingGeneratedBackupPassword': False})
+
+        handler._has_admin_val = False
+        with unittest.mock.patch.dict(os.environ, {}, clear=True):
+            self.assertTrue(handler.handle_setup_get('/api/setup/status'))
+            self.assertEqual(handler.json_sent, {'needsSetup': True, 'usingGeneratedBackupPassword': True})
+
+        # Test /setup.html with admin
+        handler._has_admin_val = True
+        self.assertTrue(handler.handle_setup_get('/setup.html'))
+        self.assertEqual(handler.redirect_sent, '/')
+
+        # Test /setup with admin
+        handler.redirect_sent = None
+        self.assertTrue(handler.handle_setup_get('/setup'))
+        self.assertEqual(handler.redirect_sent, '/')
+
+        # Test /setup.html without admin
+        handler._has_admin_val = False
+        handler.redirect_sent = None
+        self.assertTrue(handler.handle_setup_get('/setup.html'))
+        self.assertEqual(handler.static_served, 'setup.html')
+        self.assertIsNone(handler.redirect_sent)
+
+        # Test unknown path
+        handler.json_sent = None
+        handler.redirect_sent = None
+        handler.static_served = None
+        self.assertIsNone(handler.handle_setup_get('/unknown'))
+        self.assertIsNone(handler.json_sent)
+        self.assertIsNone(handler.redirect_sent)
+        self.assertIsNone(handler.static_served)
+
     def test_password_needs_rehash(self):
         cases = [
             ('pbkdf2_sha256$600000$salt$hash', False),
