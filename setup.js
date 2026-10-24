@@ -56,50 +56,6 @@
     }
   });
 
-  const snapshotFile = document.querySelector('#snapshot-file');
-  const importButton = document.querySelector('#import-snapshot');
-  const snapshotMessage = document.querySelector('#snapshot-message');
-
-  snapshotFile.addEventListener('change', () => {
-    importButton.disabled = !snapshotFile.files.length;
-    snapshotMessage.hidden = true;
-  });
-  importButton.addEventListener('click', async () => {
-    const file = snapshotFile.files[0];
-    if (!file) return;
-    if (file.size > 140 * 1024 * 1024) {
-      snapshotMessage.textContent = t('setup.importTooLarge');
-      snapshotMessage.hidden = false;
-      return;
-    }
-    importButton.disabled = true;
-    snapshotMessage.hidden = true;
-    try {
-      if (!setupToken()) throw new Error(t('setup.tokenRequired'));
-      const formData = new FormData();
-      formData.append('archive', file);
-      const headers = {
-        'Accept-Language': window.i18n.getLanguage(),
-        'X-Setup-Token': setupToken(),
-      };
-      const response = await fetch('/api/setup/import-backup', {
-        method: 'POST',
-        headers,
-        body: formData,
-        credentials: 'same-origin',
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || t('setup.importFailed'));
-      snapshotMessage.textContent = t('setup.importRestored');
-      snapshotMessage.hidden = false;
-      window.location.replace('/');
-    } catch (error) {
-      snapshotMessage.textContent = error instanceof SyntaxError ? t('setup.importInvalidJson') : error.message;
-      snapshotMessage.hidden = false;
-      importButton.disabled = false;
-    }
-  });
-
   checkSetup();
 
   window.i18n.onChange(() => {

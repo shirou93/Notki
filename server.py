@@ -2117,7 +2117,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
             elif path.startswith('/api/account/') or re.fullmatch(r'/api/notes/[^/]+/shares', path):
                 self.require_user()
 
-            if path in ('/api/setup/admin', '/api/setup/import', '/api/setup/import-backup'):
+            if path in ('/api/setup/admin',):
                 if not self.check_setup_permission():
                     raise APIError('The first-time setup can only be completed with a valid setup token.', 403)
 
@@ -2125,20 +2125,14 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 client_ip = self.get_client_ip()
                 if is_rate_limited(client_ip):
                     raise APIError('Too many failed attempts. Please try again later.', 429)
-            if path == '/api/setup/import-backup':
-                archive_bytes = self.read_archive_from_request()
-                password = get_backup_password()
-                self.import_snapshot_archive(archive_bytes, password=password)
-                return
             if path == '/api/admin/backups/upload-restore':
                 self.upload_restore_server_backup()
                 return
 
-            payload = self.read_json(MAX_SNAPSHOT_BYTES if path == '/api/setup/import' else MAX_REQUEST_BYTES)
+            payload = self.read_json(MAX_REQUEST_BYTES)
 
             routes_with_payload = {
                 '/api/setup/admin': self.create_first_admin,
-                '/api/setup/import': self.import_snapshot,
                 '/api/login': self.login,
                 '/api/login/2fa': self.login_2fa,
                 '/api/login/passkey': self.login_passkey,
@@ -2691,22 +2685,10 @@ class NotkiHandler(BaseHTTPRequestHandler):
         threading.Timer(1.0, lambda: os._exit(0)).start()
         self.send_json({'success': True})
 
-    def import_snapshot_archive(self, archive_bytes, password=None):
-        if not self.check_setup_permission():
-            raise APIError('Snapshot import is available only with a valid setup token.', 403)
-        with backup_operation():
-            snapshot = decrypt_backup(archive_bytes, password)
-            self.restore_snapshot(snapshot, replace_existing=False)
-
     @staticmethod
     def snapshot_from_bytes(raw_bytes, password=None):
         """Decrypt a backup file. Plaintext snapshots are intentionally rejected."""
         return decrypt_backup(raw_bytes, password)
-
-    def import_snapshot(self, payload):
-        if not self.check_setup_permission():
-            raise APIError('Snapshot import is available only locally or with a valid setup token.', 403)
-        raise APIError('Plaintext backups are not supported. Create an encrypted backup with a password.')
 
     # ---- Snapshot validation -------------------------------------------------
     # Everything below is executed before the restore transaction starts. Values

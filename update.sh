@@ -36,19 +36,17 @@ git checkout "$TAG"
 if [ ! -f ".env" ]; then
     echo "Initializing new .env file..."
     IS_INIT=1
-    read -p "Enter backup password (or press Enter to generate randomly): " -r BACKUP_PWD_INPUT
-
-    if [ -z "$BACKUP_PWD_INPUT" ]; then
-        # Generate a 32-character random alphanumeric password
-        BACKUP_PWD=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 32 || true)
+    read -p "Czy chcesz przywrócić z backupu? (t/N): " -r RESTORE_CHOICE
+    if [[ "$RESTORE_CHOICE" =~ ^[TtYy]$ ]]; then
+        read -p "Podaj ścieżkę do pliku backupu: " -r BACKUP_PATH
+        read -p "Podaj hasło backupu: " -r BACKUP_PWD_INPUT
+        echo "NOTKI_BACKUP_PASSWORD=\"$BACKUP_PWD_INPUT\"" > .env
+    else
+        BACKUP_PWD=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 128 || true)
         if [ -z "$BACKUP_PWD" ]; then
-            BACKUP_PWD=$(openssl rand -hex 16)
+            BACKUP_PWD=$(openssl rand -hex 64)
         fi
         echo "NOTKI_BACKUP_PASSWORD=\"$BACKUP_PWD\"" > .env
-        echo "Generated random NOTKI_BACKUP_PASSWORD in .env"
-    else
-        echo "NOTKI_BACKUP_PASSWORD=\"$BACKUP_PWD_INPUT\"" > .env
-        echo "Saved NOTKI_BACKUP_PASSWORD to .env"
     fi
 else
     IS_INIT=0
@@ -61,6 +59,14 @@ echo "Cleaning up old Docker images..."
 docker image prune -f
 
 if [ "$IS_INIT" = "1" ]; then
+    if [[ "$RESTORE_CHOICE" =~ ^[TtYy]$ ]]; then
+        echo "Restoring backup..."
+        # Copy the backup to the container temporarily and restore it
+        docker compose exec -T notki sh -c "cat > /tmp/backup.enc" < "$BACKUP_PATH"
+        echo "$BACKUP_PWD_INPUT" | docker compose exec -T notki python3 server.py --restore-backup /tmp/backup.enc --yes --backup-password-file -
+        docker compose exec -T notki rm -f /tmp/backup.enc
+        echo "Backup restored successfully."
+    fi
     echo "Fetching setup token..."
     sleep 3
     docker compose logs notki | grep "SETUP TOKEN" || true

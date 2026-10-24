@@ -39,16 +39,6 @@
         <label class="language-picker"><span class="sr-only" data-i18n="language.label">Language</span><select id="language-select" data-language-select aria-label="Change language" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="it">Italiano</option><option value="es">Español</option></select></label>
       </div>
       <p class="auth-message" id="setup-message" role="alert" hidden></p>
-      <section class="setup-import" aria-labelledby="snapshot-heading">
-        <p class="field-label" id="snapshot-heading" data-i18n="setup.snapshotHeading">HAVE A SERVER BACKUP?</p>
-        <p class="setup-hint" data-i18n="setup.snapshotHint">Importing replaces this empty installation with the accounts, notes, and invitations from the backup. After importing, sign in with the credentials from the archive.</p>
-        <label class="field-label" for="snapshot-file" data-i18n="setup.snapshotLabel">ENCRYPTED BACKUP FILE (.ENC)</label>
-        <input class="auth-input" id="snapshot-file" type="file" accept=".enc,application/json,application/octet-stream">
-        <p id="setup-backup-info" class="setup-hint" data-i18n="setup.backupInfo">Set your backup password in the .env file if you wish to restore.</p>
-        <button class="button-secondary" id="import-snapshot" type="button" disabled data-i18n="setup.snapshotImport">Import backup</button>
-        <p class="admin-message" id="snapshot-message" role="status" hidden></p>
-      </section>
-      <p class="setup-divider" data-i18n="setup.divider">or create a new administrator account</p>
       <form class="auth-form" id="setup-form">
         <label class="field-label" for="setup-email" data-i18n="auth.email">E-MAIL</label>
         <input class="auth-input" id="setup-email" type="email" autocomplete="username" required maxlength="254">
