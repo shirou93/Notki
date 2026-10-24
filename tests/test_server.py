@@ -1167,7 +1167,37 @@ class ServerFlowTests(unittest.TestCase):
         self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': False, 'logLevel': 'INFO'})
 
 
-    def test_totp_setup_and_login_flow(self):
+    def _setup_totp_for_user(self, user_client):
+        # Setup TOTP
+        status, res = self.request(user_client, 'POST', '/api/account/totp', {})
+        self.assertEqual(status, 200)
+        secret = res['secret']
+
+        # Verify to activate
+        code = server.compute_totp_code(secret)
+        status, res = self.request(user_client, 'POST', '/api/account/totp/verify', {'code': code})
+        self.assertEqual(status, 200)
+
+        return secret, res['backupCodes']
+
+    def _setup_passkey_for_user(self, user_client, passkey_id='test-passkey-id-123', passkey_name='My Laptop'):
+        status, chal_res = self.request(user_client, 'GET', '/api/login/passkey/challenge')
+        with unittest.mock.patch('server.webauthn.verify_registration_response') as mock_reg_verify:
+            mock_reg_verify.return_value = unittest.mock.Mock(
+                credential_public_key=b'dummy_pub_key',
+                sign_count=0
+            )
+            status, res = self.request(user_client, 'POST', '/api/account/passkey', {
+                'id': passkey_id, 'name': passkey_name, 'publicKey': 'ZHVtbXk=',
+                'authenticatorData': 'YXV0aERhdGE=',
+                'clientDataJSON': 'Y2xpZW50RGF0YQ==',
+                'attestationObject': 'YXR0ZXN0YXRpb24=',
+                'challengeId': chal_res['challengeId']
+            })
+            self.assertIn(status, (200, 201))
+            self.assertTrue(res.get('added'))
+
+    def test_totp_setup(self):
         user_client = self.register_user('user2fa@example.com', 'user-passphrase-123')
 
         # 1. Get 2FA status
@@ -1194,24 +1224,28 @@ class ServerFlowTests(unittest.TestCase):
         self.assertTrue(res['verified'])
         self.assertIn('backupCodes', res)
         self.assertEqual(len(res['backupCodes']), 8)
-        backup_code = res['backupCodes'][0]
 
         # 2FA status should now be active
         status, res = self.request(user_client, 'GET', '/api/account/2fa')
         self.assertTrue(res['hasTotp'])
 
-        # Test required 2FA when user does not have 2FA configured
+    def test_required_2fa_policy_blocks_non_2fa_users(self):
         self.register_user('no2fa@example.com', 'user-passphrase-123')
         self.enable_admin_2fa()
         self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': True, 'logLevel': 'INFO'})
+
         unauth_no2fa = self.new_client()
         status, login_res = self.request(unauth_no2fa, 'POST', '/api/login', {'email': 'no2fa@example.com', 'password': 'user-passphrase-123'})
         self.assertEqual(status, 403)
+
         self.request(self.admin, 'POST', '/api/admin/settings', {'require2FA': False, 'logLevel': 'INFO'})
 
-        # 3. Test 2FA login with TOTP
+    def test_totp_login(self):
+        user_client = self.register_user('user2fa_login@example.com', 'user-passphrase-123')
+        secret, _ = self._setup_totp_for_user(user_client)
+
         unauth_client = self.new_client()
-        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa@example.com', 'password': 'user-passphrase-123'})
+        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa_login@example.com', 'password': 'user-passphrase-123'})
         self.assertEqual(status, 200)
         self.assertTrue(res['requires2FA'])
         self.assertTrue(res['hasTotp'])
@@ -1221,38 +1255,43 @@ class ServerFlowTests(unittest.TestCase):
         status, error = self.request(unauth_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': '000000'})
         self.assertEqual(status, 401)
 
-        # Re-login to get fresh tempToken for emergency backup code login
-        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa@example.com', 'password': 'user-passphrase-123'})
+        # Login 2FA with valid TOTP code
+        # We need a new tempToken because the failed login attempt consumes the token
+        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa_login@example.com', 'password': 'user-passphrase-123'})
+        temp_token = res['tempToken']
+
+        valid_code = server.compute_totp_code(secret, counter=int(server.time.time() // 30) + 1)
+        status, res = self.request(unauth_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': valid_code})
+        self.assertEqual(status, 200)
+        self.assertEqual(res['user']['email'], 'user2fa_login@example.com')
+
+    def test_totp_backup_code_login(self):
+        user_client = self.register_user('user2fa_backup@example.com', 'user-passphrase-123')
+        _, backup_codes = self._setup_totp_for_user(user_client)
+        backup_code = backup_codes[0]
+
+        unauth_client = self.new_client()
+
+        # Login 2FA with emergency backup code
+        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa_backup@example.com', 'password': 'user-passphrase-123'})
         self.assertEqual(status, 200)
         temp_token = res['tempToken']
 
-        # Login 2FA with emergency backup code
         status, res = self.request(unauth_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': backup_code})
         self.assertEqual(status, 200)
-        self.assertEqual(res['user']['email'], 'user2fa@example.com')
+        self.assertEqual(res['user']['email'], 'user2fa_backup@example.com')
 
         # Attempt to reuse the consumed emergency backup code
-        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa@example.com', 'password': 'user-passphrase-123'})
+        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa_backup@example.com', 'password': 'user-passphrase-123'})
         temp_token = res['tempToken']
         status, error = self.request(unauth_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': backup_code})
         self.assertEqual(status, 401)
 
-        # Login 2FA with valid TOTP code
-        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'user2fa@example.com', 'password': 'user-passphrase-123'})
-        temp_token = res['tempToken']
-        valid_code = server.compute_totp_code(secret, counter=int(server.time.time() // 30) + 1)
-        status, res = self.request(unauth_client, 'POST', '/api/login/2fa', {'tempToken': temp_token, 'totpCode': valid_code})
-        self.assertEqual(status, 200)
-        self.assertEqual(res['user']['email'], 'user2fa@example.com')
+    def test_passkey_registration(self):
+        user_client = self.register_user('userpasskey_reg@example.com', 'user-passphrase-123')
 
-    def test_passkey_registration_and_login_flow(self):
-        user_client = self.register_user('userpasskey@example.com', 'user-passphrase-123')
-        unauth_client = self.new_client()
-
-        # 4. Passkey Registration and Login Flow
         # Test missing public key
         passkey_id = 'test-passkey-id-123'
-
         status, chal_res = self.request(user_client, 'GET', '/api/login/passkey/challenge')
 
         status, res = self.request(user_client, 'POST', '/api/account/passkey', {
@@ -1264,23 +1303,8 @@ class ServerFlowTests(unittest.TestCase):
         })
         self.assertEqual(status, 400)
 
-        status, chal_res2 = self.request(user_client, 'GET', '/api/login/passkey/challenge')
-
-        # Register valid passkey
-        with unittest.mock.patch('server.webauthn.verify_registration_response') as mock_reg_verify:
-            mock_reg_verify.return_value = unittest.mock.Mock(
-                credential_public_key=b'dummy_pub_key',
-                sign_count=0
-            )
-            status, res = self.request(user_client, 'POST', '/api/account/passkey', {
-                'id': passkey_id, 'name': 'My Laptop', 'publicKey': 'ZHVtbXk=',
-                'authenticatorData': 'YXV0aERhdGE=',
-                'clientDataJSON': 'Y2xpZW50RGF0YQ==',
-                'attestationObject': 'YXR0ZXN0YXRpb24=',
-                'challengeId': chal_res2['challengeId']
-            })
-            self.assertIn(status, (200, 201))
-            self.assertTrue(res.get('added'))
+        # Register valid passkey using helper
+        self._setup_passkey_for_user(user_client, passkey_id=passkey_id, passkey_name='My Laptop')
 
         # Check status
         status, res = self.request(user_client, 'GET', '/api/account/2fa')
@@ -1289,13 +1313,18 @@ class ServerFlowTests(unittest.TestCase):
         self.assertEqual(res['passkeys'][0]['id'], passkey_id)
         self.assertEqual(res['passkeys'][0]['name'], 'My Laptop')
 
-        # Test login via passkey with tempToken (2FA flow)
-        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'userpasskey@example.com', 'password': 'user-passphrase-123'})
+    def test_passkey_login_2fa(self):
+        user_client = self.register_user('userpasskey_2fa@example.com', 'user-passphrase-123')
+        passkey_id = 'test-passkey-id-123'
+        self._setup_passkey_for_user(user_client, passkey_id=passkey_id)
+
+        unauth_client = self.new_client()
+        status, res = self.request(unauth_client, 'POST', '/api/login', {'email': 'userpasskey_2fa@example.com', 'password': 'user-passphrase-123'})
         self.assertEqual(status, 200)
         self.assertTrue(res['hasPasskey'])
         temp_token = res['tempToken']
 
-        status, chal_res3 = self.request(unauth_client, 'GET', '/api/login/passkey/challenge')
+        status, chal_res = self.request(unauth_client, 'GET', '/api/login/passkey/challenge')
 
         with unittest.mock.patch('server.webauthn.verify_authentication_response') as mock_auth_verify:
             mock_auth_verify.return_value = unittest.mock.Mock(new_sign_count=1)
@@ -1304,15 +1333,19 @@ class ServerFlowTests(unittest.TestCase):
                 'authenticatorData': 'YXV0aERhdGE=',
                 'clientDataJSON': 'Y2xpZW50RGF0YQ==',
                 'signature': 'c2lnbmF0dXJl',
-                'challengeId': chal_res3['challengeId'],
+                'challengeId': chal_res['challengeId'],
                 'tempToken': temp_token
             })
             self.assertEqual(status, 200)
-            self.assertEqual(login_res['user']['email'], 'userpasskey@example.com')
+            self.assertEqual(login_res['user']['email'], 'userpasskey_2fa@example.com')
 
-        # Test passwordless login via passkey without tempToken
+    def test_passkey_login_passwordless(self):
+        user_client = self.register_user('userpasskey_pwdless@example.com', 'user-passphrase-123')
+        passkey_id = 'test-passkey-id-123'
+        self._setup_passkey_for_user(user_client, passkey_id=passkey_id)
+
         passwordless_client = self.new_client()
-        status, chal_res4 = self.request(passwordless_client, 'GET', '/api/login/passkey/challenge')
+        status, chal_res = self.request(passwordless_client, 'GET', '/api/login/passkey/challenge')
 
         with unittest.mock.patch('server.webauthn.verify_authentication_response') as mock_auth_verify:
             mock_auth_verify.return_value = unittest.mock.Mock(new_sign_count=2)
@@ -1321,12 +1354,16 @@ class ServerFlowTests(unittest.TestCase):
                 'authenticatorData': 'YXV0aERhdGE=',
                 'clientDataJSON': 'Y2xpZW50RGF0YQ==',
                 'signature': 'c2lnbmF0dXJl',
-                'challengeId': chal_res4['challengeId']
+                'challengeId': chal_res['challengeId']
             })
             self.assertEqual(status, 200)
-            self.assertEqual(login_res['user']['email'], 'userpasskey@example.com')
+            self.assertEqual(login_res['user']['email'], 'userpasskey_pwdless@example.com')
 
-        # Delete passkey
+    def test_passkey_deletion(self):
+        user_client = self.register_user('userpasskey_del@example.com', 'user-passphrase-123')
+        passkey_id = 'test-passkey-id-123'
+        self._setup_passkey_for_user(user_client, passkey_id=passkey_id)
+
         status, res = self.request(user_client, 'DELETE', f'/api/account/passkey/{passkey_id}')
         self.assertEqual(status, 200)
 
