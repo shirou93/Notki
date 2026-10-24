@@ -452,10 +452,19 @@ class SnapshotValidationTests(unittest.TestCase):
         prepared_users = [(1, 'a@example.com', server.hash_password('password123456'), 'admin', iso_now(), None, '[]', None, None, None)]
         prepared_notes = [('n', 1, 't', 'b', 0, 'default', '[]', 0, 0, 0, iso_now(), iso_now(), 0.0, None)]
 
+        prepared_data = {
+            'users': prepared_users,
+            'notes': prepared_notes,
+            'invites': [],
+            'shares': [],
+            'passkeys': [],
+            'settings': [],
+        }
+
         with unittest.mock.patch.object(server, 'database', fake_database):
             with self.assertRaises(server.APIError) as context:
                 server.NotkiHandler._apply_snapshot_data(
-                    self.handler, prepared_users, prepared_notes, [], [], [], [], True,
+                    self.handler, prepared_data, True,
                 )
 
         self.assertTrue(fake.rolled_back)

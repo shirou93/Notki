@@ -2976,7 +2976,7 @@ class NotkiHandler(BaseHTTPRequestHandler):
         if key == 'announcement' and len(value) > 2000:
             raise APIError('The snapshot contains invalid settings.')
 
-    def _apply_snapshot_data(self, prepared_users, prepared_notes, prepared_invites, prepared_shares, prepared_passkeys, prepared_settings, replace_existing):
+    def _apply_snapshot_data(self, prepared_data, replace_existing):
         global _FAIL2BAN_CONFIG_CACHE
         try:
             with database() as connection:
@@ -3006,33 +3006,33 @@ class NotkiHandler(BaseHTTPRequestHandler):
                         'INSERT INTO users (id, email, password_hash, role, created_at, avatar, labels_json, '
                         'totp_secret, backup_codes_json, totp_last_used_step) '
                         'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                        prepared_users,
+                        prepared_data['users'],
                     )
                     connection.executemany('''
                         INSERT INTO notes (id, user_id, title, body, body_format, color, tags_json, pinned, archived,
                                            deleted, created_at, updated_at, sort_order, due_date)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', prepared_notes)
+                    ''', prepared_data['notes'])
                     connection.executemany(
                         'INSERT INTO invites (token_hash, created_by, created_at, expires_at, used_at) '
                         'VALUES (?, ?, ?, ?, ?)',
-                        prepared_invites,
+                        prepared_data['invites'],
                     )
                     connection.executemany(
                         'INSERT INTO note_shares (note_id, user_id, permission, created_at) VALUES (?, ?, ?, ?)',
-                        prepared_shares,
+                        prepared_data['shares'],
                     )
-                    if prepared_passkeys:
+                    if prepared_data.get('passkeys'):
                         connection.executemany(
                             'INSERT INTO passkeys (id, user_id, public_key_pem, name, created_at, sign_count) '
                             'VALUES (?, ?, ?, ?, ?, ?)',
-                            prepared_passkeys,
+                            prepared_data['passkeys'],
                         )
-                    if prepared_settings:
+                    if prepared_data.get('settings'):
                         connection.executemany(
                             'INSERT INTO settings (key, value) VALUES (?, ?) '
                             'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-                            prepared_settings,
+                            prepared_data['settings'],
                         )
                 except APIError:
                     connection.rollback()
@@ -3086,10 +3086,16 @@ class NotkiHandler(BaseHTTPRequestHandler):
         prepared_passkeys = self._prepare_snapshot_passkeys(passkeys, user_ids)
         prepared_settings = self._prepare_snapshot_settings(settings)
 
-        self._apply_snapshot_data(
-            prepared_users, prepared_notes, prepared_invites, prepared_shares,
-            prepared_passkeys, prepared_settings, replace_existing
-        )
+        prepared_data = {
+            'users': prepared_users,
+            'notes': prepared_notes,
+            'invites': prepared_invites,
+            'shares': prepared_shares,
+            'passkeys': prepared_passkeys,
+            'settings': prepared_settings,
+        }
+
+        self._apply_snapshot_data(prepared_data, replace_existing)
 
         result = {
             'users': len(prepared_users),
