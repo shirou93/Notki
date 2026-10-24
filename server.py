@@ -1263,16 +1263,13 @@ def initialize_database():
 
 
 def password_needs_rehash(encoded):
-    try:
-        parts = encoded.split('$')
-        if parts[0] != 'scrypt':
-            return True
-        _, n, r, p, _, _ = parts
-        if int(n) != SCRYPT_N or int(r) != SCRYPT_R or int(p) != SCRYPT_P:
-            return True
-        return False
-    except Exception:
-        return False
+    if not encoded or not encoded.startswith('pbkdf2_sha256$'):
+        return True
+    parts = encoded.split('$')
+    if len(parts) != 4:
+        return True
+    iterations = int(parts[1])
+    return iterations < 600000
 
 
 def verify_password(password, encoded):

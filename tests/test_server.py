@@ -43,6 +43,21 @@ def with_same_origin(base_url, headers=None):
 
 
 class ServerUnitTests(unittest.TestCase):
+    def test_password_needs_rehash(self):
+        cases = [
+            ('pbkdf2_sha256$600000$salt$hash', False),
+            ('pbkdf2_sha256$599999$salt$hash', True),
+            ('pbkdf2_sha256$700000$salt$hash', False),
+            ('scrypt$65536$8$1$salt$hash', True),
+            ('pbkdf2_sha256$600000$salt', True),
+            ('invalid_format', True),
+            ('', True),
+            (None, True),
+        ]
+        for encoded, expected in cases:
+            with self.subTest(encoded=encoded):
+                self.assertEqual(server.password_needs_rehash(encoded), expected)
+
     def test_normalize_email_valid(self):
         self.assertEqual(server.normalize_email('user@example.com'), 'user@example.com')
         self.assertEqual(server.normalize_email('  user@example.com  '), 'user@example.com')
