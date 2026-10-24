@@ -3,6 +3,63 @@ import qr
 
 class TestQRGenerator(unittest.TestCase):
 
+    def test_build_bit_buffer(self):
+        test_cases = [
+            # Happy path: "AB", len=2, version=1, total capacity=4 bytes
+            (
+                [0x41, 0x42], 2, 1, 4,
+                [0x40, 0x24, 0x14, 0x20]
+            ),
+            # Padding bytes: empty data, len=0, version=1, total capacity=4 bytes
+            (
+                [], 0, 1, 4,
+                [0x40, 0x00, 0xEC, 0x11]
+            ),
+            # Single byte with padding: "A", len=1, version=1, total capacity=4 bytes
+            (
+                [0x41], 1, 1, 4,
+                [0x40, 0x14, 0x10, 0xEC]
+            ),
+            # Version 10 length (16 bits): empty data, len=0, version=10, total capacity=4 bytes
+            (
+                [], 0, 10, 4,
+                [0x40, 0x00, 0x00, 0xEC]
+            ),
+            # Terminator truncation: total capacity 2 bytes, 1 byte of data, so it won't have space for 4-bit terminator
+            # 0100 (mode) | 00000001 (len=1) | 01000001 (A=0x41) = 01000000 00010100 0001
+            # Length is 1 byte, so 4 (mode) + 8 (len) + 8 (data) = 20 bits. We only have 16 bits capacity!
+            # Wait, the function needs enough bytes. Let's do:
+            # 4 (mode) + 8 (len) = 12 bits. Total capacity 2 bytes (16 bits).
+            # Empty data, len=0. 12 bits.
+            # Terminator space = 16 - 12 = 4 bits (full terminator).
+            # Let's test terminator truncation: length = 2 bytes capacity.
+            # mode (4 bits) + len (8 bits) + data (0 bits) = 12 bits. Terminator can be up to 4 bits, so 4 bits terminator.
+            # What if mode(4) + len(8) + data(8) = 20 bits? Total capacity 3 bytes (24 bits). 4 bits terminator fits.
+            # We want terminator length = 3 or less.
+            # So len(bits) before terminator = total_data_bytes * 8 - 3 => 8x - 3.
+            # mode(4) + len(8) + data(m) = 12 + m.
+            # We need 12 + m = 8x - 3 => m = 8x - 15. Not possible if data is multiple of 8 bits.
+            # Actually, `len(bits)` before terminator is always `4 + 8 + 8*n` = `12 + 8n` for version < 10.
+            # Modulo 8, this is 4. So `total_data_bytes * 8 - len(bits)` is a multiple of 8 minus 4, so `...4`.
+            # If version >= 10, it is 4 + 16 + 8*n = 20 + 8n. Modulo 8, this is 4.
+            # Thus `len(bits) % 8` is always 4!
+            # Therefore `total_data_bytes * 8 - len(bits)` is always of the form `8k + 4`.
+            # So `term_len = min(4, 8k + 4)` which is always 4 if k >= 0!
+            # So terminator truncation in this implementation is never actually < 4 unless `8k + 4 < 4` which means `k < 0`, i.e., data exceeds capacity.
+            # Since data exceeds capacity is checked beforehand, terminator truncation < 4 doesn't happen in `_build_bit_buffer` when called validly.
+            # We will just verify a case where capacity is exactly enough for mode, len, data, and terminator, without padding:
+            # e.g., 1 byte data = 12 + 8 = 20 bits. Terminator = 4 bits -> 24 bits = 3 bytes total.
+            (
+                [0x41], 1, 1, 3,
+                [0x40, 0x14, 0x10]
+            )
+        ]
+
+        for data_bytes, data_len, version, total_bytes, expected in test_cases:
+            with self.subTest(data=data_bytes, data_len=data_len, version=version):
+                result = qr._build_bit_buffer(data_bytes, data_len, version, total_bytes)
+                self.assertEqual(result, expected)
+
     def test_format_info(self):
         # Expected format info for EC Level M (00) and mask patterns 0-7
         expected_outputs = [
