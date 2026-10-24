@@ -3909,5 +3909,53 @@ class TestSecurityAndBackupFixes(ServerFlowTests):
         self.assertNotIn('Strict-Transport-Security', headers)
 
 
+class TestExtractSpkiDer(unittest.TestCase):
+    def test_extract_spki_der_empty(self):
+        self.assertIsNone(server.extract_spki_der(None))
+        self.assertIsNone(server.extract_spki_der(b''))
+        self.assertIsNone(server.extract_spki_der(b'short'))
+
+    def test_extract_spki_der_len_91(self):
+        suffix = b'x' * (91 - len(server.SPKI_P256_HEADER))
+        pub_bytes = server.SPKI_P256_HEADER + suffix
+        self.assertEqual(server.extract_spki_der(pub_bytes), pub_bytes)
+
+        # 91 bytes but wrong header
+        wrong_pub_bytes = b'y' * 91
+        self.assertIsNone(server.extract_spki_der(wrong_pub_bytes))
+
+    def test_extract_spki_der_len_65(self):
+        suffix = b'x' * 64
+        pub_bytes = b'\x04' + suffix
+        expected = server.SPKI_P256_HEADER[:-1] + pub_bytes
+        self.assertEqual(server.extract_spki_der(pub_bytes), expected)
+
+    def test_extract_spki_der_len_64(self):
+        pub_bytes = b'x' * 64
+        expected = server.SPKI_P256_HEADER + pub_bytes
+        self.assertEqual(server.extract_spki_der(pub_bytes), expected)
+
+    def test_extract_spki_der_cose(self):
+        x = b'x' * 32
+        y = b'y' * 32
+
+        pub_bytes = b'someprefix\x21\x58\x20' + x + b'mid\x22\x58\x20' + y + b'suffix'
+        expected = server.SPKI_P256_HEADER + x + y
+        self.assertEqual(server.extract_spki_der(pub_bytes), expected)
+
+    def test_extract_spki_der_cose_invalid_length(self):
+        # The logic expects x and y to be exactly 32 bytes after the match.
+        # If the input doesn't have 32 bytes for y after the match, it returns None
+        x = b'x' * 32
+        # y is too short
+        y = b'y' * 10
+        pub_bytes = b'someprefix\x21\x58\x20' + x + b'mid\x22\x58\x20' + y
+        self.assertIsNone(server.extract_spki_der(pub_bytes))
+
+        # what if there is no \x22\x58\x20 but there is \x21\x58\x20
+        pub_bytes = b'someprefix\x21\x58\x20' + x
+        self.assertIsNone(server.extract_spki_der(pub_bytes))
+
+
 if __name__ == '__main__':
     unittest.main()
