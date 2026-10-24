@@ -59,10 +59,9 @@ Captured from a demo instance running the current code.
 **Docker Compose (recommended)**
 
 ```bash
-TAG=$(curl -s https://api.github.com/repos/shirou93/Notki/tags | grep '"name":' | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
-git clone --branch $TAG --depth 1 https://github.com/shirou93/Notki.git notki
-cd notki
-docker compose up -d --build
+mkdir notki && cd notki
+curl -sO https://raw.githubusercontent.com/shirou93/Notki/main/update.sh
+bash update.sh
 docker compose logs notki | grep "SETUP TOKEN"
 ```
 
