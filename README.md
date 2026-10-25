@@ -94,8 +94,6 @@ The archive contains accounts, notes, labels, invitations, note shares, passkeys
 - Fail closed. If a stored TOTP secret cannot be decrypted, backup creation aborts instead of silently dropping MFA data.
 - Restores are validated in full and applied inside one transaction. A failed restore changes no data.
 
-Only `notki-backup` version 2 and `notki-server-snapshot` version 2 are accepted. Version 1 encrypted backups, version 1 snapshots, plaintext `.json`, and `.tgz` archives are rejected rather than silently downgraded.
-
 ### Restore from the CLI (Large Backups)
 
 The web upload limit is 140 MB, and the decrypted snapshot is capped at 100 MB. For larger archives, stop Notki and restore the file locally on the server host:
