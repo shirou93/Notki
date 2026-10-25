@@ -31,7 +31,7 @@ echo "Fetching updates from origin..."
 git fetch origin --tags
 
 echo "Checking out tag $TAG..."
-git checkout "$TAG"
+git checkout -f "$TAG"
 
 if [ ! -f ".env" ]; then
     echo "Initializing new .env file..."
