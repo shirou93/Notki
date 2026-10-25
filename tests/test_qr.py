@@ -1,0 +1,366 @@
+import unittest
+import qr
+
+class TestQRGenerator(unittest.TestCase):
+
+    def test_build_bit_buffer(self):
+        test_cases = [
+            # Happy path: "AB", len=2, version=1, total capacity=4 bytes
+            (
+                [0x41, 0x42], 2, 1, 4,
+                [0x40, 0x24, 0x14, 0x20]
+            ),
+            # Padding bytes: empty data, len=0, version=1, total capacity=4 bytes
+            (
+                [], 0, 1, 4,
+                [0x40, 0x00, 0xEC, 0x11]
+            ),
+            # Single byte with padding: "A", len=1, version=1, total capacity=4 bytes
+            (
+                [0x41], 1, 1, 4,
+                [0x40, 0x14, 0x10, 0xEC]
+            ),
+            # Version 10 length (16 bits): empty data, len=0, version=10, total capacity=4 bytes
+            (
+                [], 0, 10, 4,
+                [0x40, 0x00, 0x00, 0xEC]
+            ),
+            # Terminator truncation: total capacity 2 bytes, 1 byte of data, so it won't have space for 4-bit terminator
+            # 0100 (mode) | 00000001 (len=1) | 01000001 (A=0x41) = 01000000 00010100 0001
+            # Length is 1 byte, so 4 (mode) + 8 (len) + 8 (data) = 20 bits. We only have 16 bits capacity!
+            # Wait, the function needs enough bytes. Let's do:
+            # 4 (mode) + 8 (len) = 12 bits. Total capacity 2 bytes (16 bits).
+            # Empty data, len=0. 12 bits.
+            # Terminator space = 16 - 12 = 4 bits (full terminator).
+            # Let's test terminator truncation: length = 2 bytes capacity.
+            # mode (4 bits) + len (8 bits) + data (0 bits) = 12 bits. Terminator can be up to 4 bits, so 4 bits terminator.
+            # What if mode(4) + len(8) + data(8) = 20 bits? Total capacity 3 bytes (24 bits). 4 bits terminator fits.
+            # We want terminator length = 3 or less.
+            # So len(bits) before terminator = total_data_bytes * 8 - 3 => 8x - 3.
+            # mode(4) + len(8) + data(m) = 12 + m.
+            # We need 12 + m = 8x - 3 => m = 8x - 15. Not possible if data is multiple of 8 bits.
+            # Actually, `len(bits)` before terminator is always `4 + 8 + 8*n` = `12 + 8n` for version < 10.
+            # Modulo 8, this is 4. So `total_data_bytes * 8 - len(bits)` is a multiple of 8 minus 4, so `...4`.
+            # If version >= 10, it is 4 + 16 + 8*n = 20 + 8n. Modulo 8, this is 4.
+            # Thus `len(bits) % 8` is always 4!
+            # Therefore `total_data_bytes * 8 - len(bits)` is always of the form `8k + 4`.
+            # So `term_len = min(4, 8k + 4)` which is always 4 if k >= 0!
+            # So terminator truncation in this implementation is never actually < 4 unless `8k + 4 < 4` which means `k < 0`, i.e., data exceeds capacity.
+            # Since data exceeds capacity is checked beforehand, terminator truncation < 4 doesn't happen in `_build_bit_buffer` when called validly.
+            # We will just verify a case where capacity is exactly enough for mode, len, data, and terminator, without padding:
+            # e.g., 1 byte data = 12 + 8 = 20 bits. Terminator = 4 bits -> 24 bits = 3 bytes total.
+            (
+                [0x41], 1, 1, 3,
+                [0x40, 0x14, 0x10]
+            )
+        ]
+
+        for data_bytes, data_len, version, total_bytes, expected in test_cases:
+            with self.subTest(data=data_bytes, data_len=data_len, version=version):
+                result = qr._build_bit_buffer(data_bytes, data_len, version, total_bytes)
+                self.assertEqual(result, expected)
+
+    def test_format_info(self):
+        # Expected format info for EC Level M (00) and mask patterns 0-7
+        expected_outputs = [
+            0x5412, 0x5125, 0x5E7C, 0x5B4B,
+            0x45F9, 0x40CE, 0x4F97, 0x4AA0
+        ]
+        for pattern, expected in enumerate(expected_outputs):
+            with self.subTest(pattern=pattern):
+                self.assertEqual(qr.get_format_info(pattern), expected)
+
+    def test_version_info(self):
+        # Version info for Version 7
+        v_info = qr.get_version_info(7)
+        self.assertEqual(v_info, 0x7C94)
+
+    def test_qr_matrix_dimensions(self):
+        # Short string -> Version 1 (21x21)
+        m1 = qr.generate_qr_matrix("hello")
+        self.assertEqual(len(m1), 21)
+        self.assertEqual(len(m1[0]), 21)
+
+        # Medium TOTP string -> Version 5 (37x37)
+        totp = "otpauth://totp/Notki:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Notki"
+        m5 = qr.generate_qr_matrix(totp)
+        self.assertEqual(len(m5), 37)
+        self.assertEqual(len(m5[0]), 37)
+
+    def test_find_qr_spec(self):
+        cases = [
+            (1, 1),      # Version 1 bounds
+            (14, 1),
+            (15, 2),     # Transition to Version 2
+            (84, 5),     # Version 5 bounds
+            (85, 6),
+            (213, 10),   # Version 10 bounds
+            (214, None), # Exceeds capacity
+            (500, None)
+        ]
+        for data_len, expected_version in cases:
+            with self.subTest(data_len=data_len):
+                spec = qr._find_qr_spec(data_len)
+                if expected_version is None:
+                    self.assertIsNone(spec)
+                else:
+                    self.assertIsNotNone(spec)
+                    self.assertEqual(spec[0], expected_version)
+
+    def test_qr_matrix_finder_patterns(self):
+        m = qr.generate_qr_matrix("test")
+        # Top-left finder pattern center (2,2) should be black (1)
+        self.assertEqual(m[2][2], 1)
+        # Top-left finder pattern outer ring
+        self.assertEqual(m[0][0], 1)
+        self.assertEqual(m[0][6], 1)
+        self.assertEqual(m[6][0], 1)
+        self.assertEqual(m[6][6], 1)
+        # Separator ring
+        self.assertEqual(m[0][7], 0)
+        self.assertEqual(m[7][0], 0)
+
+    def test_qr_matrix_format_info_bits(self):
+        m = qr.generate_qr_matrix("test")
+        size = len(m)
+        # Check dark module at (size-8, 8)
+        self.assertEqual(m[size - 8][8], 1)
+        # Check that top-left vertical format info MSB at (0, 8) and horizontal format info MSB at (8, 0) are set properly
+        self.assertIn(m[0][8], (0, 1))
+        self.assertEqual(m[0][8], m[8][0])  # Both vertical and horizontal start with bit 14 (MSB)
+
+    def test_qr_svg_output(self):
+        svg = qr.generate_qr_svg("hello", module_size=4, border=4)
+        self.assertIn('<svg xmlns="http://www.w3.org/2000/svg"', svg)
+        self.assertIn('viewBox="0 0 116 116"', svg)  # (21 + 8) * 4 = 116
+        self.assertIn('<rect', svg)
+
+        # Test default parameters (module_size=4, border=4)
+        svg_default = qr.generate_qr_svg("hello")
+        self.assertEqual(svg, svg_default)
+
+        # Test custom module_size and border dimensions calculation
+        # Version 1 size = 21, border = 2, total modules = 25, module_size = 5 -> total_size = 125
+        svg_custom = qr.generate_qr_svg("hello", module_size=5, border=2)
+        self.assertIn('viewBox="0 0 125 125"', svg_custom)
+        self.assertIn('width="125"', svg_custom)
+        self.assertIn('height="125"', svg_custom)
+        self.assertIn('width="5" height="5"', svg_custom)
+
+        # Test TOTP URI SVG generation as used in server.py
+        totp_uri = "otpauth://totp/Notki:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Notki"
+        svg_totp = qr.generate_qr_svg(totp_uri)
+        self.assertIn('<svg xmlns="http://www.w3.org/2000/svg"', svg_totp)
+        self.assertIn('<rect', svg_totp)
+
+    def test_qr_data_too_long(self):
+        huge_text = "A" * 1000
+        with self.assertRaises(qr.QRError):
+            qr.generate_qr_matrix(huge_text)
+
+    def test_evaluate_penalty(self):
+        size = 12
+        def get_base_matrix():
+            # A checkerboard pattern has 50% dark modules, no consecutive 5+, no 2x2 blocks, and no rule 3 patterns.
+            # Thus, its penalty should be 0.
+            return [[(r + c) % 2 for c in range(size)] for r in range(size)]
+
+        # Base case
+        base = get_base_matrix()
+        self.assertEqual(qr.evaluate_penalty(base, size), 0)
+
+        # Rule 1: 5 or more same color modules in a row/col
+        # Row with 5 consecutive
+        m = get_base_matrix()
+        m[0][:6] = [1, 1, 1, 1, 1, 0]
+        self.assertEqual(qr.evaluate_penalty(m, size), 3)
+
+        # Row with 6 consecutive
+        m = get_base_matrix()
+        m[0][:7] = [1, 1, 1, 1, 1, 1, 0]
+        self.assertEqual(qr.evaluate_penalty(m, size), 4)
+
+        # Col with 6 consecutive
+        m = get_base_matrix()
+        for r in range(6):
+            m[r][0] = 1
+        m[6][0] = 0
+        self.assertEqual(qr.evaluate_penalty(m, size), 4)
+
+        # Rule 2: 2x2 blocks of same color
+        m = get_base_matrix()
+        m[0][0] = 1; m[0][1] = 1
+        m[1][0] = 1; m[1][1] = 1
+        self.assertEqual(qr.evaluate_penalty(m, size), 3)
+
+        # Rule 3: 1:1:3:1:1 finder-like pattern with 4 light modules before or after
+        # Row, light before
+        m = get_base_matrix()
+        m[0][:11] = [0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1]
+        self.assertEqual(qr.evaluate_penalty(m, size), 40)
+
+        # Row, light after
+        m = get_base_matrix()
+        m[0][:11] = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0]
+        self.assertEqual(qr.evaluate_penalty(m, size), 40)
+
+        # Col, light before
+        m = get_base_matrix()
+        pattern = [0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1]
+        for r in range(11):
+            m[r][0] = pattern[r]
+        self.assertEqual(qr.evaluate_penalty(m, size), 40)
+
+        # Rule 4: Proportion of dark modules
+        # 100% dark modules. diff = abs(100 - 50) // 5 = 10, penalty = 10 * 10 = 100
+        # However, 100% dark also triggers Rule 1 and Rule 2 massively. Let's just check the formula
+        # for a specific case with known rules or just rely on the overall score.
+        # Let's create a matrix with mostly 0s to trigger Rule 4 without triggering 1, 2, 3 as much
+        m = [[0 for _ in range(size)] for _ in range(size)]
+        # All zeros triggers Rule 1 and 2 heavily.
+        # A 12x12 all 0 matrix:
+        # Rule 1 rows: 12 * (3 + 7) = 120
+        # Rule 1 cols: 12 * (3 + 7) = 120
+        # Rule 2: 11 * 11 * 3 = 363
+        # Rule 4: 0% dark, diff = 50. penalty = (50 // 5) * 10 = 100
+        # Total = 120 + 120 + 363 + 100 = 703
+        self.assertEqual(qr.evaluate_penalty(m, size), 703)
+
+
+
+    def test_apply_best_mask(self):
+        size = 21
+        # Create a basic blank grid and reserved matrix
+        grid, reserved = qr._build_matrix_grid(size, 1)
+
+        import unittest.mock
+
+        # We will mock evaluate_penalty so we can control which mask wins
+        # Masks are evaluated in order 0 to 7. We'll make mask 4 have the lowest penalty.
+        with unittest.mock.patch('qr.evaluate_penalty') as mock_eval:
+            mock_eval.side_effect = [1000, 1000, 1000, 1000, 10, 1000, 1000, 1000]
+
+            best_matrix = qr._apply_best_mask(grid, reserved, size)
+
+            self.assertEqual(mock_eval.call_count, 8)
+
+            # Since mask 4 won, we should verify the format info bits injected match mask 4.
+            # Format info for mask 4, EC level M (00) is get_format_info(4).
+            expected_fmt = qr.get_format_info(4)
+
+            # Check a few format bits to verify mask 4 was actually applied to best_matrix.
+            # Bit 14 (MSB) is at best_matrix[0][8] and best_matrix[8][0]
+            for idx in range(15):
+                mod = (expected_fmt >> (14 - idx)) & 1
+                if idx < 6:
+                    self.assertEqual(best_matrix[idx][8], mod)
+                elif idx < 8:
+                    self.assertEqual(best_matrix[idx + 1][8], mod)
+                else:
+                    self.assertEqual(best_matrix[size - 15 + idx][8], mod)
+
+    def test_gf_mul(self):
+        # Zero multiplication
+        self.assertEqual(qr.gf_mul(0, 5), 0)
+        self.assertEqual(qr.gf_mul(7, 0), 0)
+        self.assertEqual(qr.gf_mul(0, 0), 0)
+
+        # Identity multiplication
+        self.assertEqual(qr.gf_mul(1, 10), 10)
+        self.assertEqual(qr.gf_mul(25, 1), 25)
+
+        # Commutative property
+        self.assertEqual(qr.gf_mul(5, 7), qr.gf_mul(7, 5))
+
+        # Known values
+        # 2 * 3 = 6
+        self.assertEqual(qr.gf_mul(2, 3), 6)
+        # 3 * 4 = 12
+        self.assertEqual(qr.gf_mul(3, 4), 12)
+        # 128 * 2 = 29
+        self.assertEqual(qr.gf_mul(128, 2), 29)
+        # 255 * 255 = 226
+        self.assertEqual(qr.gf_mul(255, 255), 226)
+
+    def test_rs_poly_mul(self):
+        test_cases = [
+            # Identity polynomial
+            ([1], [1, 2, 3], [1, 2, 3]),
+            # Zero polynomial
+            ([0], [1, 2, 3], [0, 0, 0]),
+            # Simple polynomial over GF(2^8)
+            ([1, 2], [1, 3], [1, 1, 6]),
+            # Commutative property
+            ([1, 3], [1, 2], [1, 1, 6]),
+        ]
+        for p1, p2, expected in test_cases:
+            with self.subTest(p1=p1, p2=p2):
+                self.assertEqual(qr.rs_poly_mul(p1, p2), expected)
+
+    def test_rs_encode(self):
+        test_cases = [
+            # Standard QR code tutorial example: Hello World
+            (
+                [32, 91, 11, 120, 209, 114, 220, 77, 67, 64, 236, 17, 236, 17, 236, 17],
+                10,
+                [196, 35, 39, 119, 235, 215, 231, 226, 93, 23]
+            ),
+            # Simple test case
+            (
+                [1, 2, 3],
+                5,
+                [116, 159, 107, 177, 49]
+            ),
+            # Zeroes edge case
+            (
+                [0, 0, 0],
+                5,
+                [0, 0, 0, 0, 0]
+            )
+        ]
+        for data, nsym, expected in test_cases:
+            with self.subTest(data=data, nsym=nsym):
+                self.assertEqual(qr.rs_encode(data, nsym), expected)
+
+    def test_rs_generator_poly(self):
+        test_cases = [
+            (1, [1, 1]),
+            (2, [1, 3, 2]),
+            (3, [1, 7, 14, 8]),
+            (5, [1, 31, 198, 63, 147, 116])
+        ]
+        for nsym, expected in test_cases:
+            with self.subTest(nsym=nsym):
+                self.assertEqual(qr.rs_generator_poly(nsym), expected)
+
+    def test_get_mask_bit(self):
+        # Test a few coordinates for each pattern to ensure accuracy of the logic
+        test_cases = [
+            # pattern 0: (r + c) % 2 == 0
+            (0, 0, 0, True), (0, 0, 1, False), (0, 1, 1, True),
+            # pattern 1: r % 2 == 0
+            (1, 0, 0, True), (1, 0, 1, True), (1, 1, 0, False),
+            # pattern 2: c % 3 == 0
+            (2, 0, 0, True), (2, 0, 1, False), (2, 0, 3, True), (2, 1, 3, True),
+            # pattern 3: (r + c) % 3 == 0
+            (3, 0, 0, True), (3, 0, 1, False), (3, 1, 2, True), (3, 2, 2, False),
+            # pattern 4: (r // 2 + c // 3) % 2 == 0
+            (4, 0, 0, True), (4, 1, 1, True), (4, 2, 0, False), (4, 0, 3, False), (4, 2, 3, True),
+            # pattern 5: ((r * c) % 2) + ((r * c) % 3) == 0
+            (5, 0, 0, True), (5, 1, 1, False), (5, 2, 3, True), (5, 2, 2, False),
+            # pattern 6: (((r * c) % 2) + ((r * c) % 3)) % 2 == 0
+            (6, 0, 0, True), (6, 1, 1, True), (6, 2, 3, True), (6, 2, 2, False),
+            # pattern 7: (((r + c) % 2) + ((r * c) % 3)) % 2 == 0
+            (7, 0, 0, True), (7, 1, 1, False), (7, 2, 3, False), (7, 2, 2, False), (7, 1, 2, False), (7, 0, 1, False)
+        ]
+
+        for pattern, r, c, expected in test_cases:
+            with self.subTest(pattern=pattern, r=r, c=c):
+                self.assertEqual(qr.get_mask_bit(pattern, r, c), expected)
+
+        # Test invalid pattern
+        self.assertFalse(qr.get_mask_bit(8, 0, 0))
+
+
+if __name__ == "__main__":
+    unittest.main()

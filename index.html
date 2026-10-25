@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f8f5">
+  <meta name="description" content="Notki — a private notebook in your browser." data-i18n-content="meta.description">
+  <title data-i18n="meta.title">Notki — Your notebook</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <script src="translations/pl.js" defer></script>
+  <script src="translations/en.js" defer></script>
+  <script src="translations/de.js" defer></script>
+  <script src="translations/fr.js" defer></script>
+  <script src="translations/ja.js" defer></script>
+  <script src="translations/ko.js" defer></script>
+  <script src="translations/it.js" defer></script>
+  <script src="translations/es.js" defer></script>
+  <script src="i18n.js" defer></script>
+  <script src="theme.js" defer></script>
+  <script src="vendor/dompurify.min.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <section class="auth-view" id="auth-view" hidden>
+    <div class="auth-content">
+      <a class="brand auth-brand" href="/" aria-label="Notki" data-i18n-aria-label="brand.aria"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span>notki<span class="brand-period">.</span></span></a>
+      <p class="eyebrow" data-i18n="auth.eyebrow">PRIVATE NOTES</p>
+      <h1 id="auth-heading"><span data-i18n="auth.heading.login">Sign in</span><span class="heading-period">.</span></h1>
+      <p class="auth-description" id="auth-description" data-i18n="auth.description.login">Sign in to your account to open your notes.</p>
+      <p class="auth-message" id="auth-message" role="alert" hidden></p>
+      <form class="auth-form" id="login-form">
+        <label class="field-label" for="login-email" data-i18n="auth.email">E-MAIL</label>
+        <input class="auth-input" id="login-email" type="email" autocomplete="username webauthn" required maxlength="254">
+        <label class="field-label" for="login-password" data-i18n="auth.password">PASSWORD</label>
+        <input class="auth-input" id="login-password" type="password" autocomplete="current-password" required>
+        <button class="button-primary" type="submit" data-i18n="auth.submit.login">Sign in</button>
+      </form>
+      <form class="auth-form" id="register-form" hidden>
+        <label class="field-label" for="register-email" data-i18n="auth.email">E-MAIL</label>
+        <input class="auth-input" id="register-email" type="email" autocomplete="email" required maxlength="254">
+        <label class="field-label" for="register-password" data-i18n="auth.password">PASSWORD</label>
+        <input class="auth-input" id="register-password" type="password" autocomplete="new-password" required minlength="12">
+        <label class="field-label" for="register-confirm" data-i18n="auth.confirmPassword">CONFIRM PASSWORD</label>
+        <input class="auth-input" id="register-confirm" type="password" autocomplete="new-password" required minlength="12">
+        <button class="button-primary" type="submit" data-i18n="auth.submit.register">Create account</button>
+      </form>
+      <form class="auth-form" id="login-2fa-form" hidden>
+        <label class="field-label" for="login-totp" data-i18n="auth.2fa.totpCode">TWO-FACTOR CODE</label>
+        <input class="auth-input" id="login-totp" type="text" autocomplete="one-time-code" placeholder="6-digit code or emergency code">
+        <button class="button-primary" type="submit" data-i18n="auth.2fa.verify">Verify</button>
+        <button class="button-secondary" id="login-passkey-btn" type="button" hidden data-i18n="auth.2fa.usePasskey" style="margin-top: 8px;">Use Passkey</button>
+      </form>
+      <button class="auth-switch" id="auth-switch" type="button" hidden></button>
+    </div>
+  </section>
+
+  <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
+  <div class="app-shell" id="app-shell" hidden>
+    <div class="mobile-header" id="mobile-header">
+      <button class="icon-button hamburger-toggle" id="hamburger-toggle" type="button" aria-label="Toggle menu" title="Menu" data-i18n-aria-label="topbar.toggleMenu" data-i18n-title="topbar.toggleMenu" aria-expanded="false" aria-controls="sidebar">☰</button>
+      <a class="brand" href="#all" aria-label="Notki, all notes" data-i18n-aria-label="brand.homeAria">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>notki<span class="brand-period">.</span></span>
+      </a>
+      <div class="header-right-spacer" aria-hidden="true"></div>
+    </div>
+    <aside class="sidebar" id="sidebar" aria-label="Navigation" data-i18n-aria-label="nav.aria">
+      <a class="brand" href="#all" aria-label="Notki, all notes" data-i18n-aria-label="brand.homeAria">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>notki<span class="brand-period">.</span></span>
+      </a>
+      <nav class="nav-list" aria-label="Note views" data-i18n-aria-label="nav.viewsAria">
+        <button class="nav-item is-active" type="button" data-view="all"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10"/><path d="M7 12h10"/><path d="M7 16h6"/></svg></span><span data-i18n="nav.all">All</span><span class="nav-count" id="count-all">0</span></button>
+        <button class="nav-item" type="button" data-view="dailyPlan"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span><span data-i18n="nav.dailyPlan">Daily Plan</span><span class="nav-count" id="count-dailyPlan">0</span></button>
+        <button class="nav-item" type="button" data-view="pinned"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6l-3 3v2h10v-2l-3-3V3"/><path d="M12 14v7"/></svg></span><span data-i18n="nav.pinned">Pinned</span><span class="nav-count" id="count-pinned">0</span></button>
+        <button class="nav-item" type="button" data-view="archive"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></span><span data-i18n="nav.archive">Archive</span><span class="nav-count" id="count-archive">0</span></button>
+        <button class="nav-item" type="button" data-view="shared"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span data-i18n="nav.shared">Shared with me</span><span class="nav-count" id="count-shared">0</span></button>
+        <button class="nav-item" type="button" data-view="trash"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></span><span data-i18n="nav.trash">Trash</span><span class="nav-count" id="count-trash">0</span></button>
+        <button class="nav-item" type="button" id="nav-labels"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></span><span data-i18n="nav.labels">Labels</span><span class="nav-count" id="count-labels">0</span></button>
+        <button class="nav-item" type="button" data-view="admin" id="nav-admin" hidden><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span data-i18n="nav.adminPanel">Admin panel</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <details class="settings-menu sidebar-user-menu" id="sidebar-user-menu">
+          <summary class="sidebar-user" id="sidebar-profile-button">
+            <span class="avatar sidebar-avatar" id="sidebar-avatar" aria-hidden="true">N</span>
+            <div class="sidebar-user-info">
+              <span class="sidebar-user-email" id="sidebar-user-email"></span>
+              <span class="sidebar-user-label" data-i18n="topbar.profileMenu">Profile</span>
+            </div>
+          </summary>
+          <div class="settings-popover sidebar-user-popover" role="group" aria-label="Account" data-i18n-aria-label="topbar.account">
+            <span class="settings-heading" data-i18n="topbar.account">ACCOUNT</span>
+            <div class="data-actions">
+              <button class="data-action" id="sidebar-profile-link" type="button"><span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span class="action-label" data-i18n="topbar.profileMenu">Profile</span></button>
+              <button class="data-action" id="sidebar-admin-link" type="button" data-view="admin" hidden><span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="action-label" data-i18n="nav.adminPanel">Admin panel</span></button>
+              <button class="data-action" id="sidebar-logout-button" type="button"><span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span><span class="action-label" data-i18n="topbar.logout">Sign out</span></button>
+            </div>
+          </div>
+        </details>
+        <div class="storage-note">
+          <span class="storage-dot"></span>
+          <span data-i18n="nav.storage">Saved on the server</span>
+        </div>
+        <span class="sidebar-version">NOTKI · 0.1.6.12</span>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="breadcrumbs"><span data-i18n="topbar.breadcrumb">YOUR NOTEBOOK</span><span class="breadcrumb-slash">/</span><span id="breadcrumb-view">All</span></div>
+        <div class="topbar-actions">
+          <button class="button-secondary sync-button" id="topbar-sync-button" type="button" data-i18n="nav.syncNow" hidden>Synchronize</button>
+          <label class="search-box" for="search-input"><span class="search-icon" aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="Search notes" autocomplete="off" data-i18n-placeholder="topbar.search"><kbd>⌘ K</kbd></label>
+
+          <select id="sort-select" class="font-size-select" aria-label="Sort notes" title="Sort notes" data-i18n-aria-label="topbar.sort" data-i18n-title="topbar.sort">
+            <option value="newest" data-i18n="sort.newest">Newest first</option>
+            <option value="oldest" data-i18n="sort.oldest">Oldest first</option>
+            <option value="titleAsc" data-i18n="sort.titleAsc">Title A-Z</option>
+            <option value="titleDesc" data-i18n="sort.titleDesc">Title Z-A</option>
+          </select>
+
+          <button class="icon-button" id="view-toggle" type="button" aria-label="List view" title="List view" data-i18n-aria-label="topbar.listView" data-i18n-title="topbar.listView">▤</button>
+
+          <details class="settings-menu" id="settings-menu">
+            <summary class="avatar" id="avatar" aria-label="Local profile" title="Local profile" data-i18n-aria-label="topbar.profile" data-i18n-title="topbar.profile">N</summary>
+            <div class="settings-popover" role="group" aria-label="Account" data-i18n-aria-label="topbar.account">
+              <span class="settings-heading" data-i18n="topbar.account">ACCOUNT</span>
+              <div class="data-actions">
+                <button class="data-action" id="profile-button" type="button"><span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span class="action-label" data-i18n="topbar.profileMenu">Profile</span></button>
+                <button class="data-action" id="admin-link" type="button" data-view="admin" hidden><span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="action-label" data-i18n="nav.adminPanel">Admin panel</span></button>
+                <button class="data-action" id="logout-button" type="button"><span class="action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span><span class="action-label" data-i18n="topbar.logout">Sign out</span></button>
+              </div>
+            </div>
+          </details>
+        </div>
+      </header>
+
+      <section class="shared-banner announcement-banner" id="announcement-banner" hidden aria-live="polite">
+        <div><span class="shared-kicker" data-i18n="announcement.kicker">ANNOUNCEMENT</span><p id="announcement-text" style="font-size: 13px; font-weight: 600; margin-top: 4px;"></p></div>
+      </section>
+
+      <section class="page-heading">
+        <div><p class="eyebrow" id="note-count-label" data-i18n="page.countLabel">YOUR CALM, YOUR NOTES</p><h1 id="page-title">All notes<span class="heading-period">.</span></h1></div>
+        <div id="page-heading-actions"></div>
+      </section>
+
+      <section class="capture-wrap" aria-label="Quick note" data-i18n-aria-label="capture.aria">
+        <button class="capture-box" id="capture-note" type="button"><span class="capture-plus" aria-hidden="true">+</span><span data-i18n="capture.placeholder">Save the thought before it escapes...</span><span class="capture-shortcut">N</span></button>
+      </section>
+
+      <section class="shared-banner" id="shared-banner" hidden aria-live="polite">
+        <div><span class="shared-kicker" data-i18n="shared.kicker">A NOTE FROM SOMEONE</span><strong id="shared-title" data-i18n="shared.title">Shared note</strong><p id="shared-preview"></p></div>
+        <div class="shared-actions"><button class="button-secondary" id="dismiss-shared" type="button" data-i18n="shared.dismiss">Dismiss</button><button class="button-primary" id="save-shared" type="button" data-i18n="shared.save">Save to my notes</button></div>
+      </section>
+
+      <section class="notes-area" aria-live="polite">
+        <div class="section-label" id="pinned-label" hidden><span id="pinned-label-text" data-i18n="section.pinned">PINNED</span><span class="section-rule"></span></div>
+        <div class="notes-grid" id="pinned-grid"></div>
+        <div class="section-label" id="other-label" hidden><span id="other-label-text" data-i18n="section.other">OTHER</span><span class="section-rule"></span></div>
+        <div class="notes-grid" id="notes-grid"></div>
+        <div id="timeline-area" hidden></div>
+        <div class="empty-state" id="empty-state" hidden>
+          <div class="empty-art" aria-hidden="true"><span class="empty-sheet"></span><span class="empty-spark">✳</span></div>
+          <h2 id="empty-title">A good thought starts here.</h2>
+          <p id="empty-copy">Write your first note. It will be waiting for you right here.</p>
+          <button class="button-primary" id="empty-create" type="button" data-i18n="empty.create">+ Write your first note</button>
+        </div>
+      </section>
+      <div class="admin-main" id="admin-area" hidden>
+    <header class="admin-heading">
+      <div>
+        <p class="eyebrow" data-i18n="admin.eyebrow">SERVER MANAGEMENT</p>
+        <h1><span data-i18n="admin.heading">Admin panel</span><span class="heading-period">.</span></h1>
+        <p id="admin-account"></p>
+      </div>
+    </header>
+    <div class="admin-stats" id="admin-stats" aria-label="Server statistics" aria-live="polite" data-i18n-aria-label="admin.statsAria"></div>
+
+    <section class="admin-section">
+      <header class="admin-section-header">
+        <div><h2 data-i18n="admin.security.title">Security</h2><p data-i18n="admin.security.description">Configure server security settings.</p></div>
+      </header>
+      <div class="admin-security-controls">
+        <div class="admin-security-row">
+          <label class="admin-toggle-label">
+            <input type="checkbox" id="admin-require-2fa"> <span data-i18n="admin.security.require2fa">Require 2FA for all users</span>
+          </label>
+        </div>
+      </div>
+      <div class="admin-security-controls">
+        <div class="admin-security-row" style="flex-direction: row; align-items: center; gap: 10px;">
+          <label class="field-label" for="admin-session-days" data-i18n="admin.security.sessionDays" style="margin: 0;">Session duration (days, default 30)</label>
+          <input class="auth-input" id="admin-session-days" type="number" min="1" max="3650" value="30" style="max-width: 150px; margin: 0;">
+        </div>
+      </div>
+      <div class="admin-security-controls">
+        <div class="admin-security-row">
+          <label class="field-label" for="admin-announcement" data-i18n="admin.security.announcement">Pinned message for users (e.g., Maintenance in progress)</label>
+          <input class="auth-input" id="admin-announcement" type="text" placeholder="e.g. Patching in progress..." data-i18n-placeholder="admin.security.announcementPlaceholder" maxlength="255">
+        </div>
+      </div>
+      <div class="admin-security-controls" style="margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border-color, rgba(0,0,0,0.1));">
+        <div class="admin-security-row">
+          <label class="admin-toggle-label">
+            <input type="checkbox" id="admin-fail2ban-enabled"> <span data-i18n="admin.fail2ban.enable">Enable Fail2ban (IP rate limiting)</span>
+          </label>
+        </div>
+        <div class="admin-security-row" style="flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label class="field-label" for="admin-fail2ban-max-attempts" data-i18n="admin.fail2ban.maxAttempts" style="margin: 0;">Max failed attempts</label>
+            <input class="auth-input" id="admin-fail2ban-max-attempts" type="number" min="1" max="1000" value="15" style="max-width: 100px; margin: 0;">
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label class="field-label" for="admin-fail2ban-ban-time" data-i18n="admin.fail2ban.banTime" style="margin: 0;">Ban duration (seconds)</label>
+            <input class="auth-input" id="admin-fail2ban-ban-time" type="number" min="5" max="86400" value="60" style="max-width: 120px; margin: 0;">
+          </div>
+        </div>
+      </div>
+      <button class="button-primary" id="admin-security-apply" type="button" style="margin-top: 12px;" data-i18n="admin.security.apply">Apply</button>
+    </section>
+
+    <section class="admin-section">
+      <header class="admin-section-header">
+        <div><h2 data-i18n="admin.fail2ban.bannedTitle">Banned & Rate-Limited IP Addresses</h2><p data-i18n="admin.fail2ban.description">Protect server from brute-force login attempts.</p></div>
+        <button class="button-secondary" id="admin-unban-all-btn" type="button" data-i18n="admin.fail2ban.unbanAll">Unban all IPs</button>
+      </header>
+      <p class="admin-message" id="fail2ban-message" role="status" hidden></p>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead><tr><th data-i18n="admin.table.ip">IP ADDRESS</th><th data-i18n="admin.table.attempts">ATTEMPTS</th><th data-i18n="admin.table.status">STATUS</th><th data-i18n="admin.table.lastAttempt">LAST ATTEMPT</th><th data-i18n="admin.table.actions">ACTIONS</th></tr></thead>
+          <tbody id="admin-banned-ips"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="admin-section">
+      <header class="admin-section-header">
+        <div><h2 data-i18n="admin.update.title">System update</h2><p data-i18n="admin.update.description">Check for and install updates from GitHub.</p></div>
+        <button class="button-primary" id="check-update" type="button" data-i18n="admin.update.check">Check for updates</button>
+      </header>
+      <p class="admin-version-info"><span data-i18n="admin.update.currentVersion">Installed version:</span> <strong>0.1.6.12</strong></p>
+      <p class="admin-message" id="update-message" role="status" hidden></p>
+      <div id="update-result" class="admin-update-box" hidden>
+        <p><span data-i18n="admin.update.available">An update is available! Latest version:</span> <strong id="update-latest-version"></strong></p>
+        <button class="button-primary" id="perform-update" type="button" data-i18n="admin.update.perform">Update now</button>
+      </div>
+    </section>
+
+    <section class="admin-section">
+      <header class="admin-section-header">
+        <div><h2 data-i18n="admin.backups.title">Server-wide backups</h2><p data-i18n="admin.backups.description">Encrypted archives contain accounts, notes, and invitations. Sessions are not saved.</p></div>
+      </header>
+      <div id="backup-generated-password-warning" class="admin-message is-error" hidden data-i18n="admin.backups.generatedWarning">No backup password found in .env. A temporary one has been generated. Please set NOTKI_BACKUP_PASSWORD in .env.</div>
+      <form id="backup-form" class="backup-form-wrap">
+        <button class="button-primary" id="create-backup" type="submit" data-i18n="admin.backups.create">+ Create encrypted backup (.enc)</button>
+      </form>
+      <div id="backup-restore-file-wrap" class="backup-form-wrap" style="margin-top: 12px;">
+        <input class="auth-input" id="restore-file-input" type="file" accept=".enc,application/json,application/octet-stream" style="height: auto; min-height: 42px; padding: 8px; font-size: 11px; text-align: left; text-align-last: left;">
+        <button class="button-secondary" id="restore-file-btn" type="button" data-i18n="admin.backups.restoreFromFile">Restore from encrypted file (.enc)</button>
+      </div>
+      <p class="admin-message" id="backup-message" role="status" hidden></p>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead><tr><th data-i18n="admin.table.file">FILE</th><th data-i18n="admin.table.created">CREATED</th><th data-i18n="admin.table.size">SIZE</th><th data-i18n="admin.table.actions">ACTIONS</th></tr></thead>
+          <tbody id="server-backups"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="admin-section">
+      <header class="admin-section-header">
+        <div><h2 data-i18n="admin.users.title">Users</h2><p data-i18n="admin.users.description">Account list with the number of assigned notes.</p></div>
+      </header>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead><tr><th data-i18n="admin.table.email">E-MAIL</th><th data-i18n="admin.table.role">ROLE</th><th data-i18n="admin.table.created">CREATED</th><th data-i18n="admin.table.notes">NOTES</th><th data-i18n="admin.table.actions">ACTIONS</th></tr></thead>
+          <tbody id="admin-users"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="admin-section">
+      <header class="admin-section-header">
+        <div><h2 data-i18n="admin.invites.title">Invitations</h2><p data-i18n="admin.invites.description">A registration link works once. You can specify the number of validity days.</p></div>
+        <div class="admin-invite-controls">
+          <input type="number" id="invite-days" value="7" min="1" max="365" class="auth-input invite-days-input" aria-label="Days valid" title="Days valid" data-i18n-aria-label="admin.invites.validityDays" data-i18n-title="admin.invites.validityDays">
+          <button class="button-primary" id="create-invite" type="button" data-i18n="admin.invites.create">+ Create invitation</button>
+        </div>
+      </header>
+      <p class="admin-message" id="invite-message" role="status" hidden></p>
+      <div class="invite-result" id="invite-result" hidden>
+        <label for="invite-url" data-i18n="admin.invites.link">REGISTRATION LINK</label>
+        <div class="invite-url-row"><input id="invite-url" type="text" readonly><button class="button-secondary" id="copy-invite" type="button" data-i18n="admin.invites.copy">Copy link</button></div>
+        <small id="invite-expiry"></small>
+      </div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead><tr><th data-i18n="admin.table.created">CREATED</th><th data-i18n="admin.table.expires">EXPIRES</th><th data-i18n="admin.table.status">STATUS</th><th data-i18n="admin.table.actions">ACTIONS</th></tr></thead>
+          <tbody id="admin-invites"></tbody>
+        </table>
+      </div>
+    </section>
+        <p class="admin-message" id="admin-message" role="status"></p>
+      </div>
+      <footer class="page-footer"><span id="footer-count">0 notes</span><span data-i18n="footer.privacy">Your ideas stay yours.</span></footer>
+    </main>
+    <button class="fab-add-note" id="fab-add-note" type="button" aria-label="Add note" title="Add note" hidden>+</button>
+  </div>
+
+  <div class="modal-backdrop" id="labels-backdrop" hidden></div>
+  <section class="profile-panel labels-panel" id="labels-panel" role="dialog" aria-modal="true" aria-labelledby="labels-title" aria-hidden="true" hidden>
+    <div class="profile-topbar">
+      <h2 class="profile-title" id="labels-title" data-i18n="labels.title">Edit Labels</h2>
+      <button class="icon-button editor-close" id="close-labels" type="button" aria-label="Close" title="Close" data-i18n-aria-label="topbar.close" data-i18n-title="topbar.close">×</button>
+    </div>
+    <div class="profile-content">
+      <p class="profile-description" data-i18n="labels.description">Add and delete labels. Labels apply to all notes.</p>
+      <form class="profile-form" id="add-label-form" style="margin-top: 0; padding-top: 0; border-top: none;">
+        <div style="display: flex; gap: 8px;">
+          <input class="auth-input" id="new-label-input" type="text" placeholder="New label" data-i18n-placeholder="labels.newPlaceholder" required maxlength="80">
+          <button class="button-primary" type="submit" data-i18n="labels.add">Add</button>
+        </div>
+      </form>
+      <div id="labels-edit-list" style="margin-top: 15px; display: grid; gap: 8px;"></div>
+    </div>
+  </section>
+
+  <div class="modal-backdrop" id="profile-backdrop" hidden></div>
+  <section class="profile-panel" id="profile-panel" role="dialog" aria-modal="true" aria-labelledby="profile-title" aria-hidden="true" hidden>
+    <div class="profile-topbar">
+      <h2 class="profile-title" id="profile-title" data-i18n="topbar.profileTitle">Profile</h2>
+      <button class="icon-button editor-close" id="close-profile" type="button" aria-label="Close" title="Close" data-i18n-aria-label="topbar.close" data-i18n-title="topbar.close">×</button>
+    </div>
+    <div class="profile-content">
+      <p class="profile-account" id="profile-account"></p>
+      <p class="profile-description" data-i18n="topbar.profileDescription">Change the interface language or your account password.</p>
+      <div class="profile-avatar">
+        <span class="profile-avatar-preview" id="profile-avatar-preview" aria-hidden="true">N</span>
+        <div class="profile-avatar-actions">
+          <button class="button-secondary" id="avatar-upload" type="button" data-i18n="topbar.uploadAvatar">Upload avatar</button>
+          <button class="button-secondary" id="avatar-remove" type="button" data-i18n="topbar.removeAvatar">Remove avatar</button>
+        </div>
+      </div>
+      <input id="avatar-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+      <small class="setup-hint" data-i18n="topbar.avatarHint">PNG, JPEG, WebP or GIF, up to 2 MB.</small>
+      <p class="auth-message" id="avatar-message" role="alert" hidden></p>
+      <label class="field-label" for="profile-language" data-i18n="topbar.language">LANGUAGE</label>
+      <select class="auth-input profile-select" id="profile-language" data-language-select aria-label="Change language" data-i18n-aria-label="language.switch"><option value="pl">Polski</option><option value="en">English</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="it">Italiano</option><option value="es">Español</option></select>
+      <label class="field-label" for="profile-theme" data-i18n="topbar.themeLabel">THEME</label>
+      <select class="auth-input profile-select" id="profile-theme" data-theme-select aria-label="Change theme" data-i18n-aria-label="theme.switch"><option value="system" data-i18n="theme.system">System</option><option value="light" data-i18n="theme.light">Light</option><option value="dark" data-i18n="theme.dark">Dark</option></select>
+      <form class="profile-form" id="password-form">
+        <p class="field-label" data-i18n="topbar.changePassword">CHANGE PASSWORD</p>
+        <label class="field-label" for="current-password" data-i18n="topbar.currentPassword">CURRENT PASSWORD</label>
+        <input class="auth-input" id="current-password" type="password" autocomplete="current-password" required>
+        <label class="field-label" for="new-password" data-i18n="topbar.newPassword">NEW PASSWORD</label>
+        <input class="auth-input" id="new-password" type="password" autocomplete="new-password" required minlength="12" aria-describedby="profile-password-hint">
+        <small class="setup-hint" id="profile-password-hint" data-i18n="topbar.passwordHint">At least 12 characters.</small>
+        <label class="field-label" for="confirm-password" data-i18n="topbar.confirmPassword">CONFIRM NEW PASSWORD</label>
+        <input class="auth-input" id="confirm-password" type="password" autocomplete="new-password" required minlength="12">
+        <p class="auth-message" id="profile-message" role="alert" hidden></p>
+        <button class="button-primary" type="submit" data-i18n="topbar.changePassword">CHANGE PASSWORD</button>
+      </form>
+      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+        <p class="field-label" data-i18n="topbar.2fa.title">TWO-FACTOR AUTHENTICATION</p>
+        <p class="profile-description" data-i18n="topbar.2fa.description">Secure your account with an Authenticator App (TOTP) or a Passkey (e.g. Touch ID, Face ID).</p>
+
+        <div id="totp-setup-area">
+          <button class="button-secondary" id="setup-totp-btn" type="button" data-i18n="topbar.2fa.setupTotp">Setup Authenticator App</button>
+          <div id="totp-verify-area" hidden style="margin-top: 8px;">
+            <p class="setup-hint" data-i18n="topbar.2fa.scanQr">Scan the QR code in your authenticator app:</p>
+            <div id="totp-qr-container" style="display: flex; justify-content: center; margin: 12px 0;"></div>
+            <p class="setup-hint"><span data-i18n="topbar.2fa.totpSecret">Your secret code:</span> <strong id="totp-secret-code" style="letter-spacing: 1px; color: var(--text-color);"></strong></p>
+            <form id="totp-verify-form" style="display: flex; gap: 8px; margin-top: 8px;">
+              <input class="auth-input" id="totp-verify-code" type="text" placeholder="6-digit code" data-i18n-placeholder="topbar.2fa.codePlaceholder" autocomplete="off" inputmode="numeric" pattern="[0-9]*" style="flex: 1;" required>
+              <button class="button-primary" type="submit" data-i18n="topbar.2fa.verifyTotp">Verify</button>
+            </form>
+          </div>
+        </div>
+        <div id="totp-active-area" hidden>
+          <p class="setup-hint" style="color: var(--accent-color);" data-i18n="topbar.2fa.totpActive">Authenticator App is active.</p>
+          <div id="backup-codes-display-area" hidden style="margin-top: 12px; margin-bottom: 12px; padding: 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg);">
+            <p class="field-label" style="margin-bottom: 4px;" data-i18n="topbar.2fa.backupCodesTitle">EMERGENCY BACKUP CODES</p>
+            <p class="setup-hint" style="margin-bottom: 8px;" data-i18n="topbar.2fa.backupCodesHint">Save these backup codes in a safe place. Each code can only be used once if you lose access to your authenticator app.</p>
+            <div id="backup-codes-list" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-family: monospace; font-size: 13px; font-weight: 600; text-align: center; margin-bottom: 10px; background: var(--bg-color); padding: 8px; border-radius: 4px;"></div>
+            <button class="button-secondary" id="copy-backup-codes-btn" type="button" style="width: 100%;" data-i18n="topbar.2fa.copyBackupCodes">Copy Backup Codes</button>
+          </div>
+          <button class="button-secondary" id="remove-totp-btn" type="button" data-i18n="topbar.2fa.removeTotp">Remove</button>
+        </div>
+
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border-color);">
+          <p class="field-label" data-i18n="topbar.2fa.passkeys">PASSKEYS</p>
+          <button class="button-secondary" id="add-passkey-btn" type="button" data-i18n="topbar.2fa.addPasskey">Add Passkey</button>
+          <ul id="passkey-list" style="list-style: none; padding: 0; margin-top: 12px; display: grid; gap: 8px;"></ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <div class="modal-backdrop" id="share-backdrop" hidden></div>
+  <section class="share-panel" id="share-panel" role="dialog" aria-modal="true" aria-labelledby="share-title" aria-hidden="true" hidden>
+    <div class="profile-topbar">
+      <h2 class="profile-title" id="share-title" data-i18n="share.title">Share note</h2>
+      <button class="icon-button editor-close" id="close-share" type="button" aria-label="Close" title="Close" data-i18n-aria-label="topbar.close" data-i18n-title="topbar.close">×</button>
+    </div>
+    <div class="profile-content">
+      <p class="profile-account" id="share-note-name"></p>
+      <p class="profile-description" data-i18n="share.description">Give another account access to this note. Read-only recipients can open it but not change it.</p>
+      <form class="profile-form" id="share-form">
+        <label class="field-label" for="share-email" data-i18n="share.emailLabel">E-MAIL OF THE RECIPIENT</label>
+        <input class="auth-input" id="share-email" type="email" required autocomplete="off" placeholder="name@example.com" maxlength="254">
+        <label class="field-label" for="share-permission" data-i18n="share.permissionLabel">PERMISSION</label>
+        <select class="auth-input profile-select" id="share-permission">
+          <option value="read" data-i18n="share.permission.read">Read only</option>
+          <option value="write" data-i18n="share.permission.write">Can edit</option>
+        </select>
+        <p class="auth-message" id="share-message" role="alert" hidden></p>
+        <button class="button-primary" type="submit" data-i18n="share.submit">Share</button>
+      </form>
+      <p class="field-label" data-i18n="share.currentLabel">PEOPLE WITH ACCESS</p>
+      <ul class="share-list" id="share-list"></ul>
+      <p class="share-empty" id="share-empty" data-i18n="share.empty">This note is not shared with anyone yet.</p>
+    </div>
+  </section>
+
+  <div class="modal-backdrop" id="editor-backdrop" hidden></div>
+  <aside class="editor-panel" id="editor-panel" aria-label="Note editor" data-i18n-aria-label="editor.panel" aria-hidden="true" hidden>
+    <div class="editor-topbar">
+      <button class="icon-button editor-close" id="close-editor" type="button" aria-label="Close editor" title="Close" data-i18n-aria-label="editor.close" data-i18n-title="editor.closeTitle">×</button>
+      <span class="save-state" id="save-state"><span class="save-dot"></span><span data-i18n="editor.saved">Saved</span></span>
+      <div class="editor-tools">
+        <button class="icon-button" id="toggle-writer-mode" type="button" aria-label="Writer mode" title="Writer mode" data-i18n-aria-label="editor.writerMode" data-i18n-title="editor.writerMode"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
+        <button class="icon-button" id="pin-note" type="button" aria-label="Pin note" title="Pin" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><path d="M10 3v6l-3 3v2h10v-2l-3-3V3"/><path d="M12 14v7"/></svg></button>
+        <button class="icon-button" id="archive-note" type="button" aria-label="Archive note" title="Archive" data-i18n-aria-label="editor.archive" data-i18n-title="editor.archiveTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg></button>
+        <button class="icon-button" id="share-note" type="button" aria-label="Share note" title="Share link" data-i18n-aria-label="editor.share" data-i18n-title="editor.shareTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>
+        <button class="icon-button danger-icon" id="delete-note" type="button" aria-label="Move to trash" title="Move to trash" data-i18n-aria-label="editor.delete" data-i18n-title="editor.delete"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 10v7M14 10v7"/></svg></button>
+      </div>
+    </div>
+    <div class="editor-content">
+      <label class="sr-only" for="note-title" data-i18n="editor.titleLabel">Note title</label>
+      <input class="editor-title" id="note-title" type="text" placeholder="Title" maxlength="160" autocomplete="off" data-i18n-placeholder="editor.titlePlaceholder">
+      <div class="editor-progress" id="editor-progress" hidden>
+        <div class="editor-progress-info">
+          <span class="editor-progress-label" data-i18n="editor.progressLabel">CHECKLIST PROGRESS</span>
+          <span class="editor-progress-text" id="editor-progress-text">0/0 (0%)</span>
+        </div>
+        <div class="editor-progress-track">
+          <div class="editor-progress-fill" id="editor-progress-fill" style="width: 0%"></div>
+        </div>
+      </div>
+      <label class="sr-only" for="note-body" data-i18n="editor.bodyLabel">Note body</label>
+      <div class="format-toolbar" id="format-toolbar" role="toolbar" aria-label="Note formatting" data-i18n-aria-label="editor.toolbar">
+        <select class="font-size-select" id="font-size-select" aria-label="Font size" title="Font size" data-i18n-aria-label="editor.fontSize" data-i18n-title="editor.fontSize">
+          <option value="1">11 pt</option>
+          <option value="2">12 pt</option>
+          <option value="3" selected>14 pt</option>
+          <option value="4">17 pt</option>
+          <option value="5">20 pt</option>
+          <option value="6">24 pt</option>
+          <option value="7">30 pt</option>
+        </select>
+        <span class="format-separator" aria-hidden="true"></span>
+        <button class="format-tool" type="button" data-command="undo" aria-label="Undo" title="Undo" data-i18n-aria-label="editor.undo" data-i18n-title="editor.undo">↶</button>
+        <button class="format-tool" type="button" data-command="redo" aria-label="Redo" title="Redo" data-i18n-aria-label="editor.redo" data-i18n-title="editor.redo">↷</button>
+        <button class="format-tool" type="button" data-command="bold" aria-label="Bold" title="Bold" data-i18n-aria-label="editor.bold" data-i18n-title="editor.bold"><strong>B</strong></button>
+        <button class="format-tool" type="button" data-command="italic" aria-label="Italic" title="Italic" data-i18n-aria-label="editor.italic" data-i18n-title="editor.italic"><em>I</em></button>
+        <button class="format-tool" type="button" data-command="underline" aria-label="Underline" title="Underline" data-i18n-aria-label="editor.underline" data-i18n-title="editor.underline"><span class="underline-icon">U</span></button>
+        <span class="format-separator" aria-hidden="true"></span>
+        <button class="format-tool" type="button" data-command="insertUnorderedList" aria-label="Bulleted list" title="Bulleted list" data-i18n-aria-label="editor.bulletList" data-i18n-title="editor.bulletList">•≡</button>
+        <button class="format-tool" type="button" data-command="insertOrderedList" aria-label="Numbered list" title="Numbered list" data-i18n-aria-label="editor.numberedList" data-i18n-title="editor.numberedList">1.</button>
+        <button class="format-tool" type="button" data-insert-checklist aria-label="Add checkbox" title="Add checkbox" data-i18n-aria-label="editor.checklist" data-i18n-title="editor.checklist">☐</button>
+        <span class="format-separator" aria-hidden="true"></span>
+        <button class="format-tool clear-format" type="button" data-command="removeFormat" aria-label="Clear formatting" title="Clear formatting" data-i18n-aria-label="editor.clearFormat" data-i18n-title="editor.clearFormat">Tx</button>
+      </div>
+      <div class="editor-body" id="note-body" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Note body" data-placeholder="Start writing..." data-i18n-aria-label="editor.bodyLabel" data-i18n-data-placeholder="editor.bodyPlaceholder"></div>
+      <div class="task-restore-suggestions" id="task-restore-suggestions" role="status" hidden></div>
+      <div class="editor-meta"><span id="editor-date"></span><span class="meta-separator">·</span><span id="editor-words">0 words</span></div>
+      <div class="editor-divider"></div>
+      <div class="field-label" data-i18n="editor.dueDate">DUE DATE / DAILY PLAN</div>
+      <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
+        <input class="auth-input" id="note-due-date" type="datetime-local" style="flex: 1; font-size: 13px;">
+      </div>
+      <div class="field-label labels-label-row"><span data-i18n="editor.tags">TAGS</span> <button type="button" class="icon-button labels-edit-button" id="edit-labels" aria-label="Edit labels" title="Edit labels" data-i18n-aria-label="editor.editLabels" data-i18n-title="editor.editLabels">✎</button></div>
+      <div class="labels-container" id="note-labels"></div>
+      <div class="field-label color-label" data-i18n="editor.color">NOTE COLOR</div>
+      <div class="color-picker" role="group" aria-label="Note color" data-i18n-aria-label="editor.colorGroup">
+        <button class="color-swatch swatch-default is-selected" data-color="default" type="button" aria-label="Default" title="Default" data-i18n-aria-label="editor.color.default" data-i18n-title="editor.color.default"></button>
+        <button class="color-swatch swatch-mint" data-color="mint" type="button" aria-label="Mint" title="Mint" data-i18n-aria-label="editor.color.mint" data-i18n-title="editor.color.mint"></button>
+        <button class="color-swatch swatch-lemon" data-color="lemon" type="button" aria-label="Lemon" title="Lemon" data-i18n-aria-label="editor.color.lemon" data-i18n-title="editor.color.lemon"></button>
+        <button class="color-swatch swatch-peach" data-color="peach" type="button" aria-label="Peach" title="Peach" data-i18n-aria-label="editor.color.peach" data-i18n-title="editor.color.peach"></button>
+        <button class="color-swatch swatch-lilac" data-color="lilac" type="button" aria-label="Lilac" title="Lilac" data-i18n-aria-label="editor.color.lilac" data-i18n-title="editor.color.lilac"></button>
+        <button class="color-swatch swatch-sky" data-color="sky" type="button" aria-label="Sky" title="Sky" data-i18n-aria-label="editor.color.sky" data-i18n-title="editor.color.sky"></button>
+        <button class="color-swatch swatch-rose" data-color="rose" type="button" aria-label="Rose" title="Rose" data-i18n-aria-label="editor.color.rose" data-i18n-title="editor.color.rose"></button>
+        <button class="color-swatch swatch-sand" data-color="sand" type="button" aria-label="Sand" title="Sand" data-i18n-aria-label="editor.color.sand" data-i18n-title="editor.color.sand"></button>
+        <button class="color-swatch swatch-sage" data-color="sage" type="button" aria-label="Sage" title="Sage" data-i18n-aria-label="editor.color.sage" data-i18n-title="editor.color.sage"></button>
+        <button class="color-swatch swatch-plum" data-color="plum" type="button" aria-label="Plum" title="Plum" data-i18n-aria-label="editor.color.plum" data-i18n-title="editor.color.plum"></button>
+      </div>
+      <div class="editor-bottom-note" id="editor-share-notice" hidden></div>
+      <div class="editor-bottom-note"><span class="lock-mark" aria-hidden="true">◈</span> <span data-i18n="editor.privacy">This note stays private until you share it.</span></div>
+    </div>
+  </aside>
+
+  <div class="modal-backdrop" id="update-loading-backdrop" style="z-index: 500; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; color: #fff; text-align: center; padding: 20px;" hidden>
+    <div style="width: 42px; height: 42px; border: 4px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+    <p id="update-loading-text" style="font-size: 16px; font-weight: 600; margin: 0;" data-i18n="admin.update.restarting">Restarting server and loading interface...</p>
+  </div>
+  <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <template id="note-template">
+    <article class="note-card">
+      <div class="card-swipe-bg card-swipe-right"><span class="card-swipe-icon card-swipe-icon-right">📌</span><span class="card-swipe-label card-swipe-label-right"></span></div>
+      <div class="card-swipe-bg card-swipe-left"><span class="card-swipe-label card-swipe-label-left"></span><span class="card-swipe-icon card-swipe-icon-left">📦</span></div>
+      <div class="card-inner">
+        <div class="card-topline"><span class="card-date"></span><div class="card-tools"><button class="card-share" type="button" aria-label="Share note" title="Share link" data-i18n-aria-label="editor.share" data-i18n-title="editor.shareTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button><button class="card-drag" type="button" aria-label="Reorder note" title="Drag to reorder" data-i18n-aria-label="card.drag" data-i18n-title="card.dragTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></button><button class="card-pin" type="button" aria-label="Pin note" title="Pin" data-i18n-aria-label="editor.pin" data-i18n-title="editor.pinTitle"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><path d="M10 3v6l-3 3v2h10v-2l-3-3V3"/><path d="M12 14v7"/></svg></button></div></div>
+        <h2 class="card-title"></h2>
+        <p class="card-body"></p>
+        <div class="card-bottom"><div class="card-due"></div><div class="card-tags"></div></div>
+      </div>
+    </article>
+  </template>
+</body>
+</html>

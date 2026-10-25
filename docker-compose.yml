@@ -1,0 +1,39 @@
+services:
+  notki:
+    build: .
+    image: notki:0.1.6.2
+    container_name: notki
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    ports:
+      - "${NOTKI_HTTP_PORT:-8000}:8000"
+    volumes:
+      - notki-data:/data
+    environment:
+      NOTKI_HOST: 0.0.0.0
+      NOTKI_PORT: "8000"
+      NOTKI_DB_PATH: /data/notki.sqlite3
+      NOTKI_BACKUP_DIR: /data/backups
+      NOTKI_BACKUP_PASSWORD: "${NOTKI_BACKUP_PASSWORD:-}"
+      # Prefer setting NOTKI_SETUP_TOKEN in .env for headless deployments; the
+      # setup page asks for it before creating the administrator.
+      NOTKI_SETUP_TOKEN: "${NOTKI_SETUP_TOKEN:-}"
+      # Trust proxy headers only from the reverse proxy address/network.
+      NOTKI_TRUST_PROXY: "${NOTKI_TRUST_PROXY:-127.0.0.1/32}"
+      NOTKI_ALLOWED_HOSTS: "${NOTKI_ALLOWED_HOSTS:-}"
+      NOTKI_PUBLIC_HOST: "${NOTKI_PUBLIC_HOST:-}"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8000/api/setup/status"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  notki-data:
