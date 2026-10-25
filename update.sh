@@ -36,10 +36,10 @@ git checkout "$TAG"
 if [ ! -f ".env" ]; then
     echo "Initializing new .env file..."
     IS_INIT=1
-    read -p "Czy chcesz przywrócić z backupu? (t/N): " -r RESTORE_CHOICE
+    read -p "Do you want to restore from a backup? (y/N): " -r RESTORE_CHOICE
     if [[ "$RESTORE_CHOICE" =~ ^[TtYy]$ ]]; then
-        read -p "Podaj ścieżkę do pliku backupu: " -r BACKUP_PATH
-        read -p "Podaj hasło backupu: " -r BACKUP_PWD_INPUT
+        read -p "Enter the path to the backup file: " -r BACKUP_PATH
+        read -p "Enter the backup password: " -r BACKUP_PWD_INPUT
         echo "NOTKI_BACKUP_PASSWORD=\"$BACKUP_PWD_INPUT\"" > .env
     else
         BACKUP_PWD=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 128 || true)
