@@ -36,17 +36,21 @@ git checkout -f "$TAG"
 if [ ! -f ".env" ]; then
     echo "Initializing new .env file..."
     IS_INIT=1
+    read -p "Enter the application port (default: 3000): " -r PORT_INPUT
+    PORT_INPUT=${PORT_INPUT:-3000}
+    echo "NOTKI_HTTP_PORT=\"$PORT_INPUT\"" > .env
+
     read -p "Do you want to restore from a backup? (y/N): " -r RESTORE_CHOICE
     if [[ "$RESTORE_CHOICE" =~ ^[TtYy]$ ]]; then
         read -p "Enter the path to the backup file: " -r BACKUP_PATH
         read -p "Enter the backup password: " -r BACKUP_PWD_INPUT
-        echo "NOTKI_BACKUP_PASSWORD=\"$BACKUP_PWD_INPUT\"" > .env
+        echo "NOTKI_BACKUP_PASSWORD=\"$BACKUP_PWD_INPUT\"" >> .env
     else
         BACKUP_PWD=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 128 || true)
         if [ -z "$BACKUP_PWD" ]; then
             BACKUP_PWD=$(openssl rand -hex 64)
         fi
-        echo "NOTKI_BACKUP_PASSWORD=\"$BACKUP_PWD\"" > .env
+        echo "NOTKI_BACKUP_PASSWORD=\"$BACKUP_PWD\"" >> .env
     fi
 else
     IS_INIT=0
