@@ -96,7 +96,7 @@ The archive contains accounts, notes, labels, invitations, note shares, passkeys
 
 ### Restore from the CLI (Large Backups)
 
-The web upload limit is 140 MB, and the decrypted snapshot is capped at 100 MB. For larger archives, stop Notki and restore the file locally on the server host:
+The decrypted snapshot is capped at 100 MB. For larger archives, stop Notki and restore the file locally on the server host:
 
 ```bash
 python3 server.py --restore-backup /path/to/notki-backup-YYYYMMDD-HHMMSSZ-xxxx.enc

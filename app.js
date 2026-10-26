@@ -4327,35 +4327,6 @@
 
   document.querySelector('#backup-form')?.addEventListener('submit', handleCreateBackup);
 
-  document.querySelector('#restore-file-btn')?.addEventListener('click', async () => {
-    const fileInput = document.querySelector('#restore-file-input');
-    const file = fileInput?.files?.[0];
-    if (!file) {
-      setBackupMessage(t('admin.backups.noFileSelected'), true);
-      return;
-    }
-    const confirmed = window.confirm(t('admin.backups.confirmRestoreFile'));
-    if (!confirmed) return;
-
-    setBackupMessage(t('admin.backups.restoring'));
-
-    try {
-      const buffer = await file.arrayBuffer();
-      await apiRequest('/api/admin/backups/upload-restore', {
-        method: 'POST',
-        body: buffer,
-        headers: {
-          'Content-Type': 'application/octet-stream',
-        },
-      });
-      setBackupMessage(t('admin.backups.restored'));
-      fileInput.value = '';
-      setTimeout(() => window.location.reload(), 1200);
-    } catch (err) {
-      setBackupMessage(err.message, true);
-    }
-  });
-
   window.i18n.onChange(() => {
     applyTheme(document.documentElement.dataset.theme);
     applyViewPref();

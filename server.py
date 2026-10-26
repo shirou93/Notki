@@ -2090,39 +2090,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self.send_error_json(str(error), 400)
 
-    def read_archive_from_request(self):
-        ctype, params = parse_header_params(self.headers.get('Content-Type', ''))
-        if ctype == 'multipart/form-data':
-            boundary = params.get('boundary')
-            if not boundary:
-                raise APIError('Invalid request data.', 400)
-            try:
-                content_length = int(self.headers.get('Content-Length', 0))
-            except (ValueError, TypeError):
-                content_length = 0
-            if content_length > MAX_BACKUP_FILE_BYTES:
-                raise APIError('The backup file exceeds the size limit.', 413)
-            try:
-                fields = parse_multipart_data(self.rfile, boundary, content_length)
-            except Exception:
-                fields = {}
-            archive_list = fields.get('archive') or fields.get('file') or []
-            archive_bytes = archive_list[0] if archive_list else b''
-            if isinstance(archive_bytes, str):
-                archive_bytes = archive_bytes.encode('utf-8')
-            if not archive_bytes:
-                archive_bytes = self.read_body(MAX_BACKUP_FILE_BYTES)
-            if not archive_bytes:
-                raise APIError('No backup archive provided in request.', 400)
-            if len(archive_bytes) > MAX_BACKUP_FILE_BYTES:
-                raise APIError('The backup file exceeds the size limit.', 413)
-            return archive_bytes
-        else:
-            archive_bytes = self.read_body(MAX_BACKUP_FILE_BYTES)
-            if not archive_bytes:
-                raise APIError('No backup archive provided in request.', 400)
-            return archive_bytes
-
     def do_POST(self):
         try:
             self.check_origin()
@@ -2144,9 +2111,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
                 client_ip = self.get_client_ip()
                 if is_rate_limited(client_ip):
                     raise APIError('Too many failed attempts. Please try again later.', 429)
-            if path == '/api/admin/backups/upload-restore':
-                self.upload_restore_server_backup()
-                return
 
             payload = self.read_json(MAX_REQUEST_BYTES)
 
@@ -2479,16 +2443,6 @@ class NotkiHandler(BaseHTTPRequestHandler):
             if not cursor.rowcount:
                 raise APIError('Invitation not found.', 404)
         self.send_json({'deleted': token_hash})
-
-    def upload_restore_server_backup(self):
-        admin = self.require_user(admin=True)
-        # Only a self-contained encrypted backup is accepted. The request body is
-        # the raw archive; no plaintext JSON snapshot path exists.
-        password = get_backup_password()
-        raw_bytes = self.read_archive_from_request()
-        with backup_operation():
-            snapshot = decrypt_backup(raw_bytes, password)
-            self.restore_snapshot(snapshot, replace_existing=True)
 
     def restore_server_backup(self, filename, payload=None):
         admin = self.require_user(admin=True)

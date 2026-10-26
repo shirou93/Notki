@@ -82,7 +82,7 @@ Snapshots are validated strictly before any database change:
 - backup creation and restore are serialized by a non-blocking process-wide
   lock; a second operation receives HTTP 409 instead of capturing or applying
   partially updated state;
-- uploads are capped at 140 MB and plaintext snapshots at 100 MB.
+- plaintext snapshots are capped at 100 MB.
 
 ## Creating a backup
 
@@ -112,30 +112,23 @@ clients must send `X-Step-Up-Password` and, when 2FA is enabled,
 
 ## Restoring a backup
 
-Admin Panel → **Server-wide backups** → choose an `.enc` file → **Restore from
-encrypted file**. Enter the backup password. Restoring replaces every account,
+Admin Panel → **Server-wide backups** → choose an `.enc` file → **Restore**. Enter the backup password. Restoring replaces every account,
 note, share, invitation, passkey and setting, and signs every user out.
 Afterwards, sign in with the credentials stored in the backup.
 
 API equivalent:
 
 ```bash
-curl -X POST https://notki.example.com/api/admin/backups/upload-restore \
-  -H "Content-Type: application/octet-stream" \
+curl -X POST https://notki.example.com/api/admin/backups/notki-backup-....enc/restore \
+  -H "Content-Type: application/json" \
   -H "X-Backup-Password: your long backup password" \
   -b cookies.txt \
-  --data-binary @notki-backup-....enc
+  -d '{}'
 ```
-
-During first-run setup, the same file can be imported on the setup page
-(`POST /api/setup/import-backup`) with the setup token and `X-Backup-Password`.
-
-Only an empty installation can be imported during setup; an admin restore
-replaces existing data after full validation.
 
 ### CLI restore for large backups
 
-The web endpoint caps uploads at 140 MB. For larger archives, stop the Notki
+For larger archives, stop the Notki
 server and restore the file locally on the server host:
 
 ```bash
@@ -199,8 +192,8 @@ recoverable through this code because there is no server-key fallback.
   only. User passwords remain individually hashed inside the encrypted snapshot.
 - **Backups are not a substitute for TLS.** Use HTTPS for every admin request
   that carries `X-Backup-Password`, and do not put the password in URLs or logs.
-- **Large installations.** The web UI and HTTP API enforce a 100 MB snapshot and
-  140 MB upload limit. For larger archives, use the CLI restore described above;
+- **Large installations.** The web UI and HTTP API enforce a 100 MB snapshot
+  limit. For larger archives, use the CLI restore described above;
   its default limit is 2048 MiB and its memory use grows with the file size.
 - **Legacy formats are not accepted.** Version 1 encrypted backups and snapshot
   version 1 payloads must be migrated with an older Notki release.
