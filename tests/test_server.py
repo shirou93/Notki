@@ -342,6 +342,47 @@ class TestAddLog(unittest.TestCase):
         self.assertEqual(len(server.LOG_BUFFER), 50)
 
 
+    def test_restore_backup_cli(self):
+        created_at = server.iso_time()
+        snapshot = {
+            'format': 'notki-server-snapshot', 'version': 2, 'createdAt': created_at,
+            'users': [{
+                'id': 1, 'email': 'cli-restore-admin@example.com',
+                'passwordHash': server.hash_password('cli-restore-admin-password'),
+                'role': 'admin', 'createdAt': created_at,
+            }],
+            'notes': [{
+                'id': 'cli-restore-note', 'userId': 1, 'title': 'CLI Restored Note',
+                'body': 'CLI Restored Body', 'bodyFormat': 0, 'color': 'mint', 'tags': ['cli-restored'],
+                'pinned': False, 'archived': False, 'deleted': False,
+                'createdAt': created_at, 'updatedAt': created_at, 'order': 1,
+            }], 'invites': [], 'shares': [],
+        }
+
+        snapshot_bytes = server.encrypt_backup(snapshot, BACKUP_PASSWORD)
+
+        mock_path_obj = unittest.mock.MagicMock()
+        mock_path_obj.expanduser.return_value = mock_path_obj
+        mock_path_obj.is_file.return_value = True
+        mock_path_obj.stat.return_value.st_size = len(snapshot_bytes)
+        mock_path_obj.read_bytes.return_value = snapshot_bytes
+
+        with unittest.mock.patch('server.Path', return_value=mock_path_obj):
+            result = server.restore_backup_cli('/fake/path/backup.enc', BACKUP_PASSWORD)
+
+        self.assertTrue(result['restored'])
+
+        # Verify db was populated correctly
+        with server.database() as db:
+            user = db.execute('SELECT email FROM users WHERE id = 1').fetchone()
+            self.assertIsNotNone(user)
+            self.assertEqual(user['email'], 'cli-restore-admin@example.com')
+
+            note = db.execute('SELECT title FROM notes WHERE id = ?', ('cli-restore-note',)).fetchone()
+            self.assertIsNotNone(note)
+            self.assertEqual(note['title'], 'CLI Restored Note')
+
+
 class ServerFlowTests(unittest.TestCase):
     avatar_data = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
