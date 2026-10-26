@@ -2,7 +2,7 @@
 
 **Private notes. Your server. No telemetry.**
 
-`v0.1.6.12` | `python 3.9+` | `sqlite` | `mit`
+`v0.1.6.13` | `python 3.9+` | `sqlite` | `mit`
 
 Notki is a small, self-hosted notebook for people who want their notes to stay on their own machine. It combines a fast browser UI with a single-file SQLite database, optional note sharing, passkeys and TOTP, and password-encrypted backups.
 
