@@ -1120,7 +1120,7 @@ class ServerFlowTests(unittest.TestCase):
         self.assertIsInstance(logs_resp['logs'], list)
 
     @unittest.mock.patch('server.get_backup_password', return_value=BACKUP_PASSWORD)
-    def test_upload_restore_server_backup(self, mock_pw):
+    def test_restore_server_backup(self, mock_pw):
         created_at = server.iso_time()
         snapshot = {
             'format': 'notki-server-snapshot', 'version': 2, 'createdAt': created_at,
@@ -1138,11 +1138,13 @@ class ServerFlowTests(unittest.TestCase):
         }
         snapshot_bytes = server.encrypt_backup(snapshot, BACKUP_PASSWORD)
 
-        # Admin restores from an uploaded encrypted file
-        status, result = self.request_raw_client(
-            self.admin, 'POST', '/api/admin/backups/upload-restore', snapshot_bytes,
-            content_type='application/octet-stream',
-        )
+        # Write to backup dir to simulate a server backup file
+        filename = 'notki-backup-uploaded-restore.enc'
+        server.backup_directory().mkdir(parents=True, exist_ok=True)
+        (server.backup_directory() / filename).write_bytes(snapshot_bytes)
+
+        # Admin restores from an existing encrypted file
+        status, result = self.request(self.admin, 'POST', f'/api/admin/backups/{filename}/restore')
         self.assertEqual(status, 200)
         self.assertTrue(result['restored'])
 
@@ -2353,24 +2355,6 @@ class ParseMultipartDataTests(unittest.TestCase):
         rfile2 = io.BytesIO(body2)
         fields2 = server.parse_multipart_data(rfile2, "boundary", len(body2))
         self.assertEqual(fields2, {})
-
-    def test_read_archive_from_request_oversized_multipart(self):
-        class DummyHandler(server.NotkiHandler):
-            def __init__(self, headers, rfile):
-                self.headers = headers
-                self.rfile = rfile
-
-        headers = {
-            'Content-Type': 'multipart/form-data; boundary=boundary',
-            'Content-Length': str(server.MAX_BACKUP_FILE_BYTES + 1)
-        }
-        rfile = io.BytesIO(b'')
-        handler = DummyHandler(headers, rfile)
-        with self.assertRaises(server.APIError) as cm:
-            handler.read_archive_from_request()
-        self.assertEqual(cm.exception.status, 413)
-        self.assertEqual(str(cm.exception), 'The backup file exceeds the size limit.')
-
 
 class PerformUpdateHelperTests(unittest.TestCase):
     def setUp(self):

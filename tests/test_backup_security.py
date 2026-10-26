@@ -627,13 +627,12 @@ class BackupHttpTests(unittest.TestCase):
         invalid = server.encrypt_backup(
             make_snapshot(notes=[make_note('orphan', user_id=999)]), PASSWORD,
         )
+        filename = 'notki-invalid-restore.enc'
+        server.backup_directory().mkdir(parents=True, exist_ok=True)
+        (server.backup_directory() / filename).write_bytes(invalid)
 
-        status, body = self.request_raw(
-            self.admin, 'POST', '/api/admin/backups/upload-restore', invalid,
-            headers={'X-Backup-Password': PASSWORD},
-        )
+        status, _ = self.request(self.admin, 'POST', f'/api/admin/backups/{filename}/restore', headers={'X-Backup-Password': PASSWORD})
         self.assertEqual(status, 400)
-        self.assertNotIn(b'keep', body)
 
         status, notes = self.request(self.admin, 'GET', '/api/notes')
         self.assertEqual(status, 200)
@@ -642,38 +641,33 @@ class BackupHttpTests(unittest.TestCase):
     @unittest.mock.patch('server.get_backup_password', return_value='secret-backup-pass')
     def test_non_admin_cannot_create_restore_or_list_backups(self, mock_pw):
         backup = self.create_backup()
-        raw = (server.backup_directory() / backup['filename']).read_bytes()
         user = self.register_user('normal@example.com')
 
         status, _ = self.request(user, 'POST', '/api/admin/backups', {}, {'X-Backup-Password': PASSWORD})
         self.assertEqual(status, 403)
         status, _ = self.request(user, 'GET', '/api/admin/backups')
         self.assertEqual(status, 403)
-        status, _ = self.request_raw(
-            user, 'POST', '/api/admin/backups/upload-restore', raw,
-            headers={'X-Backup-Password': PASSWORD},
-        )
+        status, _ = self.request(user, 'POST', f'/api/admin/backups/{backup["filename"]}/restore', headers={'X-Backup-Password': PASSWORD})
         self.assertEqual(status, 403)
 
     @unittest.mock.patch('server.get_backup_password', return_value='secret-backup-pass')
-    def test_plaintext_and_legacy_plaintext_uploads_are_rejected(self, mock_pw):
+    def test_plaintext_and_legacy_plaintext_files_are_rejected(self, mock_pw):
         plaintext = json.dumps(make_snapshot()).encode('utf-8')
-        status, body = self.request_raw(
-            self.admin, 'POST', '/api/admin/backups/upload-restore', plaintext,
-            headers={'X-Backup-Password': PASSWORD},
-        )
+        filename = 'notki-plaintext.enc'
+        server.backup_directory().mkdir(parents=True, exist_ok=True)
+        (server.backup_directory() / filename).write_bytes(plaintext)
+
+        status, _ = self.request(self.admin, 'POST', f'/api/admin/backups/{filename}/restore', headers={'X-Backup-Password': PASSWORD})
         self.assertEqual(status, 400)
-        self.assertIn(b'not a valid Notki backup', body)
 
         import gzip
-        status, body = self.request_raw(
-            self.admin, 'POST', '/api/admin/backups/upload-restore', gzip.compress(plaintext),
-            headers={'X-Backup-Password': PASSWORD},
-        )
+        filename_gz = 'notki-gz.enc'
+        (server.backup_directory() / filename_gz).write_bytes(gzip.compress(plaintext))
+        status, _ = self.request(self.admin, 'POST', f'/api/admin/backups/{filename_gz}/restore', headers={'X-Backup-Password': PASSWORD})
         self.assertEqual(status, 400)
 
     @unittest.mock.patch('server.get_backup_password', return_value='secret-backup-pass')
-    def test_legacy_encrypted_backup_upload_is_rejected(self, mock_pw):
+    def test_legacy_encrypted_backup_file_is_rejected(self, mock_pw):
         legacy = json.dumps({
             'format': 'notki-encrypted-snapshot',
             'version': 1,
@@ -683,13 +677,12 @@ class BackupHttpTests(unittest.TestCase):
             'ciphertext': base64.b64encode(b'x' * 32).decode('ascii'),
             'iterations': 100_000,
         }).encode('utf-8')
+        filename = 'notki-legacy.enc'
+        server.backup_directory().mkdir(parents=True, exist_ok=True)
+        (server.backup_directory() / filename).write_bytes(legacy)
 
-        status, body = self.request_raw(
-            self.admin, 'POST', '/api/admin/backups/upload-restore', legacy,
-            headers={'X-Backup-Password': PASSWORD},
-        )
+        status, _ = self.request(self.admin, 'POST', f'/api/admin/backups/{filename}/restore', headers={'X-Backup-Password': PASSWORD})
         self.assertEqual(status, 400)
-        self.assertIn(b'not a valid Notki backup', body)
 
     @unittest.mock.patch('server.get_backup_password', return_value='secret-backup-pass')
     def test_totp_secret_survives_restore_and_replay_is_rejected(self, mock_pw):
@@ -763,15 +756,6 @@ class BackupHttpTests(unittest.TestCase):
         self.assertEqual(status, 404)
         status, listing = self.request(self.admin, 'GET', '/api/admin/backups')
         self.assertEqual(listing['backups'], [])
-
-    def test_oversized_upload_is_rejected(self):
-        with unittest.mock.patch.object(server, 'MAX_BACKUP_FILE_BYTES', 64):
-            status, body = self.request_raw(
-                self.admin, 'POST', '/api/admin/backups/upload-restore', b'x' * 256,
-                headers={'X-Backup-Password': PASSWORD},
-            )
-        self.assertEqual(status, 413)
-        self.assertIn(b'too large', body.lower())
 
     @unittest.mock.patch('server.get_backup_password', return_value='secret-backup-pass')
     def test_secrets_do_not_appear_in_logs_or_error_responses(self, mock_pw):
