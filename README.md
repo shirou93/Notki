@@ -191,4 +191,4 @@ The suite includes security-focused backup tests for wrong passwords, tampered c
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+See [LICENSE](LICENSE).
